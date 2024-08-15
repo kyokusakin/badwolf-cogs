@@ -13,11 +13,12 @@ class tweew(commands.Cog):
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
-        self.config.register_guild(channel_id=None)  # 每個伺服器的預設頻道 ID 為 None
-        self.latest_earthquake_no = None  # 儲存最近一次的地震編號
+        self.config.register_guild(channel_id=None)
+        self.latest_earthquake_no = None
+        self.init_tasks()
         self.global_config = Config.get_conf(None, identifier=1234567890, cog_name="tweew")
         self.global_config.register_global(api_key=None)
-        self.init_tasks()
+
 
     def init_tasks(self):
         """初始化定時任務"""
@@ -56,7 +57,7 @@ class tweew(commands.Cog):
         """設定全局 API 權杖"""
         await global_config.api_key.set(api_key)
         await ctx.send(f"API 權杖已設定為: {api_key}")
-        
+
     @tasks.loop(minutes=1)  # 每1分鐘檢查一次
     async def check_earthquake_map(self):
         """檢查等震度圖是否有更新並在設定的頻道中發布"""
@@ -66,16 +67,16 @@ class tweew(commands.Cog):
             if not api_key:
                 log.error("未設定 API 權杖")
                 return
-            api_url = "https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={api_key}&limit=1&format=JSON&AreaName=&StationName=---"
-            
+            api_url = api_url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={api_key}&limit=1&format=JSON&AreaName=&StationName=---"
+
             # 發送 GET 請求
             response = requests.get(api_url)
             response.raise_for_status()
-    
+
             # 解析 JSON 回應
             data = response.json()
             #log.info("API 返回的數據: %s", data)
-            
+
             records = data.get('records', {})
             earthquakes = records.get('Earthquake', [])
 
@@ -89,10 +90,9 @@ class tweew(commands.Cog):
             # 檢查地震編號是否與上次不同
             if earthquake_no != self.latest_earthquake_no:
                 self.latest_earthquake_no = earthquake_no  # 更新地震編號
-    
-                # 找到地震報告的圖片 URL
+
                 report_image_url = earthquake.get('ReportImageURI', '')
-    
+
                 # 構建地震報告內容
                 description = (
                     f"**地震編號**: {earthquake_no}\n"
@@ -101,7 +101,7 @@ class tweew(commands.Cog):
                     f"**詳細資料**: [點此查看報告]({earthquake.get('Web', '')})\n"
                     "\n**震度分布**:\n"
                 )
-    
+
                 # 收集每個有回報震度的縣市，避免重複
                 intensity_areas = earthquake.get('Intensity', {}).get('ShakingArea', [])
                 intensity_dict = {}
