@@ -55,7 +55,7 @@ class tweew(commands.Cog):
     @commands.command()
     async def settweewapikey(self, ctx, api_key: str):
         """設定全局 API 權杖"""
-        await global_config.api_key.set(api_key)
+        await self.global_config.api_key.set(api_key)
         await ctx.send(f"API 權杖已設定為: {api_key}")
 
     @tasks.loop(minutes=1)  # 每1分鐘檢查一次
@@ -119,7 +119,7 @@ class tweew(commands.Cog):
                 # 按震度級別生成震度分布內容
                 for intensity, counties in sorted_intensities:
                     description += f"{', '.join(counties)} {intensity}\n"
-    
+
                 # 為所有設定了頻道的伺服器發送更新
                 for guild in self.bot.guilds:
                     channel_id = await self.config.guild(guild).channel_id()
