@@ -2,7 +2,7 @@ import discord
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 from discord.ext import tasks
-import requests
+import aiohttp
 import datetime
 import logging
 import re
@@ -67,16 +67,12 @@ class tweew(commands.Cog):
                 log.error("未設定 API key")
                 return
 
-            # 使用 f-string 來格式化 api_url
             api_url = f"https://opendata.cwa.gov.tw/api/v1/rest/datastore/E-A0015-001?Authorization={api_key}&limit=1&format=JSON&AreaName=&StationName=---"
 
-            # 發送 GET 請求
-            response = requests.get(api_url)
-            response.raise_for_status()
-
-            # 解析 JSON 回應
-            data = response.json()
-            # log.info("API 返回的數據: %s", data)
+            async with aiohttp.ClientSession() as session:
+                async with session.get(api_url) as response:
+                    response.raise_for_status()
+                    data = await response.json()
 
             records = data.get('records', {})
             earthquakes = records.get('Earthquake', [])
@@ -90,7 +86,6 @@ class tweew(commands.Cog):
             origin_time = earthquake.get('EarthquakeInfo', {}).get('OriginTime', '未知時間')
             report_content = earthquake.get('ReportContent', '無報告內容')
             report_content_cleaned = re.sub(r'，最大震度.*$', '', report_content).strip()
-            # log.info("取得的地震編號:", earthquake_no)
 
             # 檢查地震編號是否與上次不同
             if earthquake_no != self.latest_earthquake_no:
@@ -142,7 +137,7 @@ class tweew(commands.Cog):
                             embed.set_footer(text=f"資料為中華民國中央氣象署提供")
                             await channel.send(embed=embed)
 
-        except requests.RequestException as e:
+        except aiohttp.ClientError as e:
             log.error("發送請求時發生錯誤: %s", e)
         except KeyError as e:
             log.error("解析 API 回應時發生錯誤: %s", e)
