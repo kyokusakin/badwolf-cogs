@@ -24,10 +24,15 @@ class UptimeResponder(commands.Cog):
         self.config.register_global(port=8710)
         self.uptime = datetime.now(timezone.utc)
         self.app = web.Application()
+        self.runner = None
+        self._setup_file_paths()
+        self.env = Environment(loader=FileSystemLoader(self.templates_dir))
+
+    def _setup_file_paths(self):
+        """Initialize paths for static and template directories."""
         self.cog_dir = os.path.dirname(os.path.abspath(__file__))
         self.static_dir = os.path.join(self.cog_dir, 'static')
-        self.env = Environment(loader=FileSystemLoader(os.path.join(self.cog_dir, 'templates')))
-        self.runner = None
+        self.templates_dir = os.path.join(self.cog_dir, 'templates')
 
     async def cog_load(self):
         await self.start_webserver()
@@ -40,24 +45,32 @@ class UptimeResponder(commands.Cog):
 
     @commands.command(hidden=True)
     async def uptimeresponderinfo(self, ctx: commands.Context):
+        """Display the cog's information."""
         await ctx.send(await format_info(ctx, self.qualified_name, self.__version__))
 
     async def shutdown_webserver(self):
+        """Shut down the web server if it is currently running."""
         if self.runner:
             await self.runner.cleanup()
             self.runner = None
-            log.info("Web server for UptimeResponder pings has been stopped due to cog unload.")
+            log.info("Web server for UptimeResponder has been stopped due to cog unload.")
 
     async def get_status(self, request: web.Request) -> web.Response:
-        status = {'latency': f"{self.get_latency():.2f}", 'uptime': self.get_uptime_string()}
+        """Return the current bot status as a JSON response."""
+        status = {
+            'latency': f"{self.get_latency():.2f}",
+            'uptime': self.get_uptime_string(),
+        }
         return web.json_response(status)
 
     async def main_page(self, request: web.Request) -> web.Response:
+        """Render and return the main status page."""
         name = self.bot.user.name if self.bot.user else "Unknown"
-        html_content = self.render_template('uptime_page.html', name=name, uptime=self.get_uptime_string(), latency=f"{self.get_latency():.2f}")
+        html_content = self.render_template('uptime_page.html', name=name)
         return web.Response(text=html_content, content_type='text/html', status=200)
 
     def get_uptime_string(self) -> str:
+        """Calculate and return the bot's uptime as a formatted string."""
         uptime = datetime.now(timezone.utc) - self.uptime
         days, remainder = divmod(int(uptime.total_seconds()), 86400)
         hours, remainder = divmod(remainder, 3600)
@@ -65,42 +78,54 @@ class UptimeResponder(commands.Cog):
         return f"{days:02}:{hours:02}:{minutes:02}:{seconds:02}"
 
     def get_latency(self) -> float:
-        return self.bot.latency * 1000  # Convert to milliseconds
+        """Get the current WebSocket latency in milliseconds."""
+        return self.bot.latency * 1000
 
     def render_template(self, template_name: str, **context) -> str:
+        """Render a Jinja2 template with the provided context."""
         return self.env.get_template(template_name).render(**context)
 
     async def static_file_handler(self, request: web.Request) -> web.Response:
+        """Serve static files from the static directory."""
         filename = request.match_info['filename']
         file_path = os.path.join(self.static_dir, filename)
+
         if not os.path.isfile(file_path):
-            file_path_with_txt = os.path.join(self.static_dir, f"{filename}.txt")
-            file_path_with_html = os.path.join(self.static_dir, f"{filename}.html")
-            if os.path.isfile(file_path_with_txt):
-                return web.FileResponse(file_path_with_txt)
-            if os.path.isfile(file_path_with_html):
-                return web.FileResponse(file_path_with_html)
+            # Try to serve files with .txt or .html extensions if the base filename is not found.
+            for ext in ['txt', 'html']:
+                alt_path = os.path.join(self.static_dir, f"{filename}.{ext}")
+                if os.path.isfile(alt_path):
+                    return web.FileResponse(alt_path)
+
+            # If no matching file is found, return 404.
             raise web.HTTPNotFound()
         return web.FileResponse(file_path)
 
     async def start_webserver(self, port: Optional[int] = None):
-        await asyncio.sleep(1)  # Let previous server shut down if cog was reloaded
+        """Start the web server on the specified port or the default port."""
+        await asyncio.sleep(1)  # Delay to ensure clean shutdown of previous server
         port = port or await self.config.port()
-        self.app.router.add_get("/", self.main_page)
-        self.app.router.add_get("/status", self.get_status)
-        self.app.router.add_route('GET', '/{filename:.*}', self.static_file_handler)
+        self._setup_routes()
         self.runner = web.AppRunner(self.app, access_log=None)
         await self.runner.setup()
         await web.TCPSite(self.runner, port=port).start()
-        log.info(f"Web server for UptimeResponder pings has started on port {port}.")
+        log.info(f"Web server for UptimeResponder has started on port {port}.")
+
+    def _setup_routes(self):
+        """Set up the routes for the web application."""
+        self.app.router.add_get("/", self.main_page)
+        self.app.router.add_get("/status", self.get_status)
+        self.app.router.add_route('GET', '/{filename:.*}', self.static_file_handler)
 
     @commands.is_owner()
     @commands.command()
     async def uptimeresponderport(self, ctx: commands.Context, port: Optional[int] = None):
+        """Get or set the port for the UptimeResponder web server."""
         if port is None:
             current_port = await self.config.port()
             await ctx.send(f"The current port is {current_port}.\nTo change it, run `{ctx.clean_prefix}uptimeresponderport <port>`")
             return
+
         async with ctx.typing():
             await self.shutdown_webserver()
             try:
