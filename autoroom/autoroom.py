@@ -334,6 +334,20 @@ class AutoRoom(
         if await self.bot.cog_disabled_in_guild(self, member.guild):
             return
 
+        # Ignore self (the bot)
+        if member.id == self.bot.user.id:
+            # If the bot joins a voice channel, it should immediately leave
+            if joining.channel:
+                await member.move_to(None)
+            return
+
+        # Ignore other bots
+        if member.bot:
+            # Disconnect other bots if they join a voice channel
+            if joining.channel:
+                await member.edit(voice_channel=None)
+            return
+
         # If user left an AutoRoom, do cleanup
         if isinstance(leaving.channel, discord.VoiceChannel):
             autoroom_info = await self.get_autoroom_info(leaving.channel)
@@ -353,14 +367,15 @@ class AutoRoom(
                             bucket.reset()
                             bucket.update_rate_limit()
 
+        # If user entered an AutoRoom Source channel, create new AutoRoom
         if isinstance(joining.channel, discord.VoiceChannel):
-            # If user entered an AutoRoom Source channel, create new AutoRoom
             asc = await self.get_autoroom_source_config(joining.channel)
             if asc:
                 await self._process_autoroom_create(joining.channel, asc, member)
             # If user entered an AutoRoom, allow them into the associated text channel
             if await self.get_autoroom_info(joining.channel):
                 await self._process_autoroom_legacy_text_perms(joining.channel)
+
 
     #
     # Private methods
@@ -398,8 +413,6 @@ class AutoRoom(
                             discord.NotFound,
                             discord.HTTPException,
                         ):
-                            if timeout_seconds > 0:
-                                await member.timeout(timedelta(seconds=timeout_seconds), reason="Spam voice channel")
                             await member.send(
                                 "你好！看起來你想建立一個自動房間"
                                 "\n"
@@ -408,6 +421,9 @@ class AutoRoom(
                                 "\n"
                                 f"你可以在 **{humanize_timedelta(seconds=max(retry_after, 1))}** 後再試一次"
                             )
+                            if timeout_seconds > 0:
+                                await member.timeout(timedelta(seconds=timeout_seconds), reason="Spam voice channel")
+
                     return
 
         # Generate channel name
