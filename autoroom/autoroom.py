@@ -387,14 +387,14 @@ class AutoRoom(
         # Ignore self (the bot)
         if member.id == self.bot.user.id:
             # If the bot joins a voice channel, it should immediately leave
-            if dest_category and joining.channel:
+            if member.voice and member.voice.channel in dest_category.voice_channels:
                 await member.move_to(None)
             return
 
         # Ignore other bots
         if member.bot:
             # Disconnect other bots if they join a voice channel
-            if dest_category and joining.channel:
+            if member.voice and member.voice.channel in dest_category.voice_channels:
                 await member.edit(voice_channel=None)
             return
         # Check that user isn't spamming
