@@ -329,26 +329,9 @@ class AutoRoom(
         member: discord.Member,
         leaving: discord.VoiceState,
         joining: discord.VoiceState,
-        autoroom_source: discord.VoiceChannel,
-        autoroom_source_config: dict[str, Any],
     ) -> None:
         """Do voice channel stuff when users move about channels."""
         if await self.bot.cog_disabled_in_guild(self, member.guild):
-            return
-        guild = autoroom_source.guild
-        dest_category = guild.get_channel(autoroom_source_config["dest_category_id"])
-        # Ignore self (the bot)
-        if member.id == self.bot.user.id:
-            # If the bot joins a voice channel, it should immediately leave
-            if dest_category and joining.channel:
-                await member.move_to(None)
-            return
-
-        # Ignore other bots
-        if member.bot:
-            # Disconnect other bots if they join a voice channel
-            if dest_category and joining.channel:
-                await member.edit(voice_channel=None)
             return
 
         # If user left an AutoRoom, do cleanup
@@ -401,7 +384,19 @@ class AutoRoom(
         )
         if not required_check or not optional_check:
             return
+        # Ignore self (the bot)
+        if member.id == self.bot.user.id:
+            # If the bot joins a voice channel, it should immediately leave
+            if dest_category and joining.channel:
+                await member.move_to(None)
+            return
 
+        # Ignore other bots
+        if member.bot:
+            # Disconnect other bots if they join a voice channel
+            if dest_category and joining.channel:
+                await member.edit(voice_channel=None)
+            return
         # Check that user isn't spamming
         bucket = self.bucket_autoroom_create.get_bucket(member)
         timeout_seconds = await self.config.guild(member.guild).timeout_seconds()
