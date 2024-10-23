@@ -182,7 +182,7 @@ class BirthdayCommands(MixinMeta):
                 + (
                     ""
                     if birthday_dt.year == 1
-                    else (f" will turn {next_bday_year - birthday_dt.year}")
+                    else (f" 將滿 {next_bday_year - birthday_dt.year}")
                 )
             )
             number_day_mapping[diff.days] = next_birthday_dt.strftime("%m/%d")
@@ -195,7 +195,7 @@ class BirthdayCommands(MixinMeta):
 
         sorted_parsed_bdays = sorted(parsed_bdays.items(), key=lambda x: x[0])
 
-        embed = discord.Embed(title="Upcoming Birthdays", colour=await ctx.embed_colour())
+        embed = discord.Embed(title="即將到來的生日", colour=await ctx.embed_colour())
 
         if len(sorted_parsed_bdays) > 25:
             embed.description = "Too many days to display. I've had to stop at 25."
@@ -294,9 +294,9 @@ class BirthdayAdminCommands(MixinMeta):
         final_table = no_colour_rich_markup(table)
         message = (
             final_table
-            + "\nMessage with year:\n"
+            + "\n帶年份的訊息:\n"
             + box(message_w_year)
-            + "\nMessage without year:\n"
+            + "\n不帶年份的訊息:\n"
             + box(message_wo_year)
             + warnings
         )
@@ -305,14 +305,14 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def time(self, ctx: commands.Context, *, time: TimeConverter):
         """
-        Set the time of day for the birthday message.
+        設定生日訊息的發送時間。
 
-        Minutes are ignored.
+        分鐘將被忽略。
 
-        **Examples:**
-        - `[p]bdset time 7:00` - set the time to 7:00AM UTC
-        - `[p]bdset time 12AM` - set the time to midnight UTC
-        - `[p]bdset time 3PM` - set the time to 3:00PM UTC
+        **範例：**
+        - `[p]bdset time 7:00` - 設定時間為 UTC 7:00 AM
+        - `[p]bdset time 12AM` - 設定時間為 UTC 凌晨 12:00
+        - `[p]bdset time 3PM` - 設定時間為 UTC 3:00 PM
         """
         # group has guild check
         if TYPE_CHECKING:
@@ -349,19 +349,19 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def msgwithoutyear(self, ctx: commands.Context, *, message: str):
         """
-        Set the message to send when the user did not provide a year.
+        設定用戶未提供年份時發送的訊息。
 
-        If you would like to mention a role, you will need to run `[p]bdset rolemention true`.
+        如果您想提及一個角色，您需要運行 `[p]bdset rolemention true`。
 
-        **Placeholders:**
-        - `{name}` - the user's name
-        - `{mention}` - an @ mention of the user
+        **佔位符：**
+        - `{name}` - 用戶的名字
+        - `{mention}` - 用戶的 @ 提及
 
-            All the placeholders are optional.
+            所有佔位符都是可選的。
 
-        **Examples:**
-        - `[p]bdset msgwithoutyear Happy birthday {mention}!`
-        - `[p]bdset msgwithoutyear {mention}'s birthday is today! Happy birthday {name}.`
+        **範例：**
+        - `[p]bdset msgwithoutyear 生日快樂 {mention}！`
+        - `[p]bdset msgwithoutyear {mention} 的生日是今天！生日快樂 {name}。`
         """
         # group has guild check
         if TYPE_CHECKING:
@@ -388,7 +388,7 @@ class BirthdayAdminCommands(MixinMeta):
 
             conf["message_wo_year"] = message
 
-        await ctx.send("Message set. Here's how it will look:")
+        await ctx.send("訊息已設定。以下是它的樣子：")
         await ctx.send(
             format_bday_message(message, ctx.author),
             allowed_mentions=discord.AllowedMentions(users=True),
