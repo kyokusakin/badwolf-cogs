@@ -34,8 +34,8 @@ class BirthdayCommands(MixinMeta):
 
         if not await self.check_if_setup(ctx.guild):
             await ctx.send(
-                "This command is not available until the cog has been setup. "
-                f"Get an admin to use `{ctx.clean_prefix}bdset interactive` to get started."
+                "此命令在未設置該功能模組之前無法使用。"
+                f"請讓管理員使用 `{ctx.clean_prefix}bdset interactive` 開始設置。"
             )
             raise CheckFailure("cog needs setup")
 
@@ -48,17 +48,17 @@ class BirthdayCommands(MixinMeta):
     @birthday.command(aliases=["add"])
     async def set(self, ctx: commands.Context, *, birthday: BirthdayConverter):
         """
-        Set your birthday.
+        設定您的生日。
 
-        You can optionally add in the year, if you are happy to share this.
+        您可以選擇性地添加年份，如果您願意分享的話。
 
-        If you use a date in the format xx/xx/xx or xx-xx-xx MM-DD-YYYY is assumed.
+        如果您使用的日期格式是 YYYY/MM/DD 或 YYYY-MM-DD，則預設為 YYYY-MM-DD。
 
-        **Examples:**
-        - `[p]bday set 24th September`
-        - `[p]bday set 24th Sept 2002`
-        - `[p]bday set 9/24/2002`
-        - `[p]bday set 9-24-2002`
+        **範例：**
+        - `[p]bday set 9 24 `
+        - `[p]bday set 2002 09 24`
+        - `[p]bday set 2002/9/24`
+        - `[p]bday set 2002-9-24`
         - `[p]bday set 9-24`
         """
         # guild only check in group
@@ -68,11 +68,11 @@ class BirthdayCommands(MixinMeta):
         # year as 1 means year not specified
 
         if birthday.year != 1 and birthday.year < MIN_BDAY_YEAR:
-            await ctx.send(f"I'm sorry, but I can't set your birthday to before {MIN_BDAY_YEAR}.")
+            await ctx.send(f"抱歉，我無法將您的生日設定為在 {MIN_BDAY_YEAR} 之前。")
             return
 
         if birthday > datetime.datetime.utcnow():
-            await ctx.send("You can't be born in the future!")
+            await ctx.send("您不可以設定未來的出生日期！")
             return
 
         async with self.config.member(ctx.author).birthday() as bday:
@@ -81,11 +81,11 @@ class BirthdayCommands(MixinMeta):
             bday["day"] = birthday.day
 
         if birthday.year == 1:
-            str_bday = birthday.strftime("%B %d")
+            str_bday = birthday.strftime("%m/%d")
         else:
-            str_bday = birthday.strftime("%Y, %B %d")
+            str_bday = birthday.strftime("%Y/%m/%d")
 
-        await ctx.send(f"Your birthday has been set as {str_bday}.")
+        await ctx.send(f"您的生日已設定為 {str_bday}。")
 
     @birthday.command(aliases=["delete", "del"])
     async def remove(self, ctx: commands.Context):
@@ -95,7 +95,7 @@ class BirthdayCommands(MixinMeta):
             assert isinstance(ctx.author, discord.Member)
             assert ctx.guild is not None
 
-        m = await ctx.send("Are you sure?")
+        m = await ctx.send("你確定?")
         start_adding_reactions(m, ReactionPredicate.YES_OR_NO_EMOJIS)
         check = ReactionPredicate.yes_or_no(m, ctx.author)  # type:ignore
 
@@ -107,19 +107,20 @@ class BirthdayCommands(MixinMeta):
             return
 
         if check.result is False:
-            await ctx.send("Cancelled.")
+            await ctx.send("已取消。")
             return
 
         await self.config.member(ctx.author).birthday.set({})
-        await ctx.send("Your birthday has been removed.")
+        await ctx.send("您的生日已被刪除。")
 
     @birthday.command()
     async def upcoming(self, ctx: commands.Context, days: int = 7):
-        """View upcoming birthdays, defaults to 7 days.
+        """
+        查看即將到來的生日，預設為 7 天。
 
-        **Examples:**
-        - `[p]birthday upcoming` - default of 7 days
-        - `[p]birthday upcoming 14` - 14 days
+        **範例：**
+        - `[p]birthday upcoming` - 預設為 7 天
+        - `[p]birthday upcoming 14` - 14 天
         """
         # guild only check in group
         if TYPE_CHECKING:
@@ -127,7 +128,7 @@ class BirthdayCommands(MixinMeta):
             assert ctx.guild is not None
 
         if days < 1 or days > 365:
-            await ctx.send("You must enter a number of days greater than 0 and smaller than 365.")
+            await ctx.send("您必須輸入一個大於 0 且小於 365 的天數。")
             return
 
         today_dt = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -184,12 +185,12 @@ class BirthdayCommands(MixinMeta):
                     else (f" will turn {next_bday_year - birthday_dt.year}")
                 )
             )
-            number_day_mapping[diff.days] = next_birthday_dt.strftime("%B %d")
+            number_day_mapping[diff.days] = next_birthday_dt.strftime("%m/%d")
 
         log.trace("bdays parsed: %s", parsed_bdays)
 
         if len(parsed_bdays) == 0:
-            await ctx.send(f"No upcoming birthdays in the next {days} days.")
+            await ctx.send(f"在接下來的 {days} 天內沒有即將到來的生日。")
             return
 
         sorted_parsed_bdays = sorted(parsed_bdays.items(), key=lambda x: x[0])
@@ -222,9 +223,9 @@ class BirthdayAdminCommands(MixinMeta):
     @commands.admin_or_permissions(manage_guild=True)
     async def bdset(self, ctx: commands.Context):
         """
-        Birthday management commands for admins.
+        管理員的管理命令。
 
-        Looking to set your own birthday? Use `[p]birthday set` or `[p]bday set`.
+        想要設定自己的生日？使用 `[p]birthday set` 或 `[p]bday set`。
         """
 
     @commands.bot_has_permissions(manage_roles=True)
@@ -235,7 +236,7 @@ class BirthdayAdminCommands(MixinMeta):
         if TYPE_CHECKING:
             assert isinstance(ctx.author, discord.Member)
 
-        await ctx.send("Click below to start.", view=SetupView(ctx.author, self.bot, self.config))
+        await ctx.send("點擊下方開始。", view=SetupView(ctx.author, self.bot, self.config))
 
     @bdset.command()
     async def settings(self, ctx: commands.Context):
@@ -369,7 +370,7 @@ class BirthdayAdminCommands(MixinMeta):
 
         if len(message) > MAX_BDAY_MSG_LEN:
             await ctx.send(
-                f"That message is too long! It needs to be under {MAX_BDAY_MSG_LEN} characters."
+                f"該訊息太長！必須少於 {MAX_BDAY_MSG_LEN} 個字符。"
             )
 
         try:
@@ -396,20 +397,20 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def msgwithyear(self, ctx: commands.Context, *, message: str):
         """
-        Set the message to send when the user did provide a year.
+        設定用戶提供年份時發送的訊息。
 
-        If you would like to mention a role, you will need to run `[p]bdset rolemention true`
+        如果您想提及一個角色，您需要運行 `[p]bdset rolemention true`
 
-        **Placeholders:**
-        - `{name}` - the user's name
-        - `{mention}` - an @ mention of the user
-        - `{new_age}` - the user's new age
+        **佔位符:**
+        - `{name}` - 用戶的名字
+        - `{mention}` - 用戶的 @ 提及
+        - `{new_age}` - 用戶的新年齡
 
-            All the placeholders are optional.
+            所有佔位符都是可選的。
 
-        **Examples:**
-        - `[p]bdset msgwithyear {mention} has turned {new_age}, happy birthday!`
-        - `[p]bdset msgwithyear {name} is {new_age} today! Happy birthday {mention}!`
+        **範例:**
+        - `[p]bdset msgwithyear {mention} 已經 {new_age} 歲了，生日快樂！`
+        - `[p]bdset msgwithyear {name} 今天 {new_age} 歲！生日快樂 {mention}！`
         """
         # group has guild check
         if TYPE_CHECKING:
@@ -425,8 +426,8 @@ class BirthdayAdminCommands(MixinMeta):
             format_bday_message(message, ctx.author, 1)
         except KeyError as e:
             await ctx.send(
-                f"You have a placeholder `{{{e.args[0]}}}` that is invalid. You can only include"
-                " `{name}`, `{mention}` and `{new_age}` for the message with a year."
+                f"您有一個無效的佔位符 `{{{e.args[0]}}}`。您只能包含"
+                " `{name}`、`{mention}` 和 `{new_age}` 作為包含年份的訊息。"
             )
             return
 
@@ -436,7 +437,7 @@ class BirthdayAdminCommands(MixinMeta):
 
             conf["message_w_year"] = message
 
-        await ctx.send("Message set. Here's how it will look, if you're turning 20:")
+        await ctx.send("訊息已設定。以下是如果您滿 20 歲時的樣子：")
         await ctx.send(
             format_bday_message(message, ctx.author, 20),
             allowed_mentions=discord.AllowedMentions(users=True),
@@ -445,10 +446,10 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def channel(self, ctx: commands.Context, channel: discord.TextChannel):
         """
-        Set the channel where the birthday message will be sent.
+        設定生日訊息將發送的頻道。
 
-        **Example:**
-        - `[p]bdset channel #birthdays` - set the channel to #birthdays
+        **範例：**
+        - `[p]bdset channel #birthdays` - 設定頻道為 #birthdays
         """
         # group has guild check
         if TYPE_CHECKING:
@@ -474,14 +475,14 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def role(self, ctx: commands.Context, *, role: discord.Role):
         """
-        Set the role that will be given to the user on their birthday.
+        設定在用戶生日時將賦予的角色。
 
-        You can give the exact name or a mention.
+        您可以給出確切的名稱或提及。
 
-        **Example:**
-        - `[p]bdset role @Birthday` - set the role to @Birthday
-        - `[p]bdset role Birthday` - set the role to @Birthday without a mention
-        - `[p]bdset role 418058139913063657` - set the role with an ID
+        **範例：**
+        - `[p]bdset role @Birthday` - 設定角色為 @Birthday
+        - `[p]bdset role Birthday` - 設定角色為 @Birthday，無需提及
+        - `[p]bdset role 418058139913063657` - 根據 ID 設定角色
         """
         # group has guild check
         if TYPE_CHECKING:
@@ -499,25 +500,22 @@ class BirthdayAdminCommands(MixinMeta):
 
             conf["role_id"] = role.id
 
-        await ctx.send(f"Role set to {role.name}.")
+        await ctx.send(f"角色已設定為{role.name}.")
 
     @bdset.command()
     async def forceset(
         self, ctx: commands.Context, user: discord.Member, *, birthday: BirthdayConverter
     ):
         """
-        Force-set a specific user's birthday.
+        強制設定特定用戶的生日。
 
-        You can @ mention any user or type out their exact name. If you're typing out a name with
-        spaces, make sure to put quotes around it (`"`).
+        您可以 @ 提及任何用戶或輸入他們的確切名稱。如果您輸入的名稱有空格，請確保用引號（`"`）包圍。
 
-        **Examples:**
-        - `[p]bdset set @User 1-1-2000` - set the birthday of `@User` to 1/1/2000
-        - `[p]bdset set User 1/1` - set the birthday of `@User` to 1/1/2000
-        - `[p]bdset set "User with spaces" 1-1` - set the birthday of `@User with spaces`
-            to 1/1
-        - `[p]bdset set 354125157387344896 1/1/2000` - set the birthday of `354125157387344896`
-            to 1/1/2000
+        **範例：**
+        - `[p]bdset set @User 1-1-2000` - 將 `@User` 的生日設定為 2000年1月1日
+        - `[p]bdset set User 1/1` - 將 `@User` 的生日設定為 2000年1月1日
+        - `[p]bdset set "User with spaces" 1-1` - 將 `@User with spaces` 的生日設定為 1月1日
+        - `[p]bdset set 354125157387344896 1/1/2000` - 將 `354125157387344896` 的生日設定為 2000年1月1日
         """
         if birthday.year != 1 and birthday.year < MIN_BDAY_YEAR:
             await ctx.send(f"I'm sorry, but I can't set a birthday to before {MIN_BDAY_YEAR}.")
@@ -533,11 +531,11 @@ class BirthdayAdminCommands(MixinMeta):
             bday["day"] = birthday.day
 
         if birthday.year == 1:
-            str_bday = birthday.strftime("%B %d")
+            str_bday = birthday.strftime("%m/%d")
         else:
-            str_bday = birthday.strftime("%Y, %B %d")
+            str_bday = birthday.strftime("%Y/%m/%d")
 
-        await ctx.send(f"{user.name}'s birthday has been set as {str_bday}.")
+        await ctx.send(f"{user.name} 的生日已設定為 {str_bday}。")
 
     @bdset.command()
     async def forceremove(self, ctx: commands.Context, user: discord.Member):
@@ -547,7 +545,7 @@ class BirthdayAdminCommands(MixinMeta):
             assert isinstance(user, discord.Member)
             assert ctx.guild is not None
 
-        m = await ctx.send(f"Are you sure? `{user.name}`'s birthday will be removed.")
+        m = await ctx.send(f"您確定嗎？`{user.name}` 的生日將被刪除。")
         start_adding_reactions(m, ReactionPredicate.YES_OR_NO_EMOJIS)
         check = ReactionPredicate.yes_or_no(m, ctx.author)  # type:ignore
 
@@ -559,11 +557,11 @@ class BirthdayAdminCommands(MixinMeta):
             return
 
         if check.result is False:
-            await ctx.send("Cancelled.")
+            await ctx.send("已取消。")
             return
 
         await self.config.member(user).birthday.set({})
-        await ctx.send(f"{user.name}'s birthday has been removed.")
+        await ctx.send(f"{user.name} 的生日已被刪除。")
 
     @commands.is_owner()
     @bdset.command()
