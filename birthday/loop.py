@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+from datetime import timezone, timedelta
 from typing import Any, NoReturn
 
 import discord
@@ -160,15 +161,17 @@ class BirthdayLoop(MixinMeta):
 
             hour_td = datetime.timedelta(seconds=all_settings[guild.id]["time_utc_s"])
 
-            since_midnight = datetime.datetime.utcnow().replace(
+            # 使用 UTC+8 時區
+            utc8_now = datetime.datetime.now(timezone(timedelta(hours=8)))
+            since_midnight = utc8_now.replace(
                 minute=0, second=0, microsecond=0
-            ) - datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            ) - utc8_now.replace(hour=0, minute=0, second=0, microsecond=0)
 
             if since_midnight.total_seconds() != hour_td.total_seconds():
                 log.trace("Not correct time for update for guild %s, skipping", guild_id)
                 continue
 
-            today_dt = (datetime.datetime.utcnow() - hour_td).replace(
+            today_dt = (utc8_now - hour_td).replace(
                 hour=0, minute=0, second=0, microsecond=0
             )
 

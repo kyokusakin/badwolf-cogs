@@ -306,7 +306,7 @@ class BirthdayAdminCommands(MixinMeta):
     async def time(self, ctx: commands.Context, *, time: TimeConverter):
         """
         設定生日訊息的發送時間（UTC+8）。
-        
+    
         分鐘將被忽略。
     
         **範例：**
@@ -317,20 +317,20 @@ class BirthdayAdminCommands(MixinMeta):
         if TYPE_CHECKING:
             assert ctx.guild is not None
 
-        # UTC+8 的時間轉換為 UTC，減去 8 小時
-        time_utc = time - timedelta(hours=8)
+        # 不再轉換時間，保留為 UTC+8
+        time_utc8 = time
 
-        # 設定自午夜 (UTC) 開始的秒數
-        midnight = datetime.utcnow().replace(
+        # 設定自午夜 (UTC+8) 開始的秒數
+        midnight_utc8 = datetime.now().replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
-        time_utc_s = int((time_utc - midnight).total_seconds())
-
+        time_utc8_s = int((time_utc8 - midnight_utc8).total_seconds())
+    
         async with self.config.guild(ctx.guild).all() as conf:
             old = conf["time_utc_s"]
-            conf["time_utc_s"] = time_utc_s
-
+            conf["time_utc_s"] = time_utc8_s
+    
             if old is None:
                 conf["setup_state"] += 1
 
@@ -342,12 +342,13 @@ class BirthdayAdminCommands(MixinMeta):
 
         if old is not None:
             old_dt = datetime.utcfromtimestamp(old)
-            if time_utc > old_dt and time_utc > datetime.utcnow():
+            if time_utc8 > old_dt and time_utc8 > datetime.utcnow():
                 m += (
                     "\n\nThe time you set is after the time I currently send the birthday message,"
                 " so the birthday message will be sent for a second time."
                 )
         await ctx.send(m)
+
 
     @bdset.command()
     async def msgwithoutyear(self, ctx: commands.Context, *, message: str):
