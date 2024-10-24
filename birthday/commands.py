@@ -71,7 +71,7 @@ class BirthdayCommands(MixinMeta):
             await ctx.send(f"抱歉，我無法將您的生日設定為在 {MIN_BDAY_YEAR} 之前。")
             return
 
-        if birthday > datetime.datetime.utcnow():
+        if birthday > datetime.utcnow():
             await ctx.send("您不可以設定未來的出生日期！")
             return
 
@@ -131,7 +131,7 @@ class BirthdayCommands(MixinMeta):
             await ctx.send("您必須輸入一個大於 0 且小於 365 的天數。")
             return
 
-        today_dt = datetime.datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_dt = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
 
         all_birthdays: dict[int, dict[str, dict]] = await self.config.all_members(ctx.guild)
 
@@ -147,7 +147,7 @@ class BirthdayCommands(MixinMeta):
             if not isinstance(member, discord.Member):
                 continue
 
-            birthday_dt = datetime.datetime(
+            birthday_dt = datetime(
                 year=member_data["birthday"]["year"] or 1,
                 month=member_data["birthday"]["month"],
                 day=member_data["birthday"]["day"],
@@ -260,7 +260,7 @@ class BirthdayAdminCommands(MixinMeta):
             if conf["time_utc_s"] is None:
                 time = "invalid"
             else:
-                time = datetime.datetime.utcfromtimestamp(conf["time_utc_s"]).strftime("%H:%M UTC")
+                time = datetime.utcfromtimestamp(conf["time_utc_s"]).strftime("%H:%M UTC")
                 table.add_row("Time", time)
 
             table.add_row("Allow role mentions", str(conf["allow_role_mention"]))
@@ -321,7 +321,7 @@ class BirthdayAdminCommands(MixinMeta):
         time_utc = time - timedelta(hours=8)
 
         # 設定自午夜 (UTC) 開始的秒數
-        midnight = datetime.datetime.utcnow().replace(
+        midnight = datetime.utcnow().replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
@@ -341,8 +341,8 @@ class BirthdayAdminCommands(MixinMeta):
         )
 
         if old is not None:
-            old_dt = datetime.datetime.utcfromtimestamp(old)
-            if time_utc > old_dt and time_utc > datetime.datetime.utcnow():
+            old_dt = datetime.utcfromtimestamp(old)
+            if time_utc > old_dt and time_utc > datetime.utcnow():
                 m += (
                     "\n\nThe time you set is after the time I currently send the birthday message,"
                 " so the birthday message will be sent for a second time."
@@ -524,7 +524,7 @@ class BirthdayAdminCommands(MixinMeta):
             await ctx.send(f"I'm sorry, but I can't set a birthday to before {MIN_BDAY_YEAR}.")
             return
 
-        if birthday > datetime.datetime.utcnow():
+        if birthday > datetime.utcnow():
             await ctx.send("You can't be born in the future!")
             return
 
@@ -628,7 +628,7 @@ class BirthdayAdminCommands(MixinMeta):
                 continue
             for day, users in guild_data.items():
                 for user_id, year in users.items():
-                    dt = datetime.datetime.fromordinal(int(day))
+                    dt = datetime.fromordinal(int(day))
 
                     if year is None or year < MIN_BDAY_YEAR:
                         year = 1
