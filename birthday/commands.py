@@ -321,7 +321,7 @@ class BirthdayAdminCommands(MixinMeta):
         time_utc8 = time
 
         # 設定自午夜 (UTC+8) 開始的秒數
-        midnight_utc8 = datetime.datetime.now(timezone(timedelta(hours=8))).replace(
+        midnight_utc8 = datetime.now(timezone(timedelta(hours=8))).replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
@@ -342,8 +342,8 @@ class BirthdayAdminCommands(MixinMeta):
         )
 
         if old is not None:
-            old_dt = datetime.datetime.fromtimestamp(old, tz=timezone.utc) + timedelta(hours=8)
-            if time_utc8 > old_dt and time_utc8 > datetime.datetime.now(timezone(timedelta(hours=8))):
+            old_dt = datetime.fromtimestamp(old, tz=timezone.utc) + timedelta(hours=8)
+            if time_utc8 > old_dt and time_utc8 > datetime.now(timezone(timedelta(hours=8))):
                 m += (
                     "\n\n您設定的時間在我目前發送生日訊息的時間之後，"
                     "所以生日訊息將會第二次發送。"
