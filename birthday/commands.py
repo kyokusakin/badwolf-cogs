@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-import datetime
+from datetime import timedelta, datetime
 from collections import defaultdict
 from typing import TYPE_CHECKING, Literal, Union
 
@@ -305,24 +305,27 @@ class BirthdayAdminCommands(MixinMeta):
     @bdset.command()
     async def time(self, ctx: commands.Context, *, time: TimeConverter):
         """
-        設定生日訊息的發送時間。
-
+        設定生日訊息的發送時間（UTC+8）。
+        
         分鐘將被忽略。
-
+    
         **範例：**
-        - `[p]bdset time 7:00` - 設定時間為 UTC 7:00 AM
-        - `[p]bdset time 12AM` - 設定時間為 UTC 凌晨 12:00
-        - `[p]bdset time 3PM` - 設定時間為 UTC 3:00 PM
+        - `[p]bdset time 7:00` - 設定時間為 7:00 AM (UTC+8)
+        - `[p]bdset time 12AM` - 設定時間為 凌晨 12:00 (UTC+8)
+        - `[p]bdset time 3PM` - 設定時間為 下午 3:00 (UTC+8)
         """
-        # group has guild check
         if TYPE_CHECKING:
             assert ctx.guild is not None
 
+        # UTC+8 的時間轉換為 UTC，減去 8 小時
+        time_utc = time - timedelta(hours=8)
+
+        # 設定自午夜 (UTC) 開始的秒數
         midnight = datetime.datetime.utcnow().replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
-        time_utc_s = int((time - midnight).total_seconds())
+        time_utc_s = int((time_utc - midnight).total_seconds())
 
         async with self.config.guild(ctx.guild).all() as conf:
             old = conf["time_utc_s"]
@@ -331,19 +334,19 @@ class BirthdayAdminCommands(MixinMeta):
             if old is None:
                 conf["setup_state"] += 1
 
+        # 用戶輸入的時間仍以 UTC+8 顯示
         m = (
             "Time set! I'll send the birthday message and update the birthday role at"
-            f" {time.strftime('%H:%M')} UTC."
+            f" {time.strftime('%H:%M')} UTC+8."
         )
 
         if old is not None:
             old_dt = datetime.datetime.utcfromtimestamp(old)
-            if time > old_dt and time > datetime.datetime.utcnow():
+            if time_utc > old_dt and time_utc > datetime.datetime.utcnow():
                 m += (
                     "\n\nThe time you set is after the time I currently send the birthday message,"
-                    " so the birthday message will be sent for a second time."
+                " so the birthday message will be sent for a second time."
                 )
-
         await ctx.send(m)
 
     @bdset.command()
