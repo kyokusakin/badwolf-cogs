@@ -159,10 +159,10 @@ class BirthdayCommands(MixinMeta):
                     + (
                         ""
                         if birthday_dt.year == 1
-                        else f" turns {today_dt.year - birthday_dt.year}"
+                        else f"將滿{today_dt.year - birthday_dt.year}"
                     )
                 )
-                number_day_mapping[0] = "Today"
+                number_day_mapping[0] = "今天"
                 continue
 
             this_year_bday = birthday_dt.replace(year=today_dt.year)
