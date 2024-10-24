@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 from typing import TYPE_CHECKING, Literal, Union
 
@@ -306,9 +306,9 @@ class BirthdayAdminCommands(MixinMeta):
     async def time(self, ctx: commands.Context, *, time: TimeConverter):
         """
         設定生日訊息的發送時間（UTC+8）。
-    
+
         分鐘將被忽略。
-    
+
         **範例：**
         - `[p]bdset time 7:00` - 設定時間為 7:00 AM (UTC+8)
         - `[p]bdset time 12AM` - 設定時間為 凌晨 12:00 (UTC+8)
@@ -321,31 +321,32 @@ class BirthdayAdminCommands(MixinMeta):
         time_utc8 = time
 
         # 設定自午夜 (UTC+8) 開始的秒數
-        midnight_utc8 = datetime.now().replace(
+        midnight_utc8 = datetime.datetime.now(timezone(timedelta(hours=8))).replace(
             year=1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
         )
 
+        # 計算設定時間的秒數
         time_utc8_s = int((time_utc8 - midnight_utc8).total_seconds())
-    
+
         async with self.config.guild(ctx.guild).all() as conf:
             old = conf["time_utc_s"]
             conf["time_utc_s"] = time_utc8_s
-    
+
             if old is None:
                 conf["setup_state"] += 1
 
         # 用戶輸入的時間仍以 UTC+8 顯示
         m = (
-            "Time set! I'll send the birthday message and update the birthday role at"
-            f" {time.strftime('%H:%M')} UTC+8."
+            "時間已設定！我將在"
+            f" {time.strftime('%H:%M')} UTC+8 發送生日訊息並更新生日角色。"
         )
 
         if old is not None:
-            old_dt = datetime.utcfromtimestamp(old)
-            if time_utc8 > old_dt and time_utc8 > datetime.utcnow():
+            old_dt = datetime.datetime.fromtimestamp(old, tz=timezone.utc) + timedelta(hours=8)
+            if time_utc8 > old_dt and time_utc8 > datetime.datetime.now(timezone(timedelta(hours=8))):
                 m += (
-                    "\n\nThe time you set is after the time I currently send the birthday message,"
-                " so the birthday message will be sent for a second time."
+                    "\n\n您設定的時間在我目前發送生日訊息的時間之後，"
+                    "所以生日訊息將會第二次發送。"
                 )
         await ctx.send(m)
 
