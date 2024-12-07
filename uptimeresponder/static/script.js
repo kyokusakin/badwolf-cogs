@@ -1,35 +1,26 @@
 let serverStartTime, lastUpdateTime, uptimeInterval, statusInterval;
 
-const formatUptime = (seconds) => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const remainingSeconds = seconds % 60;
+const formatUptime = (uptime) => {
+    const { days, hours, minutes, seconds } = uptime;
 
     if (days > 0) {
-        return `${days}days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        return `${days} days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     } else {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 };
 
-const updateUptime = () => {
-    const now = Date.now();
-    const uptime = Math.floor((now - serverStartTime) / 1000); // Convert milliseconds to seconds
-    document.getElementById('uptime').textContent = formatUptime(uptime);
-};
-
 const handleStatusResponse = (data) => {
-    const serverUptime = parseUptimeString(data.uptime); // Convert uptime string to total seconds
+    const serverUptime = parseUptimeString(data.uptime);
     const now = Date.now();
 
     if (!serverStartTime) {
-        serverStartTime = now - serverUptime * 1000; // Convert to milliseconds
+        serverStartTime = now - serverUptime.totalSeconds * 1000;
     } else {
         const expectedUptime = now - serverStartTime;
-        const diff = Math.abs(serverUptime * 1000 - expectedUptime);
+        const diff = Math.abs(serverUptime.totalSeconds * 1000 - expectedUptime);
         if (diff > 2000) {
-            serverStartTime = now - serverUptime * 1000;
+            serverStartTime = now - serverUptime.totalSeconds * 1000;
         }
     }
 
