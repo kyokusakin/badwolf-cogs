@@ -70,7 +70,8 @@ class UptimeResponder(commands.Cog):
 
     def get_uptime_string(self) -> str:
         """Calculate and return the bot's uptime as a formatted string."""
-        uptime = datetime.now(timezone.utc) - self.bot.uptime
+        now = datetime.now(timezone.utc)
+        uptime = now - self.bot.uptime.replace(tzinfo=timezone.utc)
         days, remainder = divmod(int(uptime.total_seconds()), 86400)
         hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
