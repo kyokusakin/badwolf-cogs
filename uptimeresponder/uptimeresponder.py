@@ -89,27 +89,34 @@ class UptimeResponder(commands.Cog):
         """Serve static files from the static directory."""
         filename = request.match_info['filename']
         file_path = os.path.join(self.static_dir, filename)
-
+        if not file_path.startswith(self.static_dir):
+            raise web.HTTPForbidden()
         if not os.path.isfile(file_path):
             # Try to serve files with .txt or .html extensions if the base filename is not found.
             for ext in ['txt', 'html']:
                 alt_path = os.path.join(self.static_dir, f"{filename}.{ext}")
                 if os.path.isfile(alt_path):
                     return web.FileResponse(alt_path)
-
-            # If no matching file is found, return 404.
             raise web.HTTPNotFound()
         return web.FileResponse(file_path)
 
     async def start_webserver(self, port: Optional[int] = None):
-        """Start the web server on the specified port or the default port."""
-        await asyncio.sleep(1)  # Delay to ensure clean shutdown of previous server
+        """
+        Start the web server on the specified port or the default port.
+        """
+        await asyncio.sleep(1)
         port = port or await self.config.port()
-        self._setup_routes()
-        self.runner = web.AppRunner(self.app, access_log=None)
-        await self.runner.setup()
-        await web.TCPSite(self.runner, port=port).start()
-        log.info(f"Web server for UptimeResponder has started on port {port}.")
+
+        try:
+            self._setup_routes()
+            self.runner = web.AppRunner(self.app, access_log=None)
+            await self.runner.setup()
+            await web.TCPSite(self.runner, port=port).start()
+            log.info(f"Web server for UptimeResponder has started on port {port}.")
+        except OSError as e:
+            # Log and raise an error if the server fails to start on the specified port
+            log.error(f"Failed to start web server on port {port}: {e}")
+            raise
 
     def _setup_routes(self):
         """Set up the routes for the web application."""
