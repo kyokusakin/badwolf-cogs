@@ -33,7 +33,7 @@ const handleStatusResponse = (data) => {
         }
     }
 
-    document.getElementById('uptime').textContent = formatUptimeFromSeconds(serverUptime);
+    document.getElementById('uptime').textContent = formatUptime(serverUptime);
     document.getElementById('latency').textContent = `${data.latency} ms`;
     lastUpdateTime = now;
 
