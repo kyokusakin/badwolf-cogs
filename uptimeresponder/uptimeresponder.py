@@ -72,7 +72,7 @@ class UptimeResponder(commands.Cog):
         """Calculate and return the bot's uptime as a formatted string."""
         now = datetime.now(timezone.utc)
         uptime = now - self.bot.uptime.replace(tzinfo=timezone.utc)
-        return int(uptime.total_seconds())
+        return str(int(uptime.total_seconds()))
 
     def get_latency(self) -> float:
         """Get the current WebSocket latency in milliseconds."""
