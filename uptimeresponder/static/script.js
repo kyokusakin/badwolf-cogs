@@ -10,6 +10,12 @@ const formatUptime = (uptime) => {
     }
 };
 
+const updateUptime = () => {
+    const now = Date.now();
+    const uptime = Math.floor((now - serverStartTime) / 1000); // Convert milliseconds to seconds
+    document.getElementById('uptime').textContent = formatUptime(uptime);
+};
+
 const handleStatusResponse = (data) => {
     const serverUptime = parseUptimeString(data.uptime);
     const now = Date.now();
