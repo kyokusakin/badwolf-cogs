@@ -20,20 +20,20 @@ const updateUptime = () => {
 };
 
 const handleStatusResponse = (data) => {
-    const serverUptime = parseUptimeString(data.uptime); // Get uptime in seconds
+    const serverUptime = parseUptimeString(data.uptime); // Convert uptime string to total seconds
     const now = Date.now();
 
     if (!serverStartTime) {
-        serverStartTime = now - serverUptime * 1000; // Store server start time in milliseconds
+        serverStartTime = now - serverUptime * 1000; // Convert to milliseconds
     } else {
-        const expectedUptime = Math.floor((now - serverStartTime) / 1000); // Convert to seconds
-        const diff = Math.abs(serverUptime - expectedUptime);
-        if (diff > 2) { // Tolerate small time difference (2 seconds)
+        const expectedUptime = now - serverStartTime;
+        const diff = Math.abs(serverUptime * 1000 - expectedUptime);
+        if (diff > 2000) {
             serverStartTime = now - serverUptime * 1000;
         }
     }
 
-    document.getElementById('uptime').textContent = formatUptime(serverUptime);
+    document.getElementById('uptime').textContent = formatUptimeFromSeconds(serverUptime);
     document.getElementById('latency').textContent = `${data.latency} ms`;
     lastUpdateTime = now;
 
