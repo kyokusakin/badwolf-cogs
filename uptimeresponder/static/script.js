@@ -93,8 +93,13 @@ const fetchStatus = () => {
 };
 
 const parseUptimeString = (uptimeString) => {
-    const [days, hours, minutes, seconds] = uptimeString.split(':').map(Number);
-    return days * 86400 + hours * 3600 + minutes * 60 + seconds; // Return total seconds
+    const totalSeconds = Number(uptimeString);
+    const days = Math.floor(totalSeconds / 86400);
+    const hours = Math.floor((totalSeconds % 86400) / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    return { days, hours, minutes, seconds };
 };
 
 document.addEventListener('DOMContentLoaded', () => {
