@@ -22,7 +22,6 @@ class UptimeResponder(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=418078199982063626, force_registration=True)
         self.config.register_global(port=8710)
-        self.uptime = datetime.now(timezone.utc)
         self.app = web.Application()
         self.runner = None
         self._setup_file_paths()
@@ -71,7 +70,7 @@ class UptimeResponder(commands.Cog):
 
     def get_uptime_string(self) -> str:
         """Calculate and return the bot's uptime as a formatted string."""
-        uptime = datetime.now(timezone.utc) - self.uptime
+        uptime = datetime.now(timezone.utc) - self.bot.uptime
         days, remainder = divmod(int(uptime.total_seconds()), 86400)
         hours, remainder = divmod(remainder, 3600)
         minutes, seconds = divmod(remainder, 60)
