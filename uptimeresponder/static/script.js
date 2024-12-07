@@ -1,31 +1,35 @@
 let serverStartTime, lastUpdateTime, uptimeInterval, statusInterval;
 
-const formatUptime = (milliseconds) => {
-    const seconds = Math.floor(milliseconds / 1000);
+const formatUptime = (seconds) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const remainingSeconds = seconds % 60;
-    return `${days.toString().padStart(2, '0')}:${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+
+    if (days > 0) {
+        return `${days}days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    } else {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
 };
 
 const updateUptime = () => {
     const now = Date.now();
-    const uptime = now - serverStartTime;
+    const uptime = Math.floor((now - serverStartTime) / 1000); // Convert milliseconds to seconds
     document.getElementById('uptime').textContent = formatUptime(uptime);
 };
 
 const handleStatusResponse = (data) => {
-    const serverUptime = parseUptimeString(data.uptime);
+    const serverUptime = parseUptimeString(data.uptime); // Get uptime in seconds
     const now = Date.now();
 
     if (!serverStartTime) {
-        serverStartTime = now - serverUptime;
+        serverStartTime = now - serverUptime * 1000; // Store server start time in milliseconds
     } else {
-        const expectedUptime = now - serverStartTime;
+        const expectedUptime = Math.floor((now - serverStartTime) / 1000); // Convert to seconds
         const diff = Math.abs(serverUptime - expectedUptime);
-        if (diff > 2000) {
-            serverStartTime = now - serverUptime;
+        if (diff > 2) { // Tolerate small time difference (2 seconds)
+            serverStartTime = now - serverUptime * 1000;
         }
     }
 
@@ -90,7 +94,7 @@ const fetchStatus = () => {
 
 const parseUptimeString = (uptimeString) => {
     const [days, hours, minutes, seconds] = uptimeString.split(':').map(Number);
-    return (days * 86400 + hours * 3600 + minutes * 60 + seconds) * 1000;
+    return days * 86400 + hours * 3600 + minutes * 60 + seconds; // Return total seconds
 };
 
 document.addEventListener('DOMContentLoaded', () => {
