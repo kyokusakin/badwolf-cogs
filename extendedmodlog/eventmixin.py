@@ -503,7 +503,7 @@ class EventMixin:
             if reason:
                 embed.add_field(name=_("Reason"), value=reason)
             if message.attachments:
-                files = "\n".join(f"- {inline(a.filename)} ({a.url})" for a in message.attachments)
+                files = "\n".join(f"- [{inline(a.filename)}]({a.url})" for a in message.attachments)
                 embed.add_field(name=_("Attachments"), value=files[:1024])
             if replying:
                 embed.add_field(name=_("Replying to:"), value=replying)
