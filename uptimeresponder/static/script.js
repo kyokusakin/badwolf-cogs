@@ -4,30 +4,26 @@ const formatUptime = (uptime) => {
     const { days, hours, minutes, seconds } = uptime;
 
     if (days > 0) {
-        return `${days} days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        return `${days}days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     } else {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 };
 
-// 持續更新運行時間
 const updateUptime = () => {
     const now = Date.now();
-    let uptime = Math.floor((now - serverStartTime) / 1000); // Convert milliseconds to seconds
-    const formattedUptime = parseUptimeSeconds(uptime);  // Convert seconds to structured uptime object
+    let uptime = Math.floor((now - serverStartTime) / 1000);
+    const formattedUptime = parseUptimeSeconds(uptime);
     document.getElementById('uptime').textContent = formatUptime(formattedUptime);
 };
 
-// 更新伺服器運行時間
 const handleStatusResponse = (data) => {
     const serverUptime = parseUptimeString(data.uptime);
     const now = Date.now();
 
-    // 如果第一次回應，設定伺服器啟動時間
     if (!serverStartTime) {
         serverStartTime = now - serverUptime.totalSeconds * 1000;
     } else {
-        // 伺服器運行時間與本地計算時間誤差過大時，校正啟動時間
         const expectedUptime = now - serverStartTime;
         const diff = Math.abs(serverUptime.totalSeconds * 1000 - expectedUptime);
         if (diff > 2000) {
@@ -35,13 +31,13 @@ const handleStatusResponse = (data) => {
         }
     }
 
-    const formattedUptime = parseUptimeString(serverUptime.totalSeconds);  // Convert totalSeconds to structured object
+    const formattedUptime = parseUptimeString(serverUptime.totalSeconds);
     document.getElementById('uptime').textContent = formatUptime(formattedUptime);
     document.getElementById('latency').textContent = `${data.latency} ms`;
     lastUpdateTime = now;
 
     if (!uptimeInterval) {
-        uptimeInterval = setInterval(updateUptime, 1000); // 每秒更新一次運行時間
+        uptimeInterval = setInterval(updateUptime, 1000);
     }
 };
 
@@ -105,7 +101,6 @@ const parseUptimeString = (uptimeString) => {
     return { totalSeconds, days, hours, minutes, seconds };
 };
 
-// This function ensures that seconds are converted to a structured object (days, hours, minutes, seconds)
 const parseUptimeSeconds = (seconds) => {
     const days = Math.floor(seconds / 86400);
     const hours = Math.floor((seconds % 86400) / 3600);
