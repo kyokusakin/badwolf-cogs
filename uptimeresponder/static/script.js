@@ -114,4 +114,34 @@ const parseUptimeSeconds = (seconds) => {
 document.addEventListener('DOMContentLoaded', () => {
     fetchStatus();
     statusInterval = setInterval(fetchStatus, 10000);
+
+    // 語言切換時更新天數顯示
+    const languageSwitcher = document.querySelector('.language-switcher select');
+    languageSwitcher.addEventListener('change', async (event) => {
+        const lang = event.target.value;
+        const response = await fetch('translations.json');
+        const translations = await response.json();
+        const translation = translations[lang];
+        window.translation = translation; // 更新全局翻譯變量
+
+        // 更新頁面上的文本
+        document.documentElement.lang = lang;
+        document.getElementById('title').innerText = translation.title;
+        document.getElementById('online').innerText = translation.botname + translation.online;
+        document.getElementById('loaded').innerText = translation.loaded;
+        document.getElementById('uptime-label').innerText = translation.uptime;
+        document.getElementById('latency-label').innerText = translation.latency;
+        document.getElementById('terms').innerText = translation.terms;
+        document.getElementById('privacy').innerText = translation.privacy;
+        document.getElementById('terms').href = `/${lang}/terms-of-service`;
+        document.getElementById('privacy').href = `/${lang}/privacy-policy`;
+
+        // 更新天數顯示
+        const uptimeElement = document.getElementById('uptime');
+        const uptimeText = uptimeElement.textContent;
+        if (uptimeText.includes('days') || uptimeText.includes('天')) {
+            const updatedUptimeText = uptimeText.replace(/days|天/, translation.days);
+            uptimeElement.textContent = updatedUptimeText;
+        }
+    });
 });
