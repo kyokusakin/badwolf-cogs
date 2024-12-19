@@ -7,7 +7,7 @@
         "latency": "Discord WS Latency:",
         "terms": "Terms of Service",
         "privacy": "Privacy Policy",
-        "botName": "萬能的帕魯"
+        "botname": "萬能的帕魯"
     },
     "zh-tw": {
         "title": "Uptime Responder",
@@ -17,7 +17,7 @@
         "latency": "Discord WS 延遲：",
         "terms": "服務條款",
         "privacy": "隱私政策",
-        "botName": "萬能的帕魯"
+        "botname": "萬能的帕魯"
     },
     "zh-cn": {
         "title": "Uptime Responder",
@@ -27,6 +27,6 @@
         "latency": "Discord WS 延迟：",
         "terms": "服务条款",
         "privacy": "隐私政策",
-        "botName": "萬能的帕魯"
+        "botname": "萬能的帕魯"
     }
 }
