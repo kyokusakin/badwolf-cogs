@@ -95,7 +95,7 @@ class UptimeResponder(commands.Cog):
             # Try to serve files with .txt or .html extensions if the base filename is not found.
             for ext in ['txt', 'html']:
                 alt_path = os.path.join(self.static_dir, f"{filename}.{ext}")
-                if os.path.isfile(alt_path)):
+                if os.path.isfile(alt_path):
                     return web.FileResponse(alt_path)
             raise web.HTTPNotFound()
         return web.FileResponse(file_path)
