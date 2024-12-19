@@ -1,5 +1,5 @@
 {
-    "en": {
+    "en-US": {
         "title": "Uptime Responder",
         "online": " is online!",
         "loaded": "Uptime Responder cog is loaded.",
@@ -9,7 +9,7 @@
         "privacy": "Privacy Policy",
         "botname": "萬能的帕魯"
     },
-    "zh-tw": {
+    "zh-TW": {
         "title": "Uptime Responder",
         "online": " 在線上！",
         "loaded": "Uptime Responder cog 已載入。",
@@ -19,7 +19,7 @@
         "privacy": "隱私政策",
         "botname": "萬能的帕魯"
     },
-    "zh-cn": {
+    "zh-CN": {
         "title": "Uptime Responder",
         "online": " 在线上！",
         "loaded": "Uptime Responder cog 已加载。",
