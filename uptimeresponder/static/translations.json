@@ -6,7 +6,8 @@
         "uptime": "Uptime:",
         "latency": "Discord WS Latency:",
         "terms": "Terms of Service",
-        "privacy": "Privacy Policy"
+        "privacy": "Privacy Policy",
+        "botName": "萬能的帕魯"
     },
     "zh-tw": {
         "title": "Uptime Responder",
@@ -15,7 +16,8 @@
         "uptime": "運行時間：",
         "latency": "Discord WS 延遲：",
         "terms": "服務條款",
-        "privacy": "隱私政策"
+        "privacy": "隱私政策",
+        "botName": "萬能的帕魯"
     },
     "zh-cn": {
         "title": "Uptime Responder",
@@ -24,6 +26,7 @@
         "uptime": "运行时间：",
         "latency": "Discord WS 延迟：",
         "terms": "服务条款",
-        "privacy": "隐私政策"
+        "privacy": "隐私政策",
+        "botName": "萬能的帕魯"
     }
 }
