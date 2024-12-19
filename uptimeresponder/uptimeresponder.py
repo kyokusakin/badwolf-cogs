@@ -4,7 +4,6 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
-from ipaddress import ip_network, ip_address
 
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
@@ -24,17 +23,17 @@ class UptimeResponder(commands.Cog):
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=418078199982063626, force_registration=True)
-        self.config.register_global(port=8710, allowed_ips=['127.0.0.1', '45.139.50.97', '45.139.50.98'])
+        self.config.register_global(port=8710, allowed_ips=['127.0.0.1', '::1'])
         self.app = web.Application()
         self.runner = None
         self._setup_file_paths()
         self.env = Environment(loader=FileSystemLoader(self.templates_dir))
 
     def _setup_file_paths(self):
-        """Set up file paths for templates and static files."""
-        cog_data_path = os.path.join(os.path.dirname(__file__), 'data')
-        self.templates_dir = os.path.join(cog_data_path, 'templates')
-        self.static_dir = os.path.join(cog_data_path, 'static')
+        """Initialize paths for static and template directories."""
+        self.cog_dir = os.path.dirname(os.path.abspath(__file__))
+        self.static_dir = os.path.join(self.cog_dir, 'static')
+        self.templates_dir = os.path.join(self.cog_dir, 'templates')
 
     async def cog_load(self):
         await self.start_webserver()
@@ -111,10 +110,10 @@ class UptimeResponder(commands.Cog):
             self._setup_routes()
             self.runner = web.AppRunner(self.app, access_log=None)
             await self.runner.setup()
-            site = web.TCPSite(self.runner, port=port)
-            await site.start()
+            await web.TCPSite(self.runner, port=port).start()
             log.info(f"Web server for UptimeResponder has started on port {port}.")
         except OSError as e:
+            # Log and raise an error if the server fails to start on the specified port
             log.error(f"Failed to start web server on port {port}: {e}")
             raise
 
@@ -130,8 +129,7 @@ class UptimeResponder(commands.Cog):
         try:
             client_ip = ip_address(request.remote)
             allowed_ips = await self.config.allowed_ips()
-            allowed_networks = [ip_network(ip, strict=False) for ip in allowed_ips]
-
+            allowed_networks = [ip_network(ip) for ip in allowed_ips]
             if not any(client_ip in network for network in allowed_networks):
                 log.warning(f"Access denied for IP: {client_ip}, path: {request.path}, method: {request.method}")
                 raise web.HTTPForbidden()
@@ -160,7 +158,6 @@ class UptimeResponder(commands.Cog):
                 await ctx.send(f"The web server has been restarted on port {port}.")
             except OSError as e:
                 await ctx.send(f"Failed to start web server on port {port}: ```\n{e}```\nPlease choose a different port. No web server is running at the moment.")
-
     @commands.is_owner()
     @commands.command()
     async def uptimeresponderips(self, ctx: commands.Context, *ips: str):
