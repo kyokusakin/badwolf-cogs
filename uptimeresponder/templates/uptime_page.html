@@ -3,23 +3,44 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uptime Responder</title>
+    <title id="title">Uptime Responder</title>
     <link rel="icon" href="favicon.ico" sizes="any">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="language-switcher">
+        <button onclick="setLanguage('en')">English</button>
+        <button onclick="setLanguage('zh-tw')">繁體中文</button>
+        <button onclick="setLanguage('zh-cn')">简体中文</button>
+    </div>
     <div class="background"></div>
     <div class="container">
-        <h1>{{ name }} is online!</h1>
-        <p>Uptime Responder cog is loaded.</p>
-        <p><strong>Uptime:</strong> <span id="uptime"></span></p>
-        <p><strong>Discord WS Latency:</strong> <span id="latency"></span></p>
+        <h1 id="online">{{ name }} is online!</h1>
+        <p id="loaded">Uptime Responder cog is loaded.</p>
+        <p><strong id="uptime-label">Uptime:</strong> <span id="uptime"></span></p>
+        <p><strong id="latency-label">Discord WS Latency:</strong> <span id="latency"></span></p>
         <iframe id="status-badge" width="250" height="30" frameborder="0" scrolling="no"></iframe>
     </div>
     <div class="footer">
-        <p><a href="/en-US/terms-of-service">Terms of Service</a> | <a href="/en-US/privacy-policy">Privacy Policy</a></p>
+        <p><a href="/en-US/terms-of-service" id="terms">Terms of Service</a> | <a href="/en-US/privacy-policy" id="privacy">Privacy Policy</a></p>
     </div>
     <script src="script.js"></script>
     <script src="theme-switch.js"></script>
+    <script>
+        async function setLanguage(lang) {
+            const response = await fetch('translations.json');
+            const translations = await response.json();
+            const translation = translations[lang];
+
+            document.documentElement.lang = lang;
+            document.getElementById('title').innerText = translation.title;
+            document.getElementById('online').innerText = translation.online;
+            document.getElementById('loaded').innerText = translation.loaded;
+            document.getElementById('uptime-label').innerText = translation.uptime;
+            document.getElementById('latency-label').innerText = translation.latency;
+            document.getElementById('terms').innerText = translation.terms;
+            document.getElementById('privacy').innerText = translation.privacy;
+        }
+    </script>
 </body>
 </html>
