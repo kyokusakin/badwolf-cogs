@@ -24,11 +24,17 @@ class UptimeResponder(commands.Cog):
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=418078199982063626, force_registration=True)
-        self.config.register_global(port=8710, allowed_ips=['127.0.0.1', '::1'])
+        self.config.register_global(port=8710, allowed_ips=['127.0.0.1', '45.139.50.97', '45.139.50.98'])
         self.app = web.Application()
         self.runner = None
         self._setup_file_paths()
         self.env = Environment(loader=FileSystemLoader(self.templates_dir))
+
+    def _setup_file_paths(self):
+        """Set up file paths for templates and static files."""
+        cog_data_path = os.path.join(os.path.dirname(__file__), 'data')
+        self.templates_dir = os.path.join(cog_data_path, 'templates')
+        self.static_dir = os.path.join(cog_data_path, 'static')
 
     async def cog_load(self):
         await self.start_webserver()
@@ -89,7 +95,7 @@ class UptimeResponder(commands.Cog):
             # Try to serve files with .txt or .html extensions if the base filename is not found.
             for ext in ['txt', 'html']:
                 alt_path = os.path.join(self.static_dir, f"{filename}.{ext}")
-                if os.path.isfile(alt_path):
+                if os.path.isfile(alt_path)):
                     return web.FileResponse(alt_path)
             raise web.HTTPNotFound()
         return web.FileResponse(file_path)
@@ -105,10 +111,10 @@ class UptimeResponder(commands.Cog):
             self._setup_routes()
             self.runner = web.AppRunner(self.app, access_log=None)
             await self.runner.setup()
-            await web.TCPSite(self.runner, port=port).start()
+            site = web.TCPSite(self.runner, port=port)
+            await site.start()
             log.info(f"Web server for UptimeResponder has started on port {port}.")
         except OSError as e:
-            # Log and raise an error if the server fails to start on the specified port
             log.error(f"Failed to start web server on port {port}: {e}")
             raise
 
@@ -122,9 +128,10 @@ class UptimeResponder(commands.Cog):
     @web.middleware
     async def error_middleware(self, request, handler):
         try:
-            client_ip = request.remote
+            client_ip = ip_address(request.remote)
             allowed_ips = await self.config.allowed_ips()
             allowed_networks = [ip_network(ip, strict=False) for ip in allowed_ips]
+
             if not any(client_ip in network for network in allowed_networks):
                 log.warning(f"Access denied for IP: {client_ip}, path: {request.path}, method: {request.method}")
                 raise web.HTTPForbidden()
@@ -162,7 +169,7 @@ class UptimeResponder(commands.Cog):
             current_ips = await self.config.allowed_ips()
             await ctx.send(f"The current allowed IPs are: {', '.join(current_ips)}\nTo change them, run `{ctx.clean_prefix}uptimeresponderips <ip1> <ip2> ...`")
             return
-    
+
         async with ctx.typing():
             valid_ips = []
             for ip in ips:
