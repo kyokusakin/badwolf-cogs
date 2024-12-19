@@ -66,6 +66,28 @@ p {
     text-decoration: underline;
 }
 
+.language-switcher {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+}
+
+.language-switcher button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px;
+    margin: 5px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background-color 0.3s ease;
+}
+
+.language-switcher button:hover {
+    background-color: #0056b3;
+}
+
 @media (prefers-color-scheme: dark) {
     body {
         background-color: #333;
