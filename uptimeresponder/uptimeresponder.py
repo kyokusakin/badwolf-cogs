@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 from jinja2 import Environment, FileSystemLoader
+from ipaddress import ip_network, ip_address
 
 from aiohttp import web
 from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
@@ -16,8 +17,6 @@ from .vexutils import format_help, format_info, get_vex_logger
 
 log = get_vex_logger(__name__)
 
-ALLOWED_IPS = ['127.0.0.1', '45.139.50.97', '45.139.50.98']
-
 class UptimeResponder(commands.Cog):
     __version__ = "2.0.0"
     __author__ = "@vexingvexed, @badwolf_tw"
@@ -25,17 +24,11 @@ class UptimeResponder(commands.Cog):
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=418078199982063626, force_registration=True)
-        self.config.register_global(port=8710)
+        self.config.register_global(port=8710, allowed_ips=['127.0.0.1', '::1'])
         self.app = web.Application()
         self.runner = None
         self._setup_file_paths()
         self.env = Environment(loader=FileSystemLoader(self.templates_dir))
-
-    def _setup_file_paths(self):
-        """Initialize paths for static and template directories."""
-        self.cog_dir = os.path.dirname(os.path.abspath(__file__))
-        self.static_dir = os.path.join(self.cog_dir, 'static')
-        self.templates_dir = os.path.join(self.cog_dir, 'templates')
 
     async def cog_load(self):
         await self.start_webserver()
@@ -130,7 +123,9 @@ class UptimeResponder(commands.Cog):
     async def error_middleware(self, request, handler):
         try:
             client_ip = request.remote
-            if client_ip not in ALLOWED_IPS:
+            allowed_ips = await self.config.allowed_ips()
+            allowed_networks = [ip_network(ip, strict=False) for ip in allowed_ips]
+            if not any(client_ip in network for network in allowed_networks):
                 log.warning(f"Access denied for IP: {client_ip}, path: {request.path}, method: {request.method}")
                 raise web.HTTPForbidden()
             return await handler(request)
@@ -158,3 +153,26 @@ class UptimeResponder(commands.Cog):
                 await ctx.send(f"The web server has been restarted on port {port}.")
             except OSError as e:
                 await ctx.send(f"Failed to start web server on port {port}: ```\n{e}```\nPlease choose a different port. No web server is running at the moment.")
+
+    @commands.is_owner()
+    @commands.command()
+    async def uptimeresponderips(self, ctx: commands.Context, *ips: str):
+        """Set the allowed IPs for the UptimeResponder web server."""
+        if not ips:
+            current_ips = await self.config.allowed_ips()
+            await ctx.send(f"The current allowed IPs are: {', '.join(current_ips)}\nTo change them, run `{ctx.clean_prefix}uptimeresponderips <ip1> <ip2> ...`")
+            return
+    
+        async with ctx.typing():
+            valid_ips = []
+            for ip in ips:
+                try:
+                    # Validate if the input is a valid IP or CIDR
+                    ip_network(ip, strict=False)
+                    valid_ips.append(ip)
+                except ValueError:
+                    await ctx.send(f"Invalid IP or CIDR: {ip}")
+                    return
+
+            await self.config.allowed_ips.set(valid_ips)
+            await ctx.send(f"The allowed IPs have been updated to: {', '.join(valid_ips)}")
