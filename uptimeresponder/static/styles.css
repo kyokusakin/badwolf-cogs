@@ -73,7 +73,7 @@ p {
     z-index: 2;
 }
 
-.language-switcher button {
+.language-switcher select {
     background-color: #007bff;
     color: white;
     border: none;
@@ -84,7 +84,7 @@ p {
     transition: background-color 0.3s ease;
 }
 
-.language-switcher button:hover {
+.language-switcher select:hover {
     background-color: #0056b3;
 }
 
@@ -120,6 +120,15 @@ p {
 
     .footer a:hover {
         color: #aad4ff;
+    }
+
+    .language-switcher select {
+        background-color: #4e9ef1;
+        color: black;
+    }
+
+    .language-switcher select:hover {
+        background-color: #aad4ff;
     }
 }
 

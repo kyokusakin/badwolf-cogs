@@ -9,9 +9,11 @@
 </head>
 <body>
     <div class="language-switcher">
-        <button onclick="setLanguage('en')">English</button>
-        <button onclick="setLanguage('zh-tw')">繁體中文</button>
-        <button onclick="setLanguage('zh-cn')">简体中文</button>
+        <select onchange="setLanguage(this.value)">
+            <option value="en">English</option>
+            <option value="zh-tw">繁體中文</option>
+            <option value="zh-cn">简体中文</option>
+        </select>
     </div>
     <div class="background"></div>
     <div class="container">
