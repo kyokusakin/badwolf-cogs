@@ -2,9 +2,10 @@ let serverStartTime, lastUpdateTime, uptimeInterval, statusInterval;
 
 const formatUptime = (uptime) => {
     const { days, hours, minutes, seconds } = uptime;
+    const daysText = window.translation && window.translation.days ? window.translation.days : 'days';
 
     if (days > 0) {
-        return `${days} days ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        return `${days} ${daysText} ${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     } else {
         return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
