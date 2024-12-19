@@ -1,7 +1,7 @@
 {
     "en": {
         "title": "Uptime Responder",
-        "online": "{{ name }} is online!",
+        "online": " is online!",
         "loaded": "Uptime Responder cog is loaded.",
         "uptime": "Uptime:",
         "latency": "Discord WS Latency:",
@@ -11,7 +11,7 @@
     },
     "zh-tw": {
         "title": "Uptime Responder",
-        "online": "{{ name }} 在線上！",
+        "online": " 在線上！",
         "loaded": "Uptime Responder cog 已載入。",
         "uptime": "運行時間：",
         "latency": "Discord WS 延遲：",
@@ -21,7 +21,7 @@
     },
     "zh-cn": {
         "title": "Uptime Responder",
-        "online": "{{ name }} 在线上！",
+        "online": " 在线上！",
         "loaded": "Uptime Responder cog 已加载。",
         "uptime": "运行时间：",
         "latency": "Discord WS 延迟：",
