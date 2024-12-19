@@ -10,6 +10,7 @@ body {
     justify-content: center;
     background: url('https://i.imgur.com/xCA1sUT.png') no-repeat center center fixed;
     background-size: cover;
+    transition: background-color 0.3s ease;
 }
 
 .background {
@@ -30,6 +31,7 @@ body {
     padding: 20px;
     border-radius: 10px;
     z-index: 1;
+    transition: background-color 0.3s ease;
 }
 
 h1 {
@@ -39,4 +41,97 @@ h1 {
 p {
     font-size: 18px;
     color: #666;
+}
+
+.footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-size: 14px;
+    color: #666;
+    background-color: #fff;
+    padding: 10px 0;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+.footer a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+}
+
+@media (prefers-color-scheme: dark) {
+    body {
+        background-color: #333;
+    }
+
+    .background {
+        filter: blur(10px);
+    }
+
+    .container {
+        background-color: rgba(0, 0, 0, 0.7);
+    }
+
+    h1 {
+        color: #fff;
+    }
+
+    p {
+        color: #ccc;
+    }
+
+    .footer {
+        background-color: #333;
+        color: #ccc;
+    }
+
+    .footer a {
+        color: #4e9ef1;
+    }
+
+    .footer a:hover {
+        color: #aad4ff;
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    body {
+        background-color: #fff;
+    }
+
+    .background {
+        filter: blur(10px);
+    }
+
+    .container {
+        background-color: rgba(255, 255, 255, 0.9);
+    }
+
+    h1 {
+        color: #333;
+    }
+
+    p {
+        color: #666;
+    }
+
+    .footer {
+        background-color: #fff;
+        color: #666;
+    }
+
+    .footer a {
+        color: #007bff;
+    }
+
+    .footer a:hover {
+        color: #0056b3;
+    }
 }

@@ -88,13 +88,12 @@ msgstr "秒"
 #: warnsystem/__init__.py:120 warnsystem/api.py:221
 #: warnsystem/warnsystem.py:404
 msgid " and "
-msgstr "和"
+msgstr ""
 
 #: warnsystem/api.py:92
 msgid "The given member cannot be found.\n"
 "If you're trying to hackban, the user ID is not valid."
-msgstr "提供的用戶未找到"\n
-"如果你在嘗試hackban，請使用User ID"
+msgstr ""
 
 #: warnsystem/api.py:592 warnsystem/api.py:1103
 msgid "warn"
@@ -180,7 +179,7 @@ msgstr "警告"
 
 #: warnsystem/api.py:630 warnsystem/api.py:636
 msgid "*[couldn't create an invite]*"
-msgstr "*[無法創建邀請]*"
+msgstr ""
 
 #: warnsystem/api.py:644
 msgid "*[No time given]*"
@@ -311,7 +310,7 @@ msgstr ""
 
 #: warnsystem/automod.py:49
 msgid "Invalid time format."
-msgstr "未知的時間格式"
+msgstr ""
 
 #: warnsystem/automod.py:68 warnsystem/automod.py:69 warnsystem/automod.py:244
 msgid "Not set."
@@ -368,7 +367,7 @@ msgstr ""
 
 #: warnsystem/automod.py:91
 msgid " level {level}"
-msgstr " 等級 {level}"
+msgstr ""
 
 #: warnsystem/automod.py:92
 msgid " from the automod"

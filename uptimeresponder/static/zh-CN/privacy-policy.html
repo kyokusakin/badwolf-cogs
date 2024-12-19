@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隐私政策 - 萬能的帕魯</title>
+    <link rel="stylesheet" href="shared-license-styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>隐私政策</h1>
+        <p><strong>萬能的帕魯#4383</strong>（以下简称“本机器人”）由DogexeDEV群开发和运营。请在使用本机器人之前仔细阅读以下条款，了解我们如何收集、使用和保护您的数据。</p>
+
+        <h2>1. 数据收集范围</h2>
+        <ul>
+            <li>● 用户的Discord ID</li>
+            <li>● 用户在服务器中的消息内容</li>
+            <li>● 用户在服务器中的活动记录（例如加入/离开服务器的时间、发送的消息数量等）</li>
+            <li>● 用户与本机器人的互动记录（例如使用的指令、回复的内容等）</li>
+        </ul>
+
+        <h2>2. 数据使用目的</h2>
+        <ul>
+            <li>● 提供并改进本机器人的服务功能</li>
+            <li>● 分析用户行为以优化用户体验</li>
+            <li>● 监控和维护服务器的安全性和运营状况</li>
+            <li>● 依照用户需求或服务器管理员要求生成报告或统计数据</li>
+        </ul>
+
+        <h2>3. 数据保护措施</h2>
+        <ul>
+            <li>● 我们采取各种技术和组织措施来保护您的个人数据免受未经授权的访问、使用或泄露。我们仅在必要的情况下存储您的数据，并在不再需要时及时删除或匿名化处理。</li>
+        </ul>
+
+        <h2>4. 数据共享</h2>
+        <ul>
+            <li>我们不会将您的个人数据出售或出租给第三方。仅在以下情况下，我们可能会与第三方共享您的数据：</li>
+            <li>● 获得您的明确同意后</li>
+            <li>● 为遵守法律法规或司法程序的要求</li>
+            <li>● 为保护我们的权利、财产或安全，以及我们的用户或公众的权利、财产或安全</li>
+        </ul>
+
+        <h2>5. 用户权利</h2>
+        <ul>
+            <li>● 您有权请求访问、更正或删除我们收集的您的个人数据。若您对我们的数据处理有任何疑问或担忧，请随时与我们联系。</li>
+        </ul>
+
+        <h2>6. 条款变更</h2>
+        <ul>
+            <li>● 我们保留随时修改本条款的权利。修改后的条款将发布在<a href="https://discord.gg/vGcw62jMQr">狗窝</a>，并自发布时起生效。我们建议您定期查看本条款以了解最新信息。</li>
+        </ul>
+
+        <h2>7. 联系方式</h2>
+        <p>如有任何问题或建议，请通过以下方式联系我们：</p>
+        <ul>
+            <li>● Discord：badwolf_tw</li>
+        </ul>
+        
+        <div>
+            <label for="language-select">切换语言:</label>
+            <select id="language-select" onchange="switchLanguage()">
+                <option value="zh-CN" selected>简体中文</option>
+                <option value="zh-TW">繁体中文</option>
+                <option value="en-US">English</option>
+            </select>
+        </div>
+    </div>
+    <script>
+        function switchLanguage() {
+            var languageSelect = document.getElementById("language-select");
+            var selectedLanguage = languageSelect.value;
+            var baseURL = "https://status.badwolftw.cloudns.ch/";
+            var newURL = baseURL + selectedLanguage + "/privacy-policy";
+            window.location.href = newURL;
+        }
+    </script>
+</body>
+</html>

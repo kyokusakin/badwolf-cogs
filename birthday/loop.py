@@ -14,7 +14,6 @@ from .vexutils import get_vex_logger
 
 log = get_vex_logger(__name__)
 
-
 class BirthdayLoop(MixinMeta):
     @commands.command(hidden=True)
     @commands.is_owner()
@@ -34,10 +33,6 @@ class BirthdayLoop(MixinMeta):
                 log.trace("ran coro %s", coro)
             except discord.HTTPException as e:
                 log.warning("A queued coro failed to run.", exc_info=e)
-
-        # just using one task for all guilds is okay. maybe it's not the fastest as no async-ness
-        # to get them doe faster as (some) rate limits are per-guild
-        # but it's fine for now and the loop is hourly
 
     async def add_role(self, me: discord.Member, member: discord.Member, role: discord.Role):
         if error := role_perm_check(me, role):
@@ -112,7 +107,6 @@ class BirthdayLoop(MixinMeta):
                 exc_info=e,
             )
 
-        # both iter_finish and iter_error set next_iter as not None
         assert self.loop_meta.next_iter is not None
         self.loop_meta.next_iter = self.loop_meta.next_iter.replace(
             minute=0
@@ -143,13 +137,15 @@ class BirthdayLoop(MixinMeta):
         all_birthdays: dict[int, dict[int, dict[str, Any]]] = await self.config.all_members()
         all_settings: dict[int, dict[str, Any]] = await self.config.all_guilds()
 
+        utc8 = timezone(timedelta(hours=8))
+
         async for guild_id, guild_data in AsyncIter(all_birthdays.items(), steps=5):
             guild: discord.Guild | None = self.bot.get_guild(int(guild_id))
             if guild is None:
                 log.trace("Guild %s is not in cache, skipping", guild_id)
                 continue
 
-            if all_settings.get(guild.id) is None:  # can happen with migration from ZeLarp's cog
+            if all_settings.get(guild.id) is None:
                 log.trace("Guild %s is not setup, skipping", guild_id)
                 continue
 
@@ -160,41 +156,28 @@ class BirthdayLoop(MixinMeta):
             birthday_members: dict[discord.Member, datetime.datetime] = {}
 
             hour_td = datetime.timedelta(seconds=all_settings[guild.id]["time_utc_s"])
+            utc8_now = datetime.datetime.now(utc8)
 
-            # 使用 UTC+8 時區
-            utc8_now = datetime.datetime.now(timezone(timedelta(hours=8)))
-            since_midnight = utc8_now.replace(
-                minute=0, second=0, microsecond=0
-            ) - utc8_now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-            if since_midnight.total_seconds() != hour_td.total_seconds():
-                log.trace("Not correct time for update for guild %s, skipping", guild_id)
-                continue
-
-            today_dt = (utc8_now - hour_td).replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
-
+            # 設置當天的 UTC+8 時間作為基準
+            today_dt = (utc8_now - hour_td).replace(hour=0, minute=0, second=0, microsecond=0)
             start = today_dt + hour_td
-            end = start + datetime.timedelta(days=1)
+            end = start + timedelta(days=1)
 
             required_role = guild.get_role(all_settings[guild.id].get("required_role"))
 
             async for member_id, data in AsyncIter(guild_data.items(), steps=50):
                 birthday = data["birthday"]
-                if not birthday:  # birthday removed but user remains in config
+                if not birthday:
                     continue
                 member = guild.get_member(int(member_id))
                 if member is None:
-                    log.trace(
-                        "Member %s for guild %s is not in cache, skipping", member_id, guild_id
-                    )
+                    log.trace("Member %s for guild %s is not in cache, skipping", member_id, guild_id)
                     continue
 
                 proper_bday_dt = datetime.datetime(
-                    year=birthday["year"] or 1, month=birthday["month"], day=birthday["day"]
+                    year=birthday["year"] or 1, month=birthday["month"], day=birthday["day"], tzinfo=utc8
                 )
-                this_year_bday_dt = proper_bday_dt.replace(year=today_dt.year) + hour_td
+                this_year_bday_dt = proper_bday_dt.replace(year=today_dt.year)
 
                 if required_role and required_role not in member.roles:
                     log.trace(
@@ -204,7 +187,7 @@ class BirthdayLoop(MixinMeta):
                     )
                     continue
 
-                if start <= this_year_bday_dt < end:  # birthday is today
+                if start <= this_year_bday_dt < end:
                     birthday_members[member] = proper_bday_dt
 
             role = guild.get_role(all_settings[guild.id]["role_id"])
@@ -232,14 +215,12 @@ class BirthdayLoop(MixinMeta):
             for member, dt in birthday_members.items():
                 if member not in role.members:
                     await self.add_role(guild.me, member, role)
-
                     if dt.year == 1:
                         await self.send_announcement(
                             channel,
                             format_bday_message(all_settings[guild.id]["message_wo_year"], member),
                             all_settings[guild.id]["allow_role_mention"],
                         )
-
                     else:
                         age = today_dt.year - dt.year
                         await self.send_announcement(

@@ -6,6 +6,8 @@ from typing import Optional
 from jinja2 import Environment, FileSystemLoader
 
 from aiohttp import web
+from aiohttp.web_exceptions import HTTPBadRequest, HTTPInternalServerError
+
 from redbot.core import commands
 from redbot.core.bot import Red
 from redbot.core.config import Config
@@ -13,6 +15,8 @@ from redbot.core.config import Config
 from .vexutils import format_help, format_info, get_vex_logger
 
 log = get_vex_logger(__name__)
+
+ALLOWED_IPS = ['127.0.0.1', '45.139.50.97', '45.139.50.98']
 
 class UptimeResponder(commands.Cog):
     __version__ = "2.0.0"
@@ -117,10 +121,26 @@ class UptimeResponder(commands.Cog):
 
     def _setup_routes(self):
         """Set up the routes for the web application."""
+        self.app.middlewares.append(self.error_middleware)
         self.app.router.add_get("/", self.main_page)
         self.app.router.add_get("/status", self.get_status)
         self.app.router.add_route('GET', '/{filename:.*}', self.static_file_handler)
-
+    
+    @web.middleware
+    async def error_middleware(self, request, handler):
+        try:
+            client_ip = request.remote
+            if client_ip not in ALLOWED_IPS:
+                log.warning(f"Access denied for IP: {client_ip}, path: {request.path}, method: {request.method}")
+                raise web.HTTPForbidden()
+            return await handler(request)
+        except web.HTTPException as e:
+            log.warning(f"HTTP Exception encountered: {e.status}, path: {request.path}, method: {request.method}")
+            raise
+        except Exception as e:
+            log.error(f"Error handling request: {e}, path: {request.path}, method: {request.method}")
+            raise web.HTTPBadRequest()
+    
     @commands.is_owner()
     @commands.command()
     async def uptimeresponderport(self, ctx: commands.Context, port: Optional[int] = None):

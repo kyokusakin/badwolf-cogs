@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Uptime Responder</title>
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="icon" href="favicon.ico" sizes="any">
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="background"></div>
@@ -14,7 +14,12 @@
         <p>Uptime Responder cog is loaded.</p>
         <p><strong>Uptime:</strong> <span id="uptime"></span></p>
         <p><strong>Discord WS Latency:</strong> <span id="latency"></span></p>
+        <iframe id="status-badge" width="250" height="30" frameborder="0" scrolling="no"></iframe>
     </div>
-    <script src="/script.js"></script>
+    <div class="footer">
+        <p><a href="/en-US/terms-of-service">Terms of Service</a> | <a href="/en-US/privacy-policy">Privacy Policy</a></p>
+    </div>
+    <script src="script.js"></script>
+    <script src="theme-switch.js"></script>
 </body>
 </html>
