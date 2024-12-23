@@ -526,10 +526,10 @@ class InviteBlocklist(commands.Cog):
     ##########################################################################################
     
     @staffrole.command(name="add")
-    async def set_staffrole(self, ctx, role: discord.Role):
+    async def set_staffrole(self, ctx, role_or_user: Union[discord.Role, discord.Member]):
         """Set the staff role to mention when an invite link is deleted"""
-        await self.config.guild(ctx.guild).staff_role.set(role.id)
-        await ctx.send(f"Staff role set to {role.mention}")
+        await self.config.guild(ctx.guild).staff_role.set(role_or_user.id)
+        await ctx.send(f"Staff role/user set to {role_or_user.mention}")
 
     @staffrole.command(name="remove", aliases=["del", "rem"])
     async def remove_staffrole(self, ctx):
