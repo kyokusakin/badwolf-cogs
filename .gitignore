@@ -208,9 +208,9 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-[Ss]tatic/en-US
-[Ss]tatic/zh-CN
-[Ss]tatic/zh-TW
+[Ss]tatic/en-US/
+[Ss]tatic/zh-CN/
+[Ss]tatic/zh-TW/
 [Ss]tatic/favicon.ico
 [Ss]tatic/.well-known
 [Ss]tatic/uwu.*
