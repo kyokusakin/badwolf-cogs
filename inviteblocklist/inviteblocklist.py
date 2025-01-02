@@ -209,7 +209,8 @@ class InviteBlocklist(commands.Cog):
                 color=discord.Color.red()
             )
             await message.channel.send(embed=embed)
-            await message.channel.send(f"{staff_role_mention}", allowed_mentions=discord.AllowedMentions(roles=True))
+            if staff_role_mention is not None:
+                await message.channel.send(f"{staff_role_mention}", allowed_mentions=discord.AllowedMentions(roles=True))
             await message.delete()
             if self.warnsystem_available:
                 await self.warnsystem.warn(guild, [message.author], guild.me, 1, reason="未授權的Discord邀請連結")
