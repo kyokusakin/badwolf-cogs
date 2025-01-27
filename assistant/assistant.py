@@ -139,20 +139,18 @@ class OpenAIChat(commands.Cog):
             # 取出一條消息進行處理
             message, response = await self.queue.get()
 
-            # 每三秒回應一次
+            # 每三秒回應一次，並且是逐條回應
             await self.send_response_with_delay(message, response)
 
-            # 處理完成後將標記為正在處理
+            # 處理完一條消息後等候3秒
             await asyncio.sleep(3)
-
-        self.is_processing = False
 
     async def send_response_with_delay(self, message: discord.Message, response: str):
-        # 把 response 分割成數個段落，並每三秒回應一個段落
-        response_parts = response.split('\n')
-        for part in response_parts:
-            await message.reply(part)
-            await asyncio.sleep(3)
+        """回應用戶並進行延遲處理。"""
+        try:
+            await message.reply(response)
+        except discord.DiscordException as e:
+            await message.channel.send(f"Error: {e}")
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
         # Initialize the client with the API key and base URL
@@ -165,7 +163,7 @@ class OpenAIChat(commands.Cog):
             # Use the new syntax for chat completions
             response = client.chat.completions.create(
                 model=model,
-                messages=[ 
+                messages=[
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": prompt.split("\n")[-1]}  # Assuming the last line is the user's message
                 ]
