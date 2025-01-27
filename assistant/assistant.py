@@ -25,9 +25,11 @@ class OpenAIChat(commands.Cog):
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
+        # 初始化訊息處理隊列
         self.queue = asyncio.Queue()
         self.queue_task = None
         self.is_processing = False
+        self.should_process = True
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -122,69 +124,78 @@ class OpenAIChat(commands.Cog):
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
 
-        response = await self.query_openai(api_key, api_url_base, model, prompt + "\n" + user_input)
-
-        if response:
-            # 將回應加入隊列
-            await self.queue.put((message, response))
-            
-            # 如果隊列處理尚未啟動，則啟動它
-            if not self.is_processing:
-                self.is_processing = True
-                self.queue_task = asyncio.create_task(self.process_queue())
+        # 將訊息加入隊列
+        await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
+        
+        # 如果隊列處理尚未啟動，則啟動它
+        if not self.is_processing:
+            self.is_processing = True
+            self.queue_task = asyncio.create_task(self.process_queue())
 
     async def process_queue(self):
-        """持續處理訊息隊列"""
+        """處理訊息隊列，每次處理後等待一段時間"""
         try:
-            while True:
+            while self.should_process:
                 try:
-                    # 等待新的訊息，設定 timeout 避免無限等待
-                    message, response = await asyncio.wait_for(self.queue.get(), timeout=60)
+                    # 從隊列中取得訊息
+                    message, api_key, api_url_base, model, prompt = await asyncio.wait_for(
+                        self.queue.get(), 
+                        timeout=30
+                    )
                     
-                    # 處理訊息
-                    await self.send_response_with_delay(message, response)
+                    # 處理單一訊息
+                    response = await self.query_openai(api_key, api_url_base, model, prompt)
+                    if response:
+                        await self.send_response(message, response)
                     
-                    # 標記任務完成
+                    # 標記此訊息已完成處理
                     self.queue.task_done()
+                    
+                    # 等待 3 秒後再處理下一條訊息
+                    await asyncio.sleep(3)
                     
                 except asyncio.TimeoutError:
                     # 如果隊列空了，就停止處理
                     if self.queue.empty():
                         self.is_processing = False
-                        break               
+                        break
+                        
         except Exception as e:
             print(f"Error in process_queue: {e}")
             self.is_processing = False
 
-    async def send_response_with_delay(self, message: discord.Message, response: str):
-        """回應用戶並進行延遲處理。"""
+    async def send_response(self, message: discord.Message, response: str):
+        """發送回應"""
         try:
             await message.reply(response)
         except discord.DiscordException as e:
-            await message.channel.send(f"Error: {e}")
+            try:
+                await message.channel.send(f"Error: {e}")
+            except:
+                print(f"Failed to send response: {e}")
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
-        # Initialize the client with the API key and base URL
+        """查詢 OpenAI API"""
         client = openai.OpenAI(
             api_key=api_key,
             base_url=api_url_base
         )
 
         try:
-            # Use the new syntax for chat completions
             response = client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": prompt.split("\n")[-1]}  # Assuming the last line is the user's message
+                    {"role": "user", "content": prompt.split("\n")[-1]}
                 ]
             )
             return response.choices[0].message.content
         except Exception as e:
-            # The error handling has changed, so we catch general exceptions
             return f"Error: {e}"
 
     async def cog_unload(self):
+        """清理資源"""
+        self.should_process = False
         if self.queue_task and not self.queue_task.done():
             self.queue_task.cancel()
             try:
