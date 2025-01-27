@@ -214,3 +214,15 @@ cython_debug/
 [Ss]tatic/favicon.ico
 [Ss]tatic/.well-known
 [Ss]tatic/uwu.*
+uptimeresponder/static/uwu.css
+uptimeresponder/static/uwu.html
+uptimeresponder/static/.well-known/security.txt
+uptimeresponder/static/en-US/privacy-policy.html
+uptimeresponder/static/en-US/shared-license-styles.css
+uptimeresponder/static/en-US/terms-of-service.html
+uptimeresponder/static/zh-CN/privacy-policy.html
+uptimeresponder/static/zh-CN/shared-license-styles.css
+uptimeresponder/static/zh-CN/terms-of-service.html
+uptimeresponder/static/zh-TW/privacy-policy.html
+uptimeresponder/static/zh-TW/shared-license-styles.css
+uptimeresponder/static/zh-TW/terms-of-service.html
