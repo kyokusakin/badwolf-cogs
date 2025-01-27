@@ -121,7 +121,7 @@ class OpenAIChat(commands.Cog):
         response = await self.query_openai(api_key, api_url_base, model, prompt + "\n" + user_input)
 
         if response:
-            await message.channel.reply(response)
+            await message.channel.send(response)
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
         # Initialize the client with the API key and base URL
