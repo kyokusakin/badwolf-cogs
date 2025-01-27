@@ -66,6 +66,16 @@ class OpenAIChat(commands.Cog):
         async with self.config.guild(ctx.guild).channels() as channels:
             channels[str(channel.id)] = {}
         await ctx.send(f"Channel {channel.mention} has been set for OpenAI responses.")
+    
+    @openai.command()
+    async def delchannel(self, ctx: commands.Context, channel: discord.TextChannel):
+        """刪除設定的 OpenAI 回應頻道。"""
+        async with self.config.guild(ctx.guild).channels() as channels:
+            if str(channel.id) in channels:
+                del channels[str(channel.id)]
+                await ctx.send(f"頻道 {channel.mention} 已從 OpenAI 回應頻道中移除。")
+            else:
+                await ctx.send(f"頻道 {channel.mention} 尚未設定為 OpenAI 回應頻道。")
 
     @openai.command()
     async def setprompt(self, ctx: commands.Context, *, prompt: str):
