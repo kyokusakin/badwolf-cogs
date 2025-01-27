@@ -120,8 +120,8 @@ class OpenAIChat(commands.Cog):
         image_data = None
         if message.attachments:
             for attachment in message.attachments:
-                if attachment.url.lower().endswith(('jpg', 'jpeg', 'png', 'gif')):
-                    image_data = await attachment.read()  # 讀取附件圖片
+                if attachment.content_type and attachment.content_type.startswith("image/"):
+                    image_data = await attachment.read()
 
         if not user_input and not image_data:
             return
@@ -136,15 +136,12 @@ class OpenAIChat(commands.Cog):
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
 
-        # 將訊息加入隊列
         if image_data:
-            # 轉換圖片為 base64
             base64_image = base64.b64encode(image_data).decode('utf-8')
             prompt += f"\n[Image: data:image/jpeg;base64,{base64_image}]"
 
         await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
         
-        # 如果隊列處理尚未啟動，則啟動它
         if not self.is_processing:
             self.is_processing = True
             self.queue_task = asyncio.create_task(self.process_queue())
