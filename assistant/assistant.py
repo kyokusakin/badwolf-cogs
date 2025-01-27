@@ -13,6 +13,7 @@ class OpenAIChat(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
+            "api_key": None,
             "api_url_base": "https://api.openai.com/v1",
             "model": "gpt-4",
         }
