@@ -25,8 +25,8 @@ class OpenAIChat(commands.Cog):
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
-        # 初始化隊列
         self.queue = asyncio.Queue()
+        self.queue_task = None
         self.is_processing = False
 
     def encode_key(self, key: str) -> str:
@@ -112,7 +112,6 @@ class OpenAIChat(commands.Cog):
         if not user_input:
             return
 
-        # Get the global API key
         api_key = await self.config.api_key()
         
         if not api_key:
@@ -128,16 +127,34 @@ class OpenAIChat(commands.Cog):
         if response:
             # 將回應加入隊列
             await self.queue.put((message, response))
-
-            # 若正在處理隊列，則不會重新開始
+            
+            # 如果隊列處理尚未啟動，則啟動它
             if not self.is_processing:
                 self.is_processing = True
-                await self.process_queue()
+                self.queue_task = asyncio.create_task(self.process_queue())
 
     async def process_queue(self):
-        while not self.queue.empty():
-            message, response = await self.queue.get()
-            asyncio.create_task(self.send_response_with_delay(message, response))
+        """持續處理訊息隊列"""
+        try:
+            while True:
+                try:
+                    # 等待新的訊息，設定 timeout 避免無限等待
+                    message, response = await asyncio.wait_for(self.queue.get(), timeout=60)
+                    
+                    # 處理訊息
+                    await self.send_response_with_delay(message, response)
+                    
+                    # 標記任務完成
+                    self.queue.task_done()
+                    
+                except asyncio.TimeoutError:
+                    # 如果隊列空了，就停止處理
+                    if self.queue.empty():
+                        self.is_processing = False
+                        break               
+        except Exception as e:
+            print(f"Error in process_queue: {e}")
+            self.is_processing = False
 
     async def send_response_with_delay(self, message: discord.Message, response: str):
         """回應用戶並進行延遲處理。"""
@@ -168,4 +185,9 @@ class OpenAIChat(commands.Cog):
             return f"Error: {e}"
 
     async def cog_unload(self):
-        pass
+        if self.queue_task and not self.queue_task.done():
+            self.queue_task.cancel()
+            try:
+                await self.queue_task
+            except asyncio.CancelledError:
+                pass
