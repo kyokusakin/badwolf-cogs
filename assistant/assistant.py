@@ -5,6 +5,7 @@ from typing import Optional
 import openai
 import base64
 import urllib.parse
+import asyncio
 
 class OpenAIChat(commands.Cog):
     """A RedBot cog for OpenAI API integration with advanced features."""
@@ -121,7 +122,15 @@ class OpenAIChat(commands.Cog):
         response = await self.query_openai(api_key, api_url_base, model, prompt + "\n" + user_input)
 
         if response:
-            await message.channel.send(response)
+            # 每三秒回應一次
+            await self.send_response_with_delay(message, response)
+
+    async def send_response_with_delay(self, message: discord.Message, response: str):
+        # 把 response 分割成數個段落，並每三秒回應一段
+        response_parts = response.split('\n')
+        for part in response_parts:
+            await message.reply(part)
+            await asyncio.sleep(3)
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
         # Initialize the client with the API key and base URL
@@ -134,7 +143,7 @@ class OpenAIChat(commands.Cog):
             # Use the new syntax for chat completions
             response = client.chat.completions.create(
                 model=model,
-                messages=[
+                messages=[ 
                     {"role": "system", "content": prompt},
                     {"role": "user", "content": prompt.split("\n")[-1]}  # Assuming the last line is the user's message
                 ]
