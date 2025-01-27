@@ -25,6 +25,10 @@ class OpenAIChat(commands.Cog):
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
+        # 初始化隊列
+        self.queue = asyncio.Queue()
+        self.is_processing = False
+
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
 
@@ -122,11 +126,29 @@ class OpenAIChat(commands.Cog):
         response = await self.query_openai(api_key, api_url_base, model, prompt + "\n" + user_input)
 
         if response:
+            # 將回應加入隊列
+            await self.queue.put((message, response))
+
+            # 若正在處理隊列，則不會重新開始
+            if not self.is_processing:
+                self.is_processing = True
+                await self.process_queue()
+
+    async def process_queue(self):
+        while not self.queue.empty():
+            # 取出一條消息進行處理
+            message, response = await self.queue.get()
+
             # 每三秒回應一次
             await self.send_response_with_delay(message, response)
 
+            # 處理完成後將標記為正在處理
+            await asyncio.sleep(3)
+
+        self.is_processing = False
+
     async def send_response_with_delay(self, message: discord.Message, response: str):
-        # 把 response 分割成數個段落，並每三秒回應一段
+        # 把 response 分割成數個段落，並每三秒回應一個段落
         response_parts = response.split('\n')
         for part in response_parts:
             await message.reply(part)
