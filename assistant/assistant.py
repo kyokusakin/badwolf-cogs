@@ -52,6 +52,7 @@ class OpenAIChat(commands.Cog):
         await ctx.send("API key has been securely stored.")
 
     @openai.command()
+    @commands.is_owner()
     async def seturl(self, ctx: commands.Context, url_base: str):
         """Set the API base URL for OpenAI requests."""
         parsed_url = urllib.parse.urlparse(url_base)
@@ -62,12 +63,14 @@ class OpenAIChat(commands.Cog):
         await ctx.send(f"API base URL has been set to: {url_base.rstrip('/')}")
 
     @openai.command()
+    @commands.is_owner()
     async def setmodel(self, ctx: commands.Context, model: str):
         """Set the model for OpenAI requests."""
         await self.config.model.set(model)
         await ctx.send(f"Model has been set to: {model}")
 
     @openai.command()
+    @commands.is_mod()
     async def setchannel(self, ctx: commands.Context, channel: discord.TextChannel):
         """Set the channel for OpenAI responses in this guild."""
         async with self.config.guild(ctx.guild).channels() as channels:
@@ -75,6 +78,7 @@ class OpenAIChat(commands.Cog):
         await ctx.send(f"Channel {channel.mention} has been set for OpenAI responses.")
     
     @openai.command()
+    @commands.is_mod()
     async def delchannel(self, ctx: commands.Context):
         """刪除所有已設定的 OpenAI 回應頻道。"""
         async with self.config.guild(ctx.guild).channels() as channels:
@@ -92,6 +96,7 @@ class OpenAIChat(commands.Cog):
                     await ctx.send(f"頻道 ID {channel_id} 找不到，無法移除。")
 
     @openai.command()
+    @commands.is_mod()
     async def setprompt(self, ctx: commands.Context, *, prompt: str):
         """Set a custom prompt for this guild."""
         await self.config.guild(ctx.guild).prompt.set(prompt)
