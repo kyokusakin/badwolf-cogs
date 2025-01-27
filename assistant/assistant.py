@@ -13,8 +13,8 @@ class OpenAIChat(commands.Cog):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
-            "api_keys": {},
-            "api_url_base": "https://api.openai.com/",
+            "api_keys": None,
+            "api_url_base": "https://api.openai.com/v1",
             "model": "gpt-4",
         }
         default_guild = {
@@ -36,12 +36,12 @@ class OpenAIChat(commands.Cog):
         """Group command for OpenAI settings."""
         pass
 
-    @openai.command()
-    async def setkey(self, ctx: commands.Context, key: str):
-        """Set the OpenAI API key."""
+    @openai.command(name="setkey")
+    @commands.is_owner()
+    async def setkey_owner(self, ctx: commands.Context, key: str):
+        """Set the OpenAI API key (Owner only)."""
         encoded_key = self.encode_key(key)
-        async with self.config.api_keys() as keys:
-            keys[str(ctx.author.id)] = encoded_key
+        await self.config.api_key.set(encoded_key)
         await ctx.send("API key has been securely stored.")
 
     @openai.command()
@@ -107,11 +107,11 @@ class OpenAIChat(commands.Cog):
         if not user_input:
             return
 
-        api_keys = await self.config.api_keys()
-        api_key = api_keys.get(str(message.author.id))
-
+        # Get the global API key
+        api_key = await self.config.api_key()
+        
         if not api_key:
-            await message.channel.send("API key not set. Use `openai setkey` to set your key.")
+            await message.channel.send("API key not set. Only the bot owner can set the key.")
             return
 
         api_key = self.decode_key(api_key)
