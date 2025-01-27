@@ -122,14 +122,7 @@ class OpenAIChat(commands.Cog):
         prompt = config["prompt"]
         user_input = message.content
 
-        # 檢查圖片附件
-        image_data = None
-        if message.attachments:
-            for attachment in message.attachments:
-                if attachment.url.lower().endswith(('jpg', 'jpeg', 'png', 'gif')):
-                    image_data = await attachment.read()
-
-        if not user_input and not image_data:
+        if not user_input:
             return
 
         api_key = await self.config.api_key()
@@ -141,12 +134,6 @@ class OpenAIChat(commands.Cog):
         api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
-
-        # 將訊息加入隊列
-        if image_data:
-            # 轉換圖片為 base64
-            base64_image = base64.b64encode(image_data).decode('utf-8')
-            prompt += f"\n[Image: data:image/jpeg;base64,{base64_image}]"
 
         await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
         
