@@ -33,6 +33,12 @@ class OpenAIChat(commands.Cog):
         self.is_processing = False
         self.should_process = True
 
+    def encode_key(self, key: str) -> str:
+        return base64.b64encode(key.encode()).decode()
+
+    def decode_key(self, encoded_key: str) -> str:
+        return base64.b64decode(encoded_key.encode()).decode()
+
     @commands.group()
     @commands.guild_only()
     async def openai(self, ctx: commands.Context):
