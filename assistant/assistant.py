@@ -14,7 +14,7 @@ class OpenAIChat(commands.Cog):
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
             "api_keys": {},
-            "api_url_base": "https://api.openai.com",
+            "api_url_base": "https://api.openai.com/",
             "model": "gpt-4",
         }
         default_guild = {
@@ -99,25 +99,32 @@ class OpenAIChat(commands.Cog):
 
         api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
-        api_url = f"{api_url_base}/v1/chat/completions"
         model = await self.config.model()
 
-        response = await self.query_openai(api_key, api_url, model, prompt + "\n" + user_input)
+        response = await self.query_openai(api_key, api_url_base, model, prompt + "\n" + user_input)
 
         if response:
             await message.channel.send(response)
 
-    async def query_openai(self, api_key: str, api_url: str, model: str, prompt: str) -> Optional[str]:
-        openai.api_key = api_key
-        openai.api_base = api_url.rsplit("/v1/chat/completions", 1)[0]
+    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
+        # Initialize the client with the API key and base URL
+        client = openai.OpenAI(
+            api_key=api_key,
+            base_url=api_url_base
+        )
 
         try:
-            response = openai.ChatCompletion.create(
+            # Use the new syntax for chat completions
+            response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}],
+                messages=[
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": prompt.split("\n")[-1]}  # Assuming the last line is the user's message
+                ]
             )
-            return response["choices"][0]["message"]["content"]
-        except openai.error.OpenAIError as e:
+            return response.choices[0].message.content
+        except Exception as e:
+            # The error handling has changed, so we catch general exceptions
             return f"Error: {e}"
 
     async def cog_unload(self):
