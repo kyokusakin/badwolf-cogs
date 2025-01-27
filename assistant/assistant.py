@@ -32,17 +32,6 @@ class OpenAIChat(commands.Cog):
         self.is_processing = False
         self.should_process = True
 
-    def encode_key(self, key: str) -> str:
-        return base64.b64encode(key.encode()).decode()
-
-    def decode_key(self, encoded_key: str) -> str:
-        return base64.b64decode(encoded_key.encode()).decode()
-
-    def encode_image(self, image_path) -> str:
-        """將圖片轉換為 base64 字串"""
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode('utf-8')
-
     @commands.group()
     @commands.guild_only()
     async def openai(self, ctx: commands.Context):
