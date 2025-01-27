@@ -18,6 +18,7 @@ class OpenAIChat(commands.Cog):
             "api_key": None,
             "api_url_base": "https://api.openai.com/v1",
             "model": "gpt-4",
+            "default_delay": 1,
         }
         default_guild = {
             "channels": {},
@@ -80,8 +81,6 @@ class OpenAIChat(commands.Cog):
             if not channels:
                 await ctx.send("目前沒有設定任何 OpenAI 回應頻道。")
                 return
-
-            # 顯示所有已設定的頻道並刪除
             for channel_id in list(channels.keys()):
                 channel = ctx.guild.get_channel(int(channel_id))
                 if channel:
@@ -96,6 +95,16 @@ class OpenAIChat(commands.Cog):
         """Set a custom prompt for this guild."""
         await self.config.guild(ctx.guild).prompt.set(prompt)
         await ctx.send("Custom prompt has been set.")
+
+    @openai.command()
+    @commands.is_owner()
+    async def setdelay(self, ctx: commands.Context, delay: float):
+        """Set the default delay time between requests."""
+        if delay < 0:
+            await ctx.send("Delay must be greater than or equal to 0 seconds.")
+            return
+        await self.config.default_delay.set(delay)
+        await ctx.send(f"Default delay has been set to {delay} seconds.")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -157,8 +166,11 @@ class OpenAIChat(commands.Cog):
                     # 標記此訊息已完成處理
                     self.queue.task_done()
                     
-                    # 等待 3 秒後再處理下一條訊息
-                    await asyncio.sleep(3)
+                    # 根據 API 限速計算延遲
+                    delay = await self.calculate_delay(response, await self.config.default_delay())
+                    
+                    # 等待計算後的延遲時間
+                    await asyncio.sleep(delay)
                     
                 except asyncio.TimeoutError:
                     # 如果隊列空了，就停止處理
@@ -169,6 +181,13 @@ class OpenAIChat(commands.Cog):
         except Exception as e:
             print(f"Error in process_queue: {e}")
             self.is_processing = False
+
+    async def calculate_delay(self, response: Optional[dict], default_delay: float) -> float:
+        """計算延遲時間，根據 x-ratelimit-limit-requests 如果可用，否則使用預設值"""
+        if response and "x-ratelimit-limit-requests" in response:
+            rate_limit = int(response["x-ratelimit-limit-requests"])
+            return max(60 / rate_limit, 1)  # 確保延遲至少 1 秒
+        return default_delay
 
     async def send_response(self, message: discord.Message, response: str):
         """發送回應"""
