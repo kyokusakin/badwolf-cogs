@@ -135,7 +135,14 @@ class OpenAIChat(commands.Cog):
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
 
-        await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
+        user_name = message.author.display_name
+        user_id = message.author.id
+        extended_prompt = (
+            f"{prompt}\n"
+            f"User {user_name} (ID: {user_id}) said: \n{user_input}"
+        )
+
+        await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
         
         # 如果隊列處理尚未啟動，則啟動它
         if not self.is_processing:
