@@ -1,9 +1,10 @@
+import base64
+from io import BytesIO
 import discord
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 from typing import Optional
 import openai
-import base64
 import urllib.parse
 import asyncio
 
@@ -36,6 +37,11 @@ class OpenAIChat(commands.Cog):
 
     def decode_key(self, encoded_key: str) -> str:
         return base64.b64decode(encoded_key.encode()).decode()
+
+    def encode_image(self, image_path) -> str:
+        """將圖片轉換為 base64 字串"""
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8')
 
     @commands.group()
     @commands.guild_only()
@@ -102,78 +108,52 @@ class OpenAIChat(commands.Cog):
         await self.config.guild(ctx.guild).prompt.set(prompt)
         await ctx.send("Custom prompt has been set.")
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
 
-    # 新增壓縮圖片的函數
-    def compress_image(image_data: bytes, max_size_kb: int = 200) -> bytes:
-        """
-        壓縮圖片並將其轉換為 base64 編碼。
-        :param image_data: 原始圖片的二進位資料。
-        :param max_size_kb: 最大檔案大小限制，單位為 KB。
-        :return: 壓縮後的圖片二進位資料。
-        """
-        # 讀取圖片
-        image = Image.open(io.BytesIO(image_data))
-    
-        # 逐步壓縮圖片，直到滿足最大檔案大小
-        quality = 90  # 初始壓縮品質
-        while True:
-            # 使用 buffer 保存壓縮後的圖片
-            with io.BytesIO() as buffer:
-                image.save(buffer, format="JPEG", quality=quality)
-                compressed_data = buffer.getvalue()
-    
-            # 如果壓縮後圖片的大小小於最大限制，就停止壓縮
-            if len(compressed_data) <= max_size_kb * 1024:
-                break
-            else:
-                # 如果仍然超過限制，繼續降低壓縮品質
-                quality -= 5
+        config = await self.config.guild(message.guild).all()
+        channels = config["channels"]
 
-        return compressed_data
+        if str(message.channel.id) not in channels:
+            return
 
-@commands.Cog.listener()
-async def on_message(self, message: discord.Message):
-    if message.author.bot or not message.guild:
-        return
+        prompt = config["prompt"]
+        user_input = message.content
 
-    config = await self.config.guild(message.guild).all()
-    channels = config["channels"]
+        # 檢查圖片附件
+        image_data = None
+        if message.attachments:
+            for attachment in message.attachments:
+                if attachment.url.lower().endswith(('jpg', 'jpeg', 'png', 'gif')):
+                    image_data = await attachment.read()  # 讀取附件圖片
 
-    if str(message.channel.id) not in channels:
-        return
+        if not user_input and not image_data:
+            return
 
-    prompt = config["prompt"]
-    user_input = message.content
+        api_key = await self.config.api_key()
+        
+        if not api_key:
+            await message.channel.send("API key not set. Only the bot owner can set the key.")
+            return
 
-    image_data = None
-    if message.attachments:
-        for attachment in message.attachments:
-            if attachment.content_type and attachment.content_type.startswith("image/"):
-                image_data = await attachment.read()
-                compressed_image_data = compress_image(image_data)
-                image_data = base64.b64encode(compressed_image_data).decode('utf-8')  # 使用 base64 編碼
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
 
-    if not user_input and not image_data:
-        return
+        # 將訊息加入隊列
+        if image_data:
+            # 轉換圖片為 base64
+            base64_image = base64.b64encode(image_data).decode('utf-8')
+            prompt += f"\n[Image: data:image/jpeg;base64,{base64_image}]"
 
-    api_key = await self.config.api_key()
-    
-    if not api_key:
-        await message.channel.send("API key not set. Only the bot owner can set the key.")
-        return
-
-    api_key = self.decode_key(api_key)
-    api_url_base = await self.config.api_url_base()
-    model = await self.config.model()
-
-    if image_data:
-        prompt += f"\n[Image: data:image/jpeg;base64,{image_data}]"
-
-    await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
-    
-    if not self.is_processing:
-        self.is_processing = True
-        self.queue_task = asyncio.create_task(self.process_queue())
+        await self.queue.put((message, api_key, api_url_base, model, prompt + "\n" + user_input))
+        
+        # 如果隊列處理尚未啟動，則啟動它
+        if not self.is_processing:
+            self.is_processing = True
+            self.queue_task = asyncio.create_task(self.process_queue())
 
     async def process_queue(self):
         """處理訊息隊列，每次處理後等待一段時間"""
@@ -227,10 +207,7 @@ async def on_message(self, message: discord.Message):
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": prompt.split("\n")[-1]}
-                ]
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-1]}]
             )
             return response.choices[0].message.content
         except Exception as e:
