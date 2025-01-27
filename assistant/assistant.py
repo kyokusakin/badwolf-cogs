@@ -127,7 +127,7 @@ class OpenAIChat(commands.Cog):
         if message.attachments:
             for attachment in message.attachments:
                 if attachment.url.lower().endswith(('jpg', 'jpeg', 'png', 'gif')):
-                    image_data = await attachment.read()  # 讀取附件圖片
+                    image_data = await attachment.read()
 
         if not user_input and not image_data:
             return
