@@ -136,14 +136,8 @@ class OpenAIChat(commands.Cog):
 
     async def process_queue(self):
         while not self.queue.empty():
-            # 取出一條消息進行處理
             message, response = await self.queue.get()
-
-            # 每三秒回應一次，並且是逐條回應
-            await self.send_response_with_delay(message, response)
-
-            # 處理完一條消息後等候3秒
-            await asyncio.sleep(3)
+            asyncio.create_task(self.send_response_with_delay(message, response))
 
     async def send_response_with_delay(self, message: discord.Message, response: str):
         """回應用戶並進行延遲處理。"""
