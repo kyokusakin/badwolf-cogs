@@ -115,7 +115,26 @@ class OpenAIChat(commands.Cog):
             return
         await self.config.default_delay.set(delay)
         await ctx.send(f"Default delay has been set to {delay} seconds.")
+    
+    @openai.command(name="chat")
+    @commands.guild_only()
+    async def chat_command(self, ctx: commands.Context, *, user_input: str):
+        api_key = await self.config.api_key()
 
+        if not api_key:
+            await ctx.send("API key not set. Only the bot owner can set the key.")
+            return
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
+        prompt = await self.config.guild(ctx.guild).prompt()
+
+        full_prompt = f"{prompt} \n {ctx.author.display_name}\nMessage: {user_input}"
+
+        response = await self.query_openai(api_key, api_url_base, model, full_prompt)
+
+        await ctx.reply(response)
+        
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
@@ -152,7 +171,6 @@ class OpenAIChat(commands.Cog):
 
         await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
         
-        # 如果隊列處理尚未啟動，則啟動它
         if not self.is_processing:
             self.is_processing = True
             self.queue_task = asyncio.create_task(self.process_queue())
@@ -186,7 +204,6 @@ class OpenAIChat(commands.Cog):
             self.is_processing = False
 
     async def calculate_delay(self, response: Optional[dict], default_delay: float) -> float:
-        """計算延遲時間，根據 x-ratelimit-limit-requests 如果可用，否則使用預設值"""
         if response and "x-ratelimit-limit-requests" in response:
             rate_limit = int(response["x-ratelimit-limit-requests"])
             return max(60 / rate_limit, 1)
@@ -216,8 +233,7 @@ class OpenAIChat(commands.Cog):
             )
             return response.choices[0].message.content
         except Exception as e:
-            log.error(f"Error querying OpenAI: {e}")
-            return f"Error: {e}"
+            return log.error(f"Error querying OpenAI: {e}")
 
     async def cog_unload(self):
         """清理資源"""
