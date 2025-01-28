@@ -167,7 +167,7 @@ class OpenAIChat(commands.Cog):
         user_id = message.author.id
         extended_prompt = (
             f"{prompt}\n"
-            f"Discord User {user_name} (ID: <@{user_id}>) said: \n{user_input}"
+            f"Discord User {user_name} (<@{user_id}>) said:\n{user_input}"
         )
 
         await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
