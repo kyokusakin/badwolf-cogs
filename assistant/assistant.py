@@ -119,6 +119,7 @@ class OpenAIChat(commands.Cog):
     @openai.command(name="chat")
     @commands.guild_only()
     async def chat_command(self, ctx: commands.Context, *, user_input: str):
+        """Send a message to the AI"""
         api_key = await self.config.api_key()
 
         if not api_key:
@@ -134,7 +135,7 @@ class OpenAIChat(commands.Cog):
         response = await self.query_openai(api_key, api_url_base, model, full_prompt)
 
         await ctx.reply(response)
-        
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
