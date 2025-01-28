@@ -23,6 +23,7 @@ There's a list of cogs below, or you can use `[p]cog list badwolf-cogs` if you'v
 | uptimeresponder | A cog which starts up a simple webserver whenever the cog is loaded, which can then be used by uptime monitoring services such as UptimeRobot, Pingdom, Uptime.com, or self-hosted ones like UptimeKuma or Upptime.. If you are using an external monitor, you will need to configure port forwarding. Make sure you are aware of the security risks of exposing your machine to the internet. The cog responds with status code 200. | Vexed, Badwolf_TW |
 | warnsystem | An alternative to the core moderation cog | retke (El Laggron) |
 | tw_eew | Use the Taiwan Central Weather Bureau's API to publish earthquake reports. | Badwolf_TW |
+| assistant | Integrates OpenAI's API with your Discord server, allowing advanced AI interactions such as responding to messages, generating images, and supporting custom prompts. | Badwolf_TW |
 
 ---
 
