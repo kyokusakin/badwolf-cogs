@@ -32,13 +32,10 @@ class OpenAIChat(commands.Cog):
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
-        # 初始化訊息處理隊列
         self.queue = asyncio.Queue()
         self.queue_task = None
         self.is_processing = False
         self.should_process = True
-
-        
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -150,7 +147,7 @@ class OpenAIChat(commands.Cog):
         user_id = message.author.id
         extended_prompt = (
             f"{prompt}\n"
-            f"User {user_name} (ID: {user_id}) said: \n{user_input}"
+            f"Discord User {user_name} (ID: <@{user_id}>) said: \n{user_input}"
         )
 
         await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
@@ -165,28 +162,21 @@ class OpenAIChat(commands.Cog):
         try:
             while self.should_process:
                 try:
-                    # 從隊列中取得訊息
                     message, api_key, api_url_base, model, prompt = await asyncio.wait_for(
                         self.queue.get(), 
                         timeout=30
                     )
-                    
-                    # 處理單一訊息
                     response = await self.query_openai(api_key, api_url_base, model, prompt)
                     if response:
                         await self.send_response(message, response)
                     
-                    # 標記此訊息已完成處理
                     self.queue.task_done()
-                    
-                    # 根據 API 限速計算延遲
+
                     delay = await self.calculate_delay(response, await self.config.default_delay())
-                    
-                    # 等待計算後的延遲時間
+
                     await asyncio.sleep(delay)
                     
                 except asyncio.TimeoutError:
-                    # 如果隊列空了，就停止處理
                     if self.queue.empty():
                         self.is_processing = False
                         break
@@ -199,7 +189,7 @@ class OpenAIChat(commands.Cog):
         """計算延遲時間，根據 x-ratelimit-limit-requests 如果可用，否則使用預設值"""
         if response and "x-ratelimit-limit-requests" in response:
             rate_limit = int(response["x-ratelimit-limit-requests"])
-            return max(60 / rate_limit, 1)  # 確保延遲至少 1 秒
+            return max(60 / rate_limit, 1)
         return default_delay
 
     async def send_response(self, message: discord.Message, response: str):
