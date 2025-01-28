@@ -7,6 +7,11 @@ from typing import Optional
 import openai
 import urllib.parse
 import asyncio
+import logging
+
+log = logging.getLogger("red.BadwolfCogs.assistant")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 class OpenAIChat(commands.Cog):
     """A RedBot cog for OpenAI API integration with advanced features."""
@@ -32,6 +37,8 @@ class OpenAIChat(commands.Cog):
         self.queue_task = None
         self.is_processing = False
         self.should_process = True
+
+        
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -185,7 +192,7 @@ class OpenAIChat(commands.Cog):
                         break
                         
         except Exception as e:
-            print(f"Error in process_queue: {e}")
+            log.error(f"Error in process_queue: {e}")
             self.is_processing = False
 
     async def calculate_delay(self, response: Optional[dict], default_delay: float) -> float:
@@ -201,9 +208,9 @@ class OpenAIChat(commands.Cog):
             await message.reply(response)
         except discord.DiscordException as e:
             try:
-                await message.channel.send(f"Error: {e}")
+                log.error(f"Error: {e}")
             except:
-                print(f"Failed to send response: {e}")
+                log.error(f"Failed to send response: {e}")
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
         """查詢 OpenAI API"""
@@ -219,6 +226,7 @@ class OpenAIChat(commands.Cog):
             )
             return response.choices[0].message.content
         except Exception as e:
+            log.error(f"Error querying OpenAI: {e}")
             return f"Error: {e}"
 
     async def cog_unload(self):
