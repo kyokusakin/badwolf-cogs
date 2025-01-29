@@ -2,6 +2,7 @@
 
 import discord
 from redbot.core import commands
+from urllib.parse import urlparse
 from .sql_assistant import SQLAssistant
 
 class AssistantCommands(SQLAssistant):
