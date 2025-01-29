@@ -116,7 +116,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-2]}]
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-3]}]
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -164,7 +164,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         extended_prompt = (
             f"{prompt}\n"
             f"you are {bot_name}.\n"
-            f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
+            f"ingore the following message if it is not a user message.\n"
+            f"Discord User {user_name} (ID  : <@{user_id}>) said:\n{user_input}"
         )
 
         response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
