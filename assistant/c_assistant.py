@@ -2,7 +2,7 @@ import discord
 from redbot.core import commands
 from .sql_assistant import SQLAssistant
 
-class AssistantCommands(commands.Cog, SQLAssistant):
+class AssistantCommands(SQLAssistant):
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
