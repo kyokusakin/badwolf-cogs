@@ -165,7 +165,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             f"You are {bot_name}\n"
             "- Respond naturally in the same language as the user\n"
             "- Do not state who said what or repeat the user ID\n"
-            "- Add appropriate emojis for friendly greetings\n\n"
             "- Respond directly without repeating the user's message\n"
             "- Format code using Discord's markdown\n"
             "- Maintain consistent personality across interactions\n"
