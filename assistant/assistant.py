@@ -42,6 +42,7 @@ class OpenAIChat(
         self.queue_task = None
         self.is_processing = False
         self.should_process = True
+        asyncio.create_task(self.initialize())
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()

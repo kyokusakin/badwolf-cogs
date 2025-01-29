@@ -15,7 +15,7 @@ class SQLAssistant:
             "sql_user": None,
             "sql_password": None,
             "sql_database": None,
-            "ssl_ca": None,  # 儲存 CA 憑證的路徑
+            "ssl_ca": None,
         }
         self.config.register_global(**default_global)
         self.connection = None
@@ -28,21 +28,23 @@ class SQLAssistant:
         sql_user = await self.config.sql_user()
         sql_password = await self.config.sql_password()
         sql_database = await self.config.sql_database()
-        ssl_ca = await self.config.ssl_ca()  # 讀取 SSL 憑證的路徑
+        ssl_ca = await self.config.ssl_ca()
         
         if not all([sql_host, sql_user, sql_password, sql_database]):
             log.warning("SQL connection details are not fully specified. Cannot initialize database connection session.")
             return
         
+        
         try:
-            # 使用 aiomysql 創建資料庫連接池
+            ssl = {'ca': ssl_ca} if ssl_ca else None
+
             self.pool = await aiomysql.create_pool(
                 host=sql_host,
                 port=sql_port,
                 user=sql_user,
                 password=sql_password,
                 db=sql_database,
-                ssl_ca=ssl_ca,  # 如果有指定 CA 憑證，使用它
+                ssl=ssl,
                 autocommit=True
             )
             await self.create_table()
