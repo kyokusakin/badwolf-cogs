@@ -106,17 +106,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
-    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
+    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
-            return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt)
+            return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt, guild_history, user_input)
 
-    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, user_input: str ) -> Optional[str]:
+    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": user_input}]
+                messages=[{"role": "system", "content": prompt}, {"role": "system", "content": guild_history}, {"role": "user", "content": user_input}]
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -135,10 +135,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return
 
         user_input = message.content
-
         if not user_input:
             return
-
+        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         api_key = await self.config.api_key()
 
         if not api_key:
@@ -158,8 +157,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             history = []
 
         prompt = config["prompt"]
+        guild_history = ""
         for entry in history:
-            prompt += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
+            guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
 
         sysprompt = (
             f"custom prompt:{prompt}\n"
@@ -182,7 +182,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n"
         )
 
-        response = await self.query_openai(api_key, api_url_base, model, sysprompt, user_input)
+        response = await self.query_openai(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
         if response:
             await self.send_response(message, response)
             await self.save_chat_history(message.guild.id, user_id, user_name, user_input, response)
