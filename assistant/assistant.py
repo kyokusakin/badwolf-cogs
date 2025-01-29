@@ -116,7 +116,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt.split("\n")[:2]}, {"role": "user", "content": prompt.split("\n")[-2]}]
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-2]}]
             )
             return response.choices[0].message.content
         except Exception as e:
