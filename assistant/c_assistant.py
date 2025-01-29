@@ -160,6 +160,7 @@ class AssistantCommands(SQLAssistant):
                            f"主機: {host}\n"
                            f"連接埠: {port}\n"
                            f"使用者: {user}\n"
+                           f"密碼: {password}\n"
                            f"資料庫: {database}")
         except ValueError as e:
             await ctx.send(f"設置 SQL 連線時出錯: {e}")
