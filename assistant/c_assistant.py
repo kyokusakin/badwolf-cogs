@@ -131,9 +131,6 @@ class AssistantCommands(SQLAssistant):
         try:
             parsed = urlparse(jdbc_url)
             
-            if parsed.scheme != 'jdbc:mysql':
-                raise ValueError("URL scheme must be 'jdbc:mysql'")
-
             # Extract components from the URL
             host = parsed.netloc.split('@')[-1].split(':')[0]
             port = int(parsed.netloc.split('@')[-1].split(':')[-1])
