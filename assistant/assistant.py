@@ -65,16 +65,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                         self.queue.get(), 
                         timeout=30
                     )
-                    full_response = ""
-                    async for chunk in self.query_openai(api_key, api_url_base, model, prompt):
-                        if chunk:
-                            full_response += chunk
-                            await self.send_response(message, full_response)
-                    await self.save_chat_history(message.author.id, message.content, full_response)
+                    response = await self.query_openai(api_key, api_url_base, model, prompt)
+                    if response:
+                        await self.send_response(message, response)
+                        await self.save_chat_history(message.author.id, message.content, response)
                     
                     self.queue.task_done()
 
-                    delay = await self.calculate_delay(full_response, await self.config.default_delay())
+                    delay = await self.calculate_delay(response, await self.config.default_delay())
 
                     await asyncio.sleep(delay)
                     
@@ -94,37 +92,36 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return default_delay
 
     async def send_response(self, message: discord.Message, response: str):
+        asyncio.create_task(self._send_in_chunks(message, response))
+
+    async def _send_in_chunks(self, message: discord.Message, response: str):
         try:
             chunk_size = 2000
-            chunks = [response[i:i+chunk_size] for i in range(0, len(response), chunk_size)]
-            
-            reply = await message.reply(chunks[0])
-            
-            for chunk in chunks[1:]:
-                if len(reply.content) + len(chunk) <= 2000:
-                    await reply.edit(content=reply.content + chunk)
-                else:
-                    reply = await message.reply(chunk)
+            chunks = [response[i : i + chunk_size] for i in range(0, len(response), chunk_size)]
+    
+            for chunk in chunks:
+                await message.reply(chunk)
                 await asyncio.sleep(1)
 
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
-    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str):
-        """Support streaming responses from OpenAI."""
+    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt)
+
+    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
         client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
         try:
-            response = await client.chat.completions.create(
+            response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-1]}],
-                stream=True
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": prompt.split("\n")[-1]}]
             )
-            async for chunk in response:
-                if chunk.choices[0].delta.content:
-                    yield chunk.choices[0].delta.content
+            return response.choices[0].message.content
         except Exception as e:
             log.error(f"Error querying OpenAI: {e}")
-            yield None
+            return None
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -154,6 +151,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         user_name = message.author.display_name
         user_id = message.author.id
+        bot_name = self.bot.user.display_name
 
         history = await self.load_chat_history(message.guild.id)
         if not history:
@@ -161,33 +159,32 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         prompt = config["prompt"]
         for entry in history:
-            prompt += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n機器人名字: {entry['bot_response']}"
+            prompt += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
 
         extended_prompt = (
             f"{prompt}\n"
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         )
 
-        full_response = ""
-        async for chunk in self.query_openai(api_key, api_url_base, model, extended_prompt):
-            if chunk:
-                full_response += chunk
-                await self.send_response(message, full_response)
-        
-        await self.save_chat_history(message.guild.id, user_id, user_name, user_input, full_response)
+        response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
+        if response:
+            await self.send_response(message, response)
+            await self.save_chat_history(message.guild.id, user_id, user_name, user_input, response)
 
     async def load_chat_history(self, guild_id: int):
-        """Load chat history for a specific guild."""
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as file:
                 return json.load(file)
         return []
 
+
     async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str):
-        """Save chat history, including user ID and name."""
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
+
+        if len(history) >= 20:
+            history = history[-19:]
 
         history.append({
             "user_id": user_id,
