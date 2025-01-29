@@ -178,10 +178,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "- Be helpful while avoiding potentially harmful content\n"
             "- Format code using Discord's markdown (```language\ncode```)\n"
             "- Maintain consistent personality across interactions\n"
-            f"Discord User {user_name} (ID: <@{user_id}>) said:\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
-        
+
         response = await self.query_openai(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
         if response:
             await self.send_response(message, response)
