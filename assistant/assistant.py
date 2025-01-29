@@ -143,10 +143,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
 
-        # Get the chat history
-        history = await self.save_chat_history(message.guild.id, user_input, "")
 
-        # Construct the prompt with history
+        history = await self.save_chat_history(message.guild.id, user_input, "")
+        if not history:
+            history = []
+
         prompt = config["prompt"]
         for entry in history:
             prompt += f"\nUser: {entry['user_message']}\nAssistant: {entry['bot_response']}"
