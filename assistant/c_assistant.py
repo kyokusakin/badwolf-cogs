@@ -101,36 +101,48 @@ class AssistantCommands(SQLAssistant):
     @openai.group(name="sql")
     @commands.is_owner()
     async def openai_sql(self, ctx: commands.Context):
-        """設定 OpenAI 相關的 SQL 資訊"""
+        """Configure OpenAI SQL settings"""
         pass
     
     @openai_sql.command()
     async def host(self, ctx: commands.Context, host: str):
-        await self.sql.config.sql_host.set(host)
-        await ctx.send(f"SQL 主機已設定為 {host}")
+        """Set SQL host."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("host", host)
+        await ctx.send(f"SQL host set to {host}")
     
     @openai_sql.command()
     async def port(self, ctx: commands.Context, port: int):
-        await self.sql.config.sql_port.set(port)
-        await ctx.send(f"SQL 連接埠已設定為 {port}")
+        """Set SQL port."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("port", port)
+        await ctx.send(f"SQL port set to {port}")
     
     @openai_sql.command()
     async def user(self, ctx: commands.Context, user: str):
-        await self.sql.config.sql_user.set(user)
-        await ctx.send(f"SQL 使用者已設定為 {user}")
+        """Set SQL user."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("user", user)
+        await ctx.send(f"SQL user set to {user}")
     
     @openai_sql.command()
     async def password(self, ctx: commands.Context, password: str):
-        await self.sql.config.sql_password.set(password)
-        await ctx.send("SQL 密碼已設定。")
+        """Set SQL password."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("password", password)
+        await ctx.send("SQL password has been set.")
     
     @openai_sql.command()
     async def database(self, ctx: commands.Context, database: str):
-        await self.sql.config.sql_database.set(database)
-        await ctx.send(f"SQL 資料庫名稱已設定為 {database}")
+        """Set SQL database name."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("database", database)
+        await ctx.send(f"SQL database set to {database}")
 
     @openai_sql.command(name="connectstr")
-    async def sql_host(self, ctx: commands.Context, mysql_url: str):
+    async def sql_connectstr(self, ctx: commands.Context, mysql_url: str):
+        """Set SQL connection string."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
         try:
             # Remove 'mysql://' if present
             if mysql_url.startswith('mysql://'):
@@ -143,70 +155,24 @@ class AssistantCommands(SQLAssistant):
             # Extract components
             user_pass, host_port = parsed.netloc.split('@')
             user, password = user_pass.split(':') if ':' in user_pass else (user_pass, '')
-            host, port = host_port.split(':') if ':' in host_port else (host_port, '3306')  # Default MySQL port
-
-            port = int(port)  # Convert port to integer
-            database = parsed.path.lstrip('/')
-
-            # SSL mode
-            ssl_mode = params.get('ssl-mode', ['DISABLED'])[0]  # Default to DISABLED if not specified
-
-            # Set each component in the config
-            await self.sql.config.sql_host.set(host)
-            await self.sql.config.sql_port.set(port)
-            await self.sql.config.sql_user.set(user)
-            await self.sql.config.sql_password.set(password)
-            await self.sql.config.sql_database.set(database)
-            # You might want to add SSL mode to your SQLAssistant class config if needed
-            # For now, let's log it for reference
-            log.info(f"SSL Mode set to: {ssl_mode}")
-
-            await ctx.send(f"SQL 連線資訊已設定為:\n"
-                           f"主機: {host}\n"
-                           f"連接埠: {port}\n"
-                           f"使用者: {user}\n"
-                           f"密碼: [已設置，但未顯示]\n"
-                           f"資料庫: {database}\n"
-                           f"SSL Mode: {ssl_mode}")
-        except ValueError as e:
-            await ctx.send(f"設置 SQL 連線時出錯: {e}")
-        except Exception as e:
-            await ctx.send(f"設置 SQL 連線時發生未預期的錯誤: {e}")
+            host, port = host_port.split(':') if ':' in host_port else (host_port, '3306')
             
-    # 新增指令來設置 SSL 憑證
-    @openai.command(name="setca")
-    @commands.is_owner()
-    async def setssl(self, ctx: commands.Context):
-        """讓用戶上傳 SSL 憑證（CA 憑證）。"""
-        await ctx.send("請上傳你的 CA 憑證文件。")
-        
-        # 創建文件上傳的檢查
-        def check(m):
-            return m.author == ctx.author and isinstance(m.channel, discord.TextChannel)
-        
-        try:
-            # 等待用戶上傳檔案
-            message = await self.bot.wait_for("message", check=check, timeout=60.0)
+            port = int(port)
+            database = parsed.path.lstrip('/')
+            
+            # Set each component
+            await sql_assistant.set_sql_setting("host", host)
+            await sql_assistant.set_sql_setting("port", port)
+            await sql_assistant.set_sql_setting("user", user)
+            await sql_assistant.set_sql_setting("password", password)
+            await sql_assistant.set_sql_setting("database", database)
 
-            # 確保有附加檔案
-            if message.attachments:
-                # 取得附件的 CA 憑證內容
-                ca_cert_url = message.attachments[0].url
-                ca_cert_file = await message.attachments[0].read()
-
-                # 儲存 CA 憑證檔案
-                ssl_dir = os.path.join(os.path.dirname(__file__), 'ssl')
-                os.makedirs(ssl_dir, exist_ok=True)
-                ca_cert_path = os.path.join(ssl_dir, 'ca-cert.pem')
-
-                with open(ca_cert_path, 'wb') as f:
-                    f.write(ca_cert_file)
-
-                await ctx.send(f"CA 憑證已成功上傳並儲存為 {ca_cert_path}.")
-                log.info(f"CA 憑證已儲存於 {ca_cert_path}.")
-            else:
-                await ctx.send("未發現檔案，請上傳一個 CA 憑證檔案。")
+            await ctx.send(f"SQL connection settings configured:\n"
+                         f"Host: {host}\n"
+                         f"Port: {port}\n"
+                         f"User: {user}\n"
+                         f"Password: [Set]\n"
+                         f"Database: {database}")
 
         except Exception as e:
-            await ctx.send(f"設置 SSL 憑證時發生錯誤: {e}")
-            log.error(f"Error setting SSL cert: {e}")
+            await ctx.send(f"Error setting SQL connection: {e}")

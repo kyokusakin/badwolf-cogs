@@ -8,42 +8,45 @@ log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 class SQLAssistant:
     def __init__(self, bot: Red):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=987654321, force_registration=True)
+        # Create a separate config instance for SQL settings
+        self.sql_config = Config.get_conf(
+            self,
+            identifier=987654321,
+            force_registration=True
+        )
+        
+        # Register default values
         default_global = {
-            "sql_host": None,
-            "sql_port": 3306,
-            "sql_user": None,
-            "sql_password": None,
-            "sql_database": None,
-            "ssl_ca": None,
+            "sql_settings": {
+                "host": None,
+                "port": 3306,
+                "user": None,
+                "password": None,
+                "database": None,
+                "ssl_ca": None
+            }
         }
-        self.config.register_global(**default_global)
-        self.connection = None
+        self.sql_config.register_global(**default_global)
         self.pool = None
     
     async def initialize(self):
         """Initialize the MySQL connection session."""
-        sql_host = await self.config.sql_host()
-        sql_port = await self.config.sql_port()
-        sql_user = await self.config.sql_user()
-        sql_password = await self.config.sql_password()
-        sql_database = await self.config.sql_database()
-        ssl_ca = await self.config.ssl_ca()
+        # Get all SQL settings at once
+        settings = (await self.sql_config.sql_settings()).copy()
         
-        if not all([sql_host, sql_user, sql_password, sql_database]):
+        if not all([settings["host"], settings["user"], settings["password"], settings["database"]]):
             log.warning("SQL connection details are not fully specified. Cannot initialize database connection session.")
             return
         
-        
         try:
-            ssl = {'ca': ssl_ca} if ssl_ca else None
+            ssl = {'ca': settings["ssl_ca"]} if settings["ssl_ca"] else None
 
             self.pool = await aiomysql.create_pool(
-                host=sql_host,
-                port=sql_port,
-                user=sql_user,
-                password=sql_password,
-                db=sql_database,
+                host=settings["host"],
+                port=settings["port"],
+                user=settings["user"],
+                password=settings["password"],
+                db=settings["database"],
                 ssl=ssl,
                 autocommit=True
             )
@@ -51,6 +54,16 @@ class SQLAssistant:
             log.info("Successfully connected to MySQL database.")
         except Exception as e:
             log.error(f"SQL connection failed: {e}")
+    
+    async def set_sql_setting(self, setting: str, value: any):
+        """Update a specific SQL setting."""
+        async with self.sql_config.sql_settings() as settings:
+            settings[setting] = value
+    
+    async def get_sql_setting(self, setting: str) -> any:
+        """Get a specific SQL setting."""
+        settings = await self.sql_config.sql_settings()
+        return settings.get(setting)
     
     async def create_table(self):
         """Create the chat history table if it doesn't exist."""
