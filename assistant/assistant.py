@@ -116,7 +116,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         try:
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "system", "content": guild_history}, {"role": "user", "content": user_input}]
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -161,15 +161,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
 
         sysprompt = (
-            f"custom prompt: {prompt}\n"
+            f"{prompt}\n"
             f"You are {bot_name}\n"
             "- Respond naturally in the same language as the user\n"
-            "- Do not explain or translate obvious greetings\n"
             "- Do not state who said what or repeat the user ID\n"
             "- Add appropriate emojis for friendly greetings\n\n"
             "- Respond directly without repeating the user's message\n"
-            "- Be helpful while avoiding potentially harmful content\n"
-            "- Format code using Discord's markdown (```language\ncode```)\n"
+            "- Format code using Discord's markdown\n"
             "- Maintain consistent personality across interactions\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
