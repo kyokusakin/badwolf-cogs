@@ -132,13 +132,17 @@ class AssistantCommands(SQLAssistant):
     @openai_sql.command(name="connectstr")
     async def sql_host(self, ctx: commands.Context, jdbc_url: str):
         try:
-            parsed = urlparse(jdbc_url)
-            log.info(f"URL parsed: {parsed}")
-            
-            if parsed.scheme != 'jdbc:mysql':
-                raise ValueError("URL scheme must be 'jdbc:mysql'")
+            # Manually parse the JDBC URL
+            if not jdbc_url.startswith('jdbc:mysql://'):
+                raise ValueError("URL must start with 'jdbc:mysql://'")
 
-            # Extract components from the URL
+            # Remove the scheme part
+            url_parts = jdbc_url[len('jdbc:mysql://'):]
+        
+            # Parse remaining URL with urlparse
+            parsed = urlparse(f'//{url_parts}')  # Add '//' to make it valid for urlparse
+
+            # Extract components
             host = parsed.netloc.split('@')[-1].split(':')[0]
             port = int(parsed.netloc.split('@')[-1].split(':')[-1])
             user = parsed.netloc.split('@')[0].split(':')[0]
@@ -151,7 +155,7 @@ class AssistantCommands(SQLAssistant):
             await self.sql.config.sql_user.set(user)
             await self.sql.config.sql_password.set(password)
             await self.sql.config.sql_database.set(database)
-
+    
             await ctx.send(f"SQL 連線資訊已設定為:\n"
                            f"主機: {host}\n"
                            f"連接埠: {port}\n"
