@@ -121,7 +121,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         config = await self.config.guild(message.guild).all()
         channels = config["channels"]
-    
+
         if str(message.channel.id) not in channels:
             return
 
@@ -131,11 +131,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return
 
         api_key = await self.config.api_key()
-    
+
         if not api_key:
             await message.channel.send("API key not set. Only the bot owner can set the key.")
             return
-
+    
         api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
@@ -143,48 +143,47 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
 
-        # Get the chat history for the guild, this will help in constructing the prompt
         history = await self.load_chat_history(message.guild.id)
         if not history:
             history = []
 
         prompt = config["prompt"]
         for entry in history:
-            prompt += f"\nUser: {entry['user_message']}\nAssistant: {entry['bot_response']}"
+            prompt += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\nAssistant: {entry['bot_response']}"
 
         extended_prompt = (
             f"{prompt}\n"
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         )
 
-        # Query OpenAI
         response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
         if response:
             await self.send_response(message, response)
-            
-            # Now save chat history after receiving response
-            await self.save_chat_history(message.guild.id, user_input, response)
+            await self.save_chat_history(message.guild.id, user_id, user_name, user_input, response)
 
     async def load_chat_history(self, guild_id: int):
-        """Load chat history for a specific guild."""
+        """讀取指定伺服器的聊天歷史"""
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
         if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
+            with open(file_path, 'r', encoding='utf-8') as file:
                 return json.load(file)
         return []
 
-    async def save_chat_history(self, guild_id: int, user_message: str, bot_response: str):
-        """Save chat history to a file based on the guild ID."""
+
+    async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str):
+        """儲存聊天歷史，包含使用者 ID 和名稱"""
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
 
         history.append({
+            "user_id": user_id,
+            "user_name": user_name,
             "user_message": user_message,
             "bot_response": bot_response
         })
 
-        with open(file_path, 'w') as file:
-            json.dump(history, file, indent=4)
+        with open(file_path, 'w', encoding='utf-8') as file:
+            json.dump(history, file, indent=4, ensure_ascii=False)
 
     async def cog_unload(self):
         """Clean up resources."""
