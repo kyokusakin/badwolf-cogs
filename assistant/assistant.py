@@ -18,8 +18,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     """A RedBot cog for OpenAI API integration with advanced features."""
 
     def __init__(self, bot: Red):
-        super().__init__()
         self.bot = bot
+        super().__init__()
         self.config = Config.get_conf(
             self,
             identifier=1234567890,

@@ -1,8 +1,6 @@
 import discord
 import logging
 from redbot.core import commands
-from urllib.parse import urlparse, parse_qs
-from .sql_assistant import SQLAssistant
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
@@ -11,7 +9,7 @@ class AssistantCommands(SQLAssistant):
 
     def __init__(self, bot):
         self.bot = bot
-        self.sql = SQLAssistant(bot)
+        super().__init__(bot)
         bot.loop.create_task(self.sql.initialize())
 
     @commands.group()
