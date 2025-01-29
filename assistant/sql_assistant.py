@@ -1,52 +1,84 @@
-import aiomysql
-from redbot.core import Config, commands
-from redbot.core.bot import Red
+# sql_assistant.py
 import logging
+import aiomysql
+from redbot.core import Config
+from redbot.core.bot import Red
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
 class SQLAssistant:
     def __init__(self, bot: Red):
         self.bot = bot
-        self.config = Config.get_conf(self, identifier=987654321, force_registration=True)
+        # 使用獨立的 config 實例
+        self._config = Config.get_conf(
+            None,  # 這裡不傳入 self，因為我們只需要一個全局配置
+            identifier=987654321,
+            force_registration=True,
+            cog_name="OpenAIChat"  # 指定 cog 名稱
+        )
+        
         default_global = {
-            "sql_host": None,
-            "sql_port": 3306,
-            "sql_user": None,
-            "sql_password": None,
-            "sql_database": None,
+            "sql_settings": {
+                "host": None,
+                "port": 3306,
+                "user": None,
+                "password": None,
+                "database": None,
+                "ssl_ca": None
+            }
         }
-        self.config.register_global(**default_global)
+        self._config.register_global(**default_global)
         self.pool = None
-    
+
+    @property
+    def config(self):
+        return self._config
+
     async def initialize(self):
-        """初始化 SQL 連線池"""
-        sql_host = await self.config.sql_host()
-        sql_port = await self.config.sql_port()
-        sql_user = await self.config.sql_user()
-        sql_password = await self.config.sql_password()
-        sql_database = await self.config.sql_database()
-        
-        if not all([sql_host, sql_user, sql_password, sql_database]):
-            log.warning("SQL 資訊未設定，無法初始化資料庫連線池。")
-            return
-        
+        """Initialize the MySQL connection session."""
         try:
+            all_settings = await self._config.all()
+            settings = all_settings.get("sql_settings", {})
+            
+            if not all([settings.get("host"), settings.get("user"), 
+                       settings.get("password"), settings.get("database")]):
+                log.warning("SQL connection details are not fully specified.")
+                return
+            
+            ssl = {'ca': settings.get("ssl_ca")} if settings.get("ssl_ca") else None
+            
+            if self.pool:
+                self.pool.close()
+                await self.pool.wait_closed()
+            
             self.pool = await aiomysql.create_pool(
-                host=sql_host,
-                port=sql_port,
-                user=sql_user,
-                password=sql_password,
-                db=sql_database,
+                host=settings["host"],
+                port=settings.get("port", 3306),
+                user=settings["user"],
+                password=settings["password"],
+                db=settings["database"],
+                ssl=ssl,
                 autocommit=True
             )
             await self.create_table()
-            log.info("成功連接至 SQL 資料庫。")
+            log.info("Successfully connected to MySQL database.")
         except Exception as e:
-            log.error(f"SQL 連線失敗: {e}")
-    
+            log.error(f"SQL connection failed: {e}")
+
+    async def set_sql_setting(self, setting: str, value: any):
+        """Update a specific SQL setting."""
+        async with self._config.sql_settings() as settings:
+            settings[setting] = value
+        # 使用新設定重新初始化連接
+        await self.initialize()
+
+    async def get_sql_setting(self, setting: str) -> any:
+        """Get a specific SQL setting."""
+        all_settings = await self._config.all()
+        return all_settings.get("sql_settings", {}).get(setting)
+
     async def create_table(self):
-        """建立對話記錄表格"""
+        """Create the chat history table if it doesn't exist."""
         query = """
         CREATE TABLE IF NOT EXISTS chat_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -56,34 +88,43 @@ class SQLAssistant:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )"""
         await self.execute(query)
-    
+
     async def execute(self, query: str, *values):
-        """執行 SQL 查詢 (不回傳結果)"""
+        """Execute SQL queries without returning results."""
         if not self.pool:
-            log.warning("SQL 連線池尚未初始化。")
+            log.warning("SQL session not initialized.")
             return
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(query, values)
-    
+        try:
+            async with self.pool.acquire() as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(query, values)
+                    log.info("Query executed successfully.")
+        except Exception as e:
+            log.error(f"Error executing query: {e}")
+
     async def fetch(self, query: str, *values):
-        """執行 SQL 查詢並回傳結果"""
+        """Execute SQL queries and return results."""
         if not self.pool:
-            log.warning("SQL 連線池尚未初始化。")
+            log.warning("SQL session not initialized.")
             return None
-        async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(query, values)
-                return await cur.fetchall()
-    
+        try:
+            async with self.pool.acquire() as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(query, values)
+                    result = await cursor.fetchall()
+                    return result
+        except Exception as e:
+            log.error(f"Error fetching query results: {e}")
+            return None
+
     async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
-        """儲存對話記錄"""
+        """Save chat history to the database."""
         query = """
         INSERT INTO chat_history (user_id, user_message, bot_response)
         VALUES (%s, %s, %s)"""
         await self.execute(query, user_id, user_message, bot_response)
         
-        # 保持每個用戶最多 10 條記錄
+        # Keep only the last 10 records per user
         delete_query = """
         DELETE FROM chat_history WHERE id NOT IN (
             SELECT id FROM (
@@ -91,10 +132,10 @@ class SQLAssistant:
             ) as temp
         )"""
         await self.execute(delete_query, user_id)
-    
+
     async def close(self):
-        """關閉 SQL 連線池"""
+        """Close the MySQL session."""
         if self.pool:
             self.pool.close()
             await self.pool.wait_closed()
-            log.info("SQL 連線池已關閉。")
+            log.info("MySQL session closed.")

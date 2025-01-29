@@ -1,4 +1,3 @@
-# assistant.py
 import asyncio
 import base64
 import logging
@@ -8,23 +7,24 @@ import discord
 import openai
 from redbot.core import Config, commands
 from redbot.core.bot import Red
-from .c_assistant import AssistantCommands
 from .sql_assistant import SQLAssistant
+from .c_assistant import AssistantCommands
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-
-class OpenAIChat(
-  commands.Cog,
-  AssistantCommands,
-  SQLAssistant
-):
+class OpenAIChat(commands.Cog, AssistantCommands):
     """A RedBot cog for OpenAI API integration with advanced features."""
 
     def __init__(self, bot: Red):
-        super().__init__(bot)
-        self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
+        super().__init__()
+        self.bot = bot
+        # 主要的 OpenAI 設定
+        self.config = Config.get_conf(
+            self,
+            identifier=1234567890,
+            force_registration=True
+        )
         default_global = {
             "api_key": None,
             "api_url_base": "https://api.openai.com/v1",
@@ -38,10 +38,19 @@ class OpenAIChat(
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
+        # 初始化 SQL 助手
+        self.sql = SQLAssistant(bot)
+        
         self.queue = asyncio.Queue()
         self.queue_task = None
         self.is_processing = False
         self.should_process = True
+        
+        asyncio.create_task(self.initialize())
+
+    async def initialize(self):
+        """Initialize components."""
+        await self.sql.initialize()
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -109,6 +118,58 @@ class OpenAIChat(
             return response.choices[0].message.content
         except Exception as e:
             return log.error(f"Error querying OpenAI: {e}")
+        
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
+
+        config = await self.config.guild(message.guild).all()
+        channels = config["channels"]
+
+        if str(message.channel.id) not in channels:
+            return
+
+        prompt = config["prompt"]
+        user_input = message.content
+
+        if not user_input:
+            return
+
+        api_key = await self.config.api_key()
+        
+        if not api_key:
+            await message.channel.send("API key not set. Only the bot owner can set the key.")
+            return
+
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
+
+        user_name = message.author.display_name
+        user_id = message.author.id
+        extended_prompt = (
+            f"{prompt}\n"
+            f"Discord User {user_name} (<@{user_id}>) said:\n{user_input}"
+        )
+
+        await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
+        
+        if not self.is_processing:
+            self.is_processing = True
+            self.queue_task = asyncio.create_task(self.process_queue())
+
+    async def set_sql_setting(self, setting: str, value: any):
+        """代理到 SQL Assistant 的設定方法"""
+        await self.sql.set_sql_setting(setting, value)
+
+    async def get_sql_setting(self, setting: str) -> any:
+        """代理到 SQL Assistant 的獲取設定方法"""
+        return await self.sql.get_sql_setting(setting)
+
+    async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
+        """代理到 SQL Assistant 的儲存聊天記錄方法"""
+        await self.sql.save_chat_history(user_id, user_message, bot_response)
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -151,7 +212,7 @@ class OpenAIChat(
             self.queue_task = asyncio.create_task(self.process_queue())
 
     async def cog_unload(self):
-        """清理資源"""
+        """Clean up resources."""
         self.should_process = False
         await self.sql.close()
         if self.queue_task and not self.queue_task.done():

@@ -1,6 +1,12 @@
+# c_assistant.py
+import os
 import discord
+import logging
 from redbot.core import commands
+from urllib.parse import urlparse, parse_qs
 from .sql_assistant import SQLAssistant
+
+log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
 class AssistantCommands(SQLAssistant):
     """提供 OpenAI 聊天相關的指令。"""
@@ -92,33 +98,81 @@ class AssistantCommands(SQLAssistant):
         )
         await ctx.reply(response)
 
-    @commands.group()
+    @openai.group(name="sql")
     @commands.is_owner()
     async def openai_sql(self, ctx: commands.Context):
-        """設定 OpenAI 相關的 SQL 資訊"""
+        """Configure OpenAI SQL settings"""
         pass
     
     @openai_sql.command()
     async def host(self, ctx: commands.Context, host: str):
-        await self.sql.config.sql_host.set(host)
-        await ctx.send(f"SQL 主機已設定為 {host}")
+        """Set SQL host."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("host", host)
+        await ctx.send(f"SQL host set to {host}")
     
     @openai_sql.command()
     async def port(self, ctx: commands.Context, port: int):
-        await self.sql.config.sql_port.set(port)
-        await ctx.send(f"SQL 連接埠已設定為 {port}")
+        """Set SQL port."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("port", port)
+        await ctx.send(f"SQL port set to {port}")
     
     @openai_sql.command()
     async def user(self, ctx: commands.Context, user: str):
-        await self.sql.config.sql_user.set(user)
-        await ctx.send(f"SQL 使用者已設定為 {user}")
+        """Set SQL user."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("user", user)
+        await ctx.send(f"SQL user set to {user}")
     
     @openai_sql.command()
     async def password(self, ctx: commands.Context, password: str):
-        await self.sql.config.sql_password.set(password)
-        await ctx.send("SQL 密碼已設定。")
+        """Set SQL password."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("password", password)
+        await ctx.send("SQL password has been set.")
     
     @openai_sql.command()
     async def database(self, ctx: commands.Context, database: str):
-        await self.sql.config.sql_database.set(database)
-        await ctx.send(f"SQL 資料庫名稱已設定為 {database}")
+        """Set SQL database name."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        await sql_assistant.set_sql_setting("database", database)
+        await ctx.send(f"SQL database set to {database}")
+
+    @openai_sql.command(name="connectstr")
+    async def sql_connectstr(self, ctx: commands.Context, mysql_url: str):
+        """Set SQL connection string."""
+        sql_assistant = self.bot.get_cog("OpenAIChat")
+        try:
+            # Remove 'mysql://' if present
+            if mysql_url.startswith('mysql://'):
+                mysql_url = mysql_url[len('mysql://'):]
+            
+            # Parse the URL
+            parsed = urlparse(f'//{mysql_url}')
+            params = parse_qs(parsed.query)
+    
+            # Extract components
+            user_pass, host_port = parsed.netloc.split('@')
+            user, password = user_pass.split(':') if ':' in user_pass else (user_pass, '')
+            host, port = host_port.split(':') if ':' in host_port else (host_port, '3306')
+            
+            port = int(port)
+            database = parsed.path.lstrip('/')
+            
+            # Set each component
+            await sql_assistant.set_sql_setting("host", host)
+            await sql_assistant.set_sql_setting("port", port)
+            await sql_assistant.set_sql_setting("user", user)
+            await sql_assistant.set_sql_setting("password", password)
+            await sql_assistant.set_sql_setting("database", database)
+
+            await ctx.send(f"SQL connection settings configured:\n"
+                         f"Host: {host}\n"
+                         f"Port: {port}\n"
+                         f"User: {user}\n"
+                         f"Password: [Set]\n"
+                         f"Database: {database}")
+
+        except Exception as e:
+            await ctx.send(f"Error setting SQL connection: {e}")
