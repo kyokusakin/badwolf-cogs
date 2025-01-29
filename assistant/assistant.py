@@ -143,6 +143,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
 
+        # Save chat history for the guild instead of the user
         history = await self.save_chat_history(message.guild.id, user_input, "")
         if not history:
             history = []
@@ -161,12 +162,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     
         if not self.is_processing:
             self.is_processing = True
-            self.queue_task = asyncio.create_task(self.process_queue())
+            self.queue_task = asyncio.create_task(self.process_queue()))
 
-
-    async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
-        """Save chat history to a file."""
-        file_path = os.path.join("chat_histories", f"{user_id}.json")
+    async def save_chat_history(self, guild_id: int, user_message: str, bot_response: str):
+        """Save chat history to a file based on the guild ID."""
+        file_path = os.path.join("chat_histories", f"{guild_id}.json")
         history = []
 
         if os.path.exists(file_path):
