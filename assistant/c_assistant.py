@@ -1,9 +1,12 @@
 # c_assistant.py
 
 import discord
+import logging
 from redbot.core import commands
 from urllib.parse import urlparse
 from .sql_assistant import SQLAssistant
+
+log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
 class AssistantCommands(SQLAssistant):
     """提供 OpenAI 聊天相關的指令。"""
@@ -130,7 +133,11 @@ class AssistantCommands(SQLAssistant):
     async def sql_host(self, ctx: commands.Context, jdbc_url: str):
         try:
             parsed = urlparse(jdbc_url)
+            log.info(f"URL parsed: {parsed}")
             
+            if parsed.scheme != 'jdbc:mysql':
+                raise ValueError("URL scheme must be 'jdbc:mysql'")
+
             # Extract components from the URL
             host = parsed.netloc.split('@')[-1].split(':')[0]
             port = int(parsed.netloc.split('@')[-1].split(':')[-1])
