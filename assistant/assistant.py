@@ -143,7 +143,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
 
-
         history = await self.save_chat_history(message.guild.id, user_input, "")
         if not history:
             history = []
@@ -151,23 +150,19 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         prompt = config["prompt"]
         for entry in history:
             prompt += f"\nUser: {entry['user_message']}\nAssistant: {entry['bot_response']}"
-    
+
         extended_prompt = (
             f"{prompt}\n"
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         )
 
+        # Put message in queue and handle processing via the queue
         await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
     
         if not self.is_processing:
             self.is_processing = True
             self.queue_task = asyncio.create_task(self.process_queue())
 
-        # Process the query and save the response
-        response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
-        if response:
-            await self.send_response(message, response)
-            await self.save_chat_history(message.guild.id, user_input, response)
 
     async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
         """Save chat history to a file."""
