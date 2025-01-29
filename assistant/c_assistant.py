@@ -130,24 +130,26 @@ class AssistantCommands(SQLAssistant):
         await ctx.send(f"SQL 資料庫名稱已設定為 {database}")
 
     @openai_sql.command(name="connectstr")
-    async def sql_host(self, ctx: commands.Context, jdbc_url: str):
+    async def sql_host(self, ctx: commands.Context, mysql_url: str):
         try:
-            # Manually parse the JDBC URL
-            if not jdbc_url.startswith('jdbc:mysql://'):
-                raise ValueError("URL must start with 'jdbc:mysql://'")
-
-            # Remove the scheme part
-            url_parts = jdbc_url[len('jdbc:mysql://'):]
-        
-            # Parse remaining URL with urlparse
-            parsed = urlparse(f'//{url_parts}')  # Add '//' to make it valid for urlparse
-
+            # Remove 'mysql://' if present
+            if mysql_url.startswith('mysql://'):
+                mysql_url = mysql_url[len('mysql://'):]
+            
+            # Parse the URL
+            parsed = urlparse(f'//{mysql_url}')
+            params = parse_qs(parsed.query)
+    
             # Extract components
-            host = parsed.netloc.split('@')[-1].split(':')[0]
-            port = int(parsed.netloc.split('@')[-1].split(':')[-1])
-            user = parsed.netloc.split('@')[0].split(':')[0]
-            password = parsed.netloc.split('@')[0].split(':')[-1]
+            user_pass, host_port = parsed.netloc.split('@')
+            user, password = user_pass.split(':') if ':' in user_pass else (user_pass, '')
+            host, port = host_port.split(':') if ':' in host_port else (host_port, '3306')  # Default MySQL port
+
+            port = int(port)  # Convert port to integer
             database = parsed.path.lstrip('/')
+
+            # SSL mode
+            ssl_mode = params.get('ssl-mode', ['DISABLED'])[0]  # Default to DISABLED if not specified
 
             # Set each component in the config
             await self.sql.config.sql_host.set(host)
@@ -155,12 +157,18 @@ class AssistantCommands(SQLAssistant):
             await self.sql.config.sql_user.set(user)
             await self.sql.config.sql_password.set(password)
             await self.sql.config.sql_database.set(database)
-    
+            # You might want to add SSL mode to your SQLAssistant class config if needed
+            # For now, let's log it for reference
+            log.info(f"SSL Mode set to: {ssl_mode}")
+
             await ctx.send(f"SQL 連線資訊已設定為:\n"
                            f"主機: {host}\n"
                            f"連接埠: {port}\n"
                            f"使用者: {user}\n"
-                           f"密碼: {password}\n"
-                           f"資料庫: {database}")
+                           f"密碼: [已設置，但未顯示]\n"
+                           f"資料庫: {database}\n"
+                           f"SSL Mode: {ssl_mode}")
         except ValueError as e:
             await ctx.send(f"設置 SQL 連線時出錯: {e}")
+        except Exception as e:
+            await ctx.send(f"設置 SQL 連線時發生未預期的錯誤: {e}")
