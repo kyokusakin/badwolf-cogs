@@ -113,6 +113,7 @@ class OpenAIChat(
     async def cog_unload(self):
         """清理資源"""
         self.should_process = False
+        await self.sql.close()
         if self.queue_task and not self.queue_task.done():
             self.queue_task.cancel()
             try:

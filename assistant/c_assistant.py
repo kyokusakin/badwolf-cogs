@@ -1,11 +1,14 @@
 import discord
 from redbot.core import commands
+from .sql_assistant import SQLAssistant
 
-class AssistantCommands(commands.Cog):
+class AssistantCommands(commands.Cog, SQLAssistant):
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
         self.bot = bot
+        self.sql = SQLAssistant(bot)
+        bot.loop.create_task(self.sql.initialize())
 
     @commands.group()
     @commands.guild_only()
@@ -88,3 +91,34 @@ class AssistantCommands(commands.Cog):
             user_input
         )
         await ctx.reply(response)
+
+    @commands.group()
+    @commands.is_owner()
+    async def openai_sql(self, ctx: commands.Context):
+        """設定 OpenAI 相關的 SQL 資訊"""
+        pass
+    
+    @openai_sql.command()
+    async def host(self, ctx: commands.Context, host: str):
+        await self.sql.config.sql_host.set(host)
+        await ctx.send(f"SQL 主機已設定為 {host}")
+    
+    @openai_sql.command()
+    async def port(self, ctx: commands.Context, port: int):
+        await self.sql.config.sql_port.set(port)
+        await ctx.send(f"SQL 連接埠已設定為 {port}")
+    
+    @openai_sql.command()
+    async def user(self, ctx: commands.Context, user: str):
+        await self.sql.config.sql_user.set(user)
+        await ctx.send(f"SQL 使用者已設定為 {user}")
+    
+    @openai_sql.command()
+    async def password(self, ctx: commands.Context, password: str):
+        await self.sql.config.sql_password.set(password)
+        await ctx.send("SQL 密碼已設定。")
+    
+    @openai_sql.command()
+    async def database(self, ctx: commands.Context, database: str):
+        await self.sql.config.sql_database.set(database)
+        await ctx.send(f"SQL 資料庫名稱已設定為 {database}")
