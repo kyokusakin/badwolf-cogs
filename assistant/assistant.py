@@ -19,7 +19,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     def __init__(self, bot: Red):
         self.bot = bot
-        super().__init__()
+        super().__init__(bot)
         self.config = Config.get_conf(
             self,
             identifier=1234567890,
