@@ -110,6 +110,46 @@ class OpenAIChat(
         except Exception as e:
             return log.error(f"Error querying OpenAI: {e}")
 
+    @commands.Cog.listener()
+    async def on_message(self, message: discord.Message):
+        if message.author.bot or not message.guild:
+            return
+
+        config = await self.config.guild(message.guild).all()
+        channels = config["channels"]
+
+        if str(message.channel.id) not in channels:
+            return
+
+        prompt = config["prompt"]
+        user_input = message.content
+
+        if not user_input:
+            return
+
+        api_key = await self.config.api_key()
+        
+        if not api_key:
+            await message.channel.send("API key not set. Only the bot owner can set the key.")
+            return
+
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
+
+        user_name = message.author.display_name
+        user_id = message.author.id
+        extended_prompt = (
+            f"{prompt}\n"
+            f"Discord User {user_name} (ID: <@{user_id}>) said: \n{user_input}"
+        )
+
+        await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
+        
+        if not self.is_processing:
+            self.is_processing = True
+            self.queue_task = asyncio.create_task(self.process_queue())
+
     async def cog_unload(self):
         """清理資源"""
         self.should_process = False
