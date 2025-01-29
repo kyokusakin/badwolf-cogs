@@ -162,7 +162,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     
         if not self.is_processing:
             self.is_processing = True
-            self.queue_task = asyncio.create_task(self.process_queue()))
+            self.queue_task = asyncio.create_task(self.process_queue())
 
     async def save_chat_history(self, guild_id: int, user_message: str, bot_response: str):
         """Save chat history to a file based on the guild ID."""
