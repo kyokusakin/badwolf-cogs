@@ -124,3 +124,33 @@ class AssistantCommands(SQLAssistant):
     async def database(self, ctx: commands.Context, database: str):
         await self.sql.config.sql_database.set(database)
         await ctx.send(f"SQL 資料庫名稱已設定為 {database}")
+
+    @openai_sql.command(name="connectstr")
+    async def sql_host(self, ctx: commands.Context, jdbc_url: str):
+        try:
+            parsed = urlparse(jdbc_url)
+            
+            if parsed.scheme != 'jdbc:mysql':
+                raise ValueError("URL scheme must be 'jdbc:mysql'")
+
+            # Extract components from the URL
+            host = parsed.netloc.split('@')[-1].split(':')[0]
+            port = int(parsed.netloc.split('@')[-1].split(':')[-1])
+            user = parsed.netloc.split('@')[0].split(':')[0]
+            password = parsed.netloc.split('@')[0].split(':')[-1]
+            database = parsed.path.lstrip('/')
+
+            # Set each component in the config
+            await self.sql.config.sql_host.set(host)
+            await self.sql.config.sql_port.set(port)
+            await self.sql.config.sql_user.set(user)
+            await self.sql.config.sql_password.set(password)
+            await self.sql.config.sql_database.set(database)
+
+            await ctx.send(f"SQL 連線資訊已設定為:\n"
+                           f"主機: {host}\n"
+                           f"連接埠: {port}\n"
+                           f"使用者: {user}\n"
+                           f"資料庫: {database}")
+        except ValueError as e:
+            await ctx.send(f"設置 SQL 連線時出錯: {e}")
