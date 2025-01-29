@@ -91,9 +91,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return default_delay
 
     async def send_response(self, message: discord.Message, response: str):
-        """Send response"""
         try:
-            await message.reply(response)
+            chunk_size = 2000
+            chunks = [response[i : i + chunk_size] for i in range(0, len(response), chunk_size)]
+        
+            for chunk in chunks:
+                await message.channel.send(chunk)
+                await asyncio.sleep(1)
+            
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
