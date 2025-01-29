@@ -65,14 +65,16 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                         self.queue.get(), 
                         timeout=30
                     )
-                    async for response in self.query_openai(api_key, api_url_base, model, prompt):
-                        if response:
-                            await self.send_response(message, response)
-                    await self.save_chat_history(message.author.id, message.content, response)
+                    full_response = ""
+                    async for chunk in self.query_openai(api_key, api_url_base, model, prompt):
+                        if chunk:
+                            full_response += chunk
+                            await self.send_response(message, full_response)
+                    await self.save_chat_history(message.author.id, message.content, full_response)
                     
                     self.queue.task_done()
 
-                    delay = await self.calculate_delay(response, await self.config.default_delay())
+                    delay = await self.calculate_delay(full_response, await self.config.default_delay())
 
                     await asyncio.sleep(delay)
                     
@@ -96,18 +98,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             chunk_size = 2000
             chunks = [response[i:i+chunk_size] for i in range(0, len(response), chunk_size)]
             
-            # Send initial reply or edit
             reply = await message.reply(chunks[0])
             
-            # If there's more to send, continue with edits or new messages
             for chunk in chunks[1:]:
                 if len(reply.content) + len(chunk) <= 2000:
-                    # If we can still edit the message
                     await reply.edit(content=reply.content + chunk)
                 else:
-                    # If we've hit the character limit, reply with a new message
                     reply = await message.reply(chunk)
-                await asyncio.sleep(0.1)  # Small delay to prevent rate limiting
+                await asyncio.sleep(1)
 
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
