@@ -1,8 +1,7 @@
-import mysqlx
+import mysql.connector
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 import logging
-import os
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
@@ -16,9 +15,10 @@ class SQLAssistant:
             "sql_user": None,
             "sql_password": None,
             "sql_database": None,
+            "ssl_ca": None,  # 儲存 CA 憑證的路徑
         }
         self.config.register_global(**default_global)
-        self.session = None
+        self.connection = None
     
     async def initialize(self):
         """Initialize the MySQL connection session."""
@@ -27,27 +27,21 @@ class SQLAssistant:
         sql_user = await self.config.sql_user()
         sql_password = await self.config.sql_password()
         sql_database = await self.config.sql_database()
+        ssl_ca = await self.config.ssl_ca()  # 讀取 SSL 憑證的路徑
         
-        # 設定 SSL 檔案路徑
-        ssl_dir = os.path.join(os.path.dirname(__file__), 'ssl')
-        ssl_options = {
-            'ca': os.path.join(ssl_dir, 'ca-cert.pem'),
-            'cert': os.path.join(ssl_dir, 'client-cert.pem'),
-            'key': os.path.join(ssl_dir, 'client-key.pem')
-        }
-
         if not all([sql_host, sql_user, sql_password, sql_database]):
             log.warning("SQL connection details are not fully specified. Cannot initialize database connection session.")
             return
         
         try:
-            self.session = mysqlx.get_client(
+            # 連接 MySQL
+            self.connection = mysql.connector.connect(
                 host=sql_host,
                 port=sql_port,
                 user=sql_user,
                 password=sql_password,
                 database=sql_database,
-                ssl_context=ssl_options  # 設定 SSL 參數
+                ssl_ca=ssl_ca  # 如果有指定 CA 憑證，使用它
             )
             await self.create_table()
             log.info("Successfully connected to MySQL database.")
@@ -68,26 +62,28 @@ class SQLAssistant:
     
     async def execute(self, query: str, *values):
         """Execute SQL queries without returning results."""
-        if not self.session:
+        if not self.connection:
             log.warning("SQL session not initialized.")
             return
         try:
-            schema = self.session.get_schema()
-            table = schema.get_table('chat_history')
-            table.sql(query).execute(*values)
+            cursor = self.connection.cursor()
+            cursor.execute(query, values)
+            self.connection.commit()
+            cursor.close()
         except Exception as e:
             log.error(f"Error executing query: {e}")
     
     async def fetch(self, query: str, *values):
         """Execute SQL queries and return results."""
-        if not self.session:
+        if not self.connection:
             log.warning("SQL session not initialized.")
             return None
         try:
-            schema = self.session.get_schema()
-            table = schema.get_table('chat_history')
-            result = table.sql(query).execute(*values)
-            return result.fetch_all()
+            cursor = self.connection.cursor()
+            cursor.execute(query, values)
+            result = cursor.fetchall()
+            cursor.close()
+            return result
         except Exception as e:
             log.error(f"Error fetching query results: {e}")
             return None
@@ -110,6 +106,6 @@ class SQLAssistant:
 
     async def close(self):
         """Close the MySQL session."""
-        if self.session:
-            self.session.close()
+        if self.connection:
+            self.connection.close()
             log.info("MySQL session closed.")
