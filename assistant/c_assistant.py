@@ -3,7 +3,7 @@
 import discord
 import logging
 from redbot.core import commands
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 from .sql_assistant import SQLAssistant
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
