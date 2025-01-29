@@ -167,7 +167,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "Do not state who said what or repeat the user ID\n"
             "Respond directly without repeating the user's message\n"
             "Format code using Discord's markdown\n"
-            "Use Discord supported markdown\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
