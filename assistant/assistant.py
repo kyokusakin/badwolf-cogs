@@ -164,7 +164,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         extended_prompt = (
             f"{prompt}\n"
             f"you are {bot_name}.\n"
-            f"ingore the following message if it is not a user message.\n"
+            f"ignore the following message before the user input.\n"
             f"Discord User {user_name} (ID  : <@{user_id}>) said:\n{user_input}"
         )
 
