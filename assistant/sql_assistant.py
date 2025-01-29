@@ -1,21 +1,22 @@
-import aiomysql
-from redbot.core import Config, commands
-from redbot.core.bot import Red
+# sql_assistant.py
 import logging
+import aiomysql
+from redbot.core import Config
+from redbot.core.bot import Red
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
 class SQLAssistant:
     def __init__(self, bot: Red):
         self.bot = bot
-        # Create a separate config instance for SQL settings
-        self.sql_config = Config.get_conf(
-            self,
+        # 使用獨立的 config 實例
+        self._config = Config.get_conf(
+            None,  # 這裡不傳入 self，因為我們只需要一個全局配置
             identifier=987654321,
-            force_registration=True
+            force_registration=True,
+            cog_name="OpenAIChat"  # 指定 cog 名稱
         )
         
-        # Register default values
         default_global = {
             "sql_settings": {
                 "host": None,
@@ -26,24 +27,33 @@ class SQLAssistant:
                 "ssl_ca": None
             }
         }
-        self.sql_config.register_global(**default_global)
+        self._config.register_global(**default_global)
         self.pool = None
-    
+
+    @property
+    def config(self):
+        return self._config
+
     async def initialize(self):
         """Initialize the MySQL connection session."""
-        # Get all SQL settings at once
-        settings = (await self.sql_config.sql_settings()).copy()
-        
-        if not all([settings["host"], settings["user"], settings["password"], settings["database"]]):
-            log.warning("SQL connection details are not fully specified. Cannot initialize database connection session.")
-            return
-        
         try:
-            ssl = {'ca': settings["ssl_ca"]} if settings["ssl_ca"] else None
-
+            all_settings = await self._config.all()
+            settings = all_settings.get("sql_settings", {})
+            
+            if not all([settings.get("host"), settings.get("user"), 
+                       settings.get("password"), settings.get("database")]):
+                log.warning("SQL connection details are not fully specified.")
+                return
+            
+            ssl = {'ca': settings.get("ssl_ca")} if settings.get("ssl_ca") else None
+            
+            if self.pool:
+                self.pool.close()
+                await self.pool.wait_closed()
+            
             self.pool = await aiomysql.create_pool(
                 host=settings["host"],
-                port=settings["port"],
+                port=settings.get("port", 3306),
                 user=settings["user"],
                 password=settings["password"],
                 db=settings["database"],
@@ -54,17 +64,19 @@ class SQLAssistant:
             log.info("Successfully connected to MySQL database.")
         except Exception as e:
             log.error(f"SQL connection failed: {e}")
-    
+
     async def set_sql_setting(self, setting: str, value: any):
         """Update a specific SQL setting."""
-        async with self.sql_config.sql_settings() as settings:
+        async with self._config.sql_settings() as settings:
             settings[setting] = value
-    
+        # 使用新設定重新初始化連接
+        await self.initialize()
+
     async def get_sql_setting(self, setting: str) -> any:
         """Get a specific SQL setting."""
-        settings = await self.sql_config.sql_settings()
-        return settings.get(setting)
-    
+        all_settings = await self._config.all()
+        return all_settings.get("sql_settings", {}).get(setting)
+
     async def create_table(self):
         """Create the chat history table if it doesn't exist."""
         query = """
@@ -76,7 +88,7 @@ class SQLAssistant:
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )"""
         await self.execute(query)
-    
+
     async def execute(self, query: str, *values):
         """Execute SQL queries without returning results."""
         if not self.pool:
@@ -89,7 +101,7 @@ class SQLAssistant:
                     log.info("Query executed successfully.")
         except Exception as e:
             log.error(f"Error executing query: {e}")
-    
+
     async def fetch(self, query: str, *values):
         """Execute SQL queries and return results."""
         if not self.pool:
@@ -104,7 +116,7 @@ class SQLAssistant:
         except Exception as e:
             log.error(f"Error fetching query results: {e}")
             return None
-    
+
     async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
         """Save chat history to the database."""
         query = """
