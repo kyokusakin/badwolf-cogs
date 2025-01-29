@@ -172,3 +172,41 @@ class AssistantCommands(SQLAssistant):
             await ctx.send(f"設置 SQL 連線時出錯: {e}")
         except Exception as e:
             await ctx.send(f"設置 SQL 連線時發生未預期的錯誤: {e}")
+            
+    # 新增指令來設置 SSL 憑證
+    @openai.command(name="setca")
+    @commands.is_owner()
+    async def setssl(self, ctx: commands.Context):
+        """讓用戶上傳 SSL 憑證（CA 憑證）。"""
+        await ctx.send("請上傳你的 CA 憑證文件。")
+        
+        # 創建文件上傳的檢查
+        def check(m):
+            return m.author == ctx.author and isinstance(m.channel, discord.TextChannel)
+        
+        try:
+            # 等待用戶上傳檔案
+            message = await self.bot.wait_for("message", check=check, timeout=60.0)
+
+            # 確保有附加檔案
+            if message.attachments:
+                # 取得附件的 CA 憑證內容
+                ca_cert_url = message.attachments[0].url
+                ca_cert_file = await message.attachments[0].read()
+
+                # 儲存 CA 憑證檔案
+                ssl_dir = os.path.join(os.path.dirname(__file__), 'ssl')
+                os.makedirs(ssl_dir, exist_ok=True)
+                ca_cert_path = os.path.join(ssl_dir, 'ca-cert.pem')
+
+                with open(ca_cert_path, 'wb') as f:
+                    f.write(ca_cert_file)
+
+                await ctx.send(f"CA 憑證已成功上傳並儲存為 {ca_cert_path}.")
+                log.info(f"CA 憑證已儲存於 {ca_cert_path}.")
+            else:
+                await ctx.send("未發現檔案，請上傳一個 CA 憑證檔案。")
+
+        except Exception as e:
+            await ctx.send(f"設置 SSL 憑證時發生錯誤: {e}")
+            log.error(f"Error setting SSL cert: {e}")

@@ -1,7 +1,8 @@
-import aiomysql
+import mysqlx
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 import logging
+import os
 
 log = logging.getLogger("red.BadwolfCogs.sql_assistant")
 
@@ -17,28 +18,36 @@ class SQLAssistant:
             "sql_database": None,
         }
         self.config.register_global(**default_global)
-        self.pool = None
+        self.session = None
     
     async def initialize(self):
-        """Initialize the MySQL connection pool."""
+        """Initialize the MySQL connection session."""
         sql_host = await self.config.sql_host()
         sql_port = await self.config.sql_port()
         sql_user = await self.config.sql_user()
         sql_password = await self.config.sql_password()
         sql_database = await self.config.sql_database()
         
+        # 設定 SSL 檔案路徑
+        ssl_dir = os.path.join(os.path.dirname(__file__), 'ssl')
+        ssl_options = {
+            'ca': os.path.join(ssl_dir, 'ca-cert.pem'),
+            'cert': os.path.join(ssl_dir, 'client-cert.pem'),
+            'key': os.path.join(ssl_dir, 'client-key.pem')
+        }
+
         if not all([sql_host, sql_user, sql_password, sql_database]):
-            log.warning("SQL connection details are not fully specified. Cannot initialize database connection pool.")
+            log.warning("SQL connection details are not fully specified. Cannot initialize database connection session.")
             return
         
         try:
-            self.pool = await aiomysql.create_pool(
+            self.session = mysqlx.get_client(
                 host=sql_host,
                 port=sql_port,
                 user=sql_user,
                 password=sql_password,
-                db=sql_database,
-                autocommit=True
+                database=sql_database,
+                ssl_context=ssl_options  # 設定 SSL 參數
             )
             await self.create_table()
             log.info("Successfully connected to MySQL database.")
@@ -59,22 +68,29 @@ class SQLAssistant:
     
     async def execute(self, query: str, *values):
         """Execute SQL queries without returning results."""
-        if not self.pool:
-            log.warning("SQL connection pool not initialized.")
+        if not self.session:
+            log.warning("SQL session not initialized.")
             return
-        async with self.pool.acquire() as conn:
-            async with conn.cursor() as cur:
-                await cur.execute(query, values)
+        try:
+            schema = self.session.get_schema()
+            table = schema.get_table('chat_history')
+            table.sql(query).execute(*values)
+        except Exception as e:
+            log.error(f"Error executing query: {e}")
     
     async def fetch(self, query: str, *values):
         """Execute SQL queries and return results."""
-        if not self.pool:
-            log.warning("SQL connection pool not initialized.")
+        if not self.session:
+            log.warning("SQL session not initialized.")
             return None
-        async with self.pool.acquire() as conn:
-            async with conn.cursor(aiomysql.DictCursor) as cur:
-                await cur.execute(query, values)
-                return await cur.fetchall()
+        try:
+            schema = self.session.get_schema()
+            table = schema.get_table('chat_history')
+            result = table.sql(query).execute(*values)
+            return result.fetch_all()
+        except Exception as e:
+            log.error(f"Error fetching query results: {e}")
+            return None
     
     async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
         """Save chat history to the database."""
@@ -93,8 +109,7 @@ class SQLAssistant:
         await self.execute(delete_query, user_id)
 
     async def close(self):
-        """Close the SQL connection pool."""
-        if self.pool:
-            self.pool.close()
-            await self.pool.wait_closed()
-            log.info("SQL connection pool closed.")
+        """Close the MySQL session."""
+        if self.session:
+            self.session.close()
+            log.info("MySQL session closed.")
