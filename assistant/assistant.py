@@ -94,7 +94,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         asyncio.create_task(self._send_in_chunks(message, response))
 
     async def _send_in_chunks(self, message: discord.Message, response: str):
-        """實際執行分段發送的異步函數"""
         try:
             chunk_size = 2000
             chunks = [response[i : i + chunk_size] for i in range(0, len(response), chunk_size)]
@@ -107,12 +106,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Error sending response: {e}")
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
-        """Query OpenAI API"""
-        client = openai.OpenAI(
-            api_key=api_key,
-            base_url=api_url_base
-        )
+        """使用 ThreadPoolExecutor 避免阻塞事件迴圈"""
+        loop = asyncio.get_running_loop()
+        with concurrent.futures.ThreadPoolExecutor() as pool:
+            return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt)
 
+    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
+        """真正執行 OpenAI API 請求的同步函數"""
+        client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
         try:
             response = client.chat.completions.create(
                 model=model,
