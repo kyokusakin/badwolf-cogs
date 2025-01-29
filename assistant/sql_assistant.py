@@ -1,4 +1,4 @@
-import mysql.connector
+import aiomysql
 from redbot.core import Config, commands
 from redbot.core.bot import Red
 import logging
@@ -19,6 +19,7 @@ class SQLAssistant:
         }
         self.config.register_global(**default_global)
         self.connection = None
+        self.pool = None
     
     async def initialize(self):
         """Initialize the MySQL connection session."""
@@ -34,14 +35,15 @@ class SQLAssistant:
             return
         
         try:
-            # 連接 MySQL
-            self.connection = mysql.connector.connect(
+            # 使用 aiomysql 創建資料庫連接池
+            self.pool = await aiomysql.create_pool(
                 host=sql_host,
                 port=sql_port,
                 user=sql_user,
                 password=sql_password,
-                database=sql_database,
-                ssl_ca=ssl_ca  # 如果有指定 CA 憑證，使用它
+                db=sql_database,
+                ssl_ca=ssl_ca,  # 如果有指定 CA 憑證，使用它
+                autocommit=True
             )
             await self.create_table()
             log.info("Successfully connected to MySQL database.")
@@ -62,28 +64,28 @@ class SQLAssistant:
     
     async def execute(self, query: str, *values):
         """Execute SQL queries without returning results."""
-        if not self.connection:
+        if not self.pool:
             log.warning("SQL session not initialized.")
             return
         try:
-            cursor = self.connection.cursor()
-            cursor.execute(query, values)
-            self.connection.commit()
-            cursor.close()
+            async with self.pool.acquire() as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(query, values)
+                    log.info("Query executed successfully.")
         except Exception as e:
             log.error(f"Error executing query: {e}")
     
     async def fetch(self, query: str, *values):
         """Execute SQL queries and return results."""
-        if not self.connection:
+        if not self.pool:
             log.warning("SQL session not initialized.")
             return None
         try:
-            cursor = self.connection.cursor()
-            cursor.execute(query, values)
-            result = cursor.fetchall()
-            cursor.close()
-            return result
+            async with self.pool.acquire() as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(query, values)
+                    result = await cursor.fetchall()
+                    return result
         except Exception as e:
             log.error(f"Error fetching query results: {e}")
             return None
@@ -106,6 +108,7 @@ class SQLAssistant:
 
     async def close(self):
         """Close the MySQL session."""
-        if self.connection:
-            self.connection.close()
+        if self.pool:
+            self.pool.close()
+            await self.pool.wait_closed()
             log.info("MySQL session closed.")
