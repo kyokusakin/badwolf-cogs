@@ -1,13 +1,14 @@
 import asyncio
 import base64
 import logging
+import os
+import json
 from typing import Optional
 
 import discord
 import openai
 from redbot.core import Config, commands
 from redbot.core.bot import Red
-from .sql_assistant import SQLAssistant
 from .c_assistant import AssistantCommands
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
@@ -19,7 +20,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     def __init__(self, bot: Red):
         super().__init__()
         self.bot = bot
-        # 主要的 OpenAI 設定
         self.config = Config.get_conf(
             self,
             identifier=1234567890,
@@ -38,9 +38,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
 
-        # 初始化 SQL 助手
-        self.sql = SQLAssistant(bot)
-        
         self.queue = asyncio.Queue()
         self.queue_task = None
         self.is_processing = False
@@ -50,7 +47,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def initialize(self):
         """Initialize components."""
-        await self.sql.initialize()
+        os.makedirs("chat_histories", exist_ok=True)
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -59,7 +56,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return base64.b64decode(encoded_key.encode()).decode()
 
     async def process_queue(self):
-        """處理訊息隊列，每次處理後等待一段時間"""
+        """Process message queue, wait for some time after each processing."""
         try:
             while self.should_process:
                 try:
@@ -94,17 +91,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return default_delay
 
     async def send_response(self, message: discord.Message, response: str):
-        """發送回應"""
+        """Send response"""
         try:
             await message.reply(response)
         except discord.DiscordException as e:
-            try:
-                log.error(f"Error: {e}")
-            except:
-                log.error(f"Failed to send response: {e}")
+            log.error(f"Error sending response: {e}")
 
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str) -> Optional[str]:
-        """查詢 OpenAI API"""
+        """Query OpenAI API"""
         client = openai.OpenAI(
             api_key=api_key,
             base_url=api_url_base
@@ -117,8 +111,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             )
             return response.choices[0].message.content
         except Exception as e:
-            return log.error(f"Error querying OpenAI: {e}")
-        
+            log.error(f"Error querying OpenAI: {e}")
+            return None
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
@@ -126,18 +121,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         config = await self.config.guild(message.guild).all()
         channels = config["channels"]
-
+    
         if str(message.channel.id) not in channels:
             return
 
-        prompt = config["prompt"]
         user_input = message.content
 
         if not user_input:
             return
 
         api_key = await self.config.api_key()
-        
+    
         if not api_key:
             await message.channel.send("API key not set. Only the bot owner can set the key.")
             return
@@ -148,73 +142,52 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         user_name = message.author.display_name
         user_id = message.author.id
+
+        # Get the chat history
+        history = await self.save_chat_history(message.guild.id, user_input, "")
+
+        # Construct the prompt with history
+        prompt = config["prompt"]
+        for entry in history:
+            prompt += f"\nUser: {entry['user_message']}\nAssistant: {entry['bot_response']}"
+    
         extended_prompt = (
             f"{prompt}\n"
-            f"Discord User {user_name} (<@{user_id}>) said:\n{user_input}"
+            f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         )
 
         await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
-        
+    
         if not self.is_processing:
             self.is_processing = True
             self.queue_task = asyncio.create_task(self.process_queue())
 
-    async def set_sql_setting(self, setting: str, value: any):
-        """代理到 SQL Assistant 的設定方法"""
-        await self.sql.set_sql_setting(setting, value)
-
-    async def get_sql_setting(self, setting: str) -> any:
-        """代理到 SQL Assistant 的獲取設定方法"""
-        return await self.sql.get_sql_setting(setting)
+        # Process the query and save the response
+        response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
+        if response:
+            await self.send_response(message, response)
+            await self.save_chat_history(message.guild.id, user_input, response)
 
     async def save_chat_history(self, user_id: int, user_message: str, bot_response: str):
-        """代理到 SQL Assistant 的儲存聊天記錄方法"""
-        await self.sql.save_chat_history(user_id, user_message, bot_response)
+        """Save chat history to a file."""
+        file_path = os.path.join("chat_histories", f"{user_id}.json")
+        history = []
 
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot or not message.guild:
-            return
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                history = json.load(file)
 
-        config = await self.config.guild(message.guild).all()
-        channels = config["channels"]
+        history.append({
+            "user_message": user_message,
+            "bot_response": bot_response
+        })
 
-        if str(message.channel.id) not in channels:
-            return
-
-        prompt = config["prompt"]
-        user_input = message.content
-
-        if not user_input:
-            return
-
-        api_key = await self.config.api_key()
-        
-        if not api_key:
-            await message.channel.send("API key not set. Only the bot owner can set the key.")
-            return
-
-        api_key = self.decode_key(api_key)
-        api_url_base = await self.config.api_url_base()
-        model = await self.config.model()
-
-        user_name = message.author.display_name
-        user_id = message.author.id
-        extended_prompt = (
-            f"{prompt}\n"
-            f"Discord User {user_name} (ID: <@{user_id}>) said: \n{user_input}"
-        )
-
-        await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
-        
-        if not self.is_processing:
-            self.is_processing = True
-            self.queue_task = asyncio.create_task(self.process_queue())
+        with open(file_path, 'w') as file:
+            json.dump(history, file, indent=4)
 
     async def cog_unload(self):
         """Clean up resources."""
         self.should_process = False
-        await self.sql.close()
         if self.queue_task and not self.queue_task.done():
             self.queue_task.cancel()
             try:
