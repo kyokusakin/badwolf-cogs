@@ -143,8 +143,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
 
-        # Save chat history for the guild instead of the user
-        history = await self.save_chat_history(message.guild.id, user_input, "")
+        # Get the chat history for the guild, this will help in constructing the prompt
+        history = await self.load_chat_history(message.guild.id)
         if not history:
             history = []
 
@@ -157,21 +157,26 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         )
 
-        # Put message in queue and handle processing via the queue
-        await self.queue.put((message, api_key, api_url_base, model, extended_prompt))
-    
-        if not self.is_processing:
-            self.is_processing = True
-            self.queue_task = asyncio.create_task(self.process_queue())
+        # Query OpenAI
+        response = await self.query_openai(api_key, api_url_base, model, extended_prompt)
+        if response:
+            await self.send_response(message, response)
+            
+            # Now save chat history after receiving response
+            await self.save_chat_history(message.guild.id, user_input, response)
+
+    async def load_chat_history(self, guild_id: int):
+        """Load chat history for a specific guild."""
+        file_path = os.path.join("chat_histories", f"{guild_id}.json")
+        if os.path.exists(file_path):
+            with open(file_path, 'r') as file:
+                return json.load(file)
+        return []
 
     async def save_chat_history(self, guild_id: int, user_message: str, bot_response: str):
         """Save chat history to a file based on the guild ID."""
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
-        history = []
-
-        if os.path.exists(file_path):
-            with open(file_path, 'r') as file:
-                history = json.load(file)
+        history = await self.load_chat_history(guild_id)
 
         history.append({
             "user_message": user_message,
