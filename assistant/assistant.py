@@ -137,7 +137,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_input = message.content
         if not user_input:
             return
-        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
         api_key = await self.config.api_key()
 
         if not api_key:
@@ -181,7 +180,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "- Maintain consistent personality across interactions\n"
             f"Discord User {user_name} (ID: <@{user_id}>) said:\n"
         )
-
+        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
+        
         response = await self.query_openai(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
         if response:
             await self.send_response(message, response)
