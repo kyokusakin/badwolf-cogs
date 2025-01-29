@@ -2,15 +2,14 @@ import discord
 import logging
 from redbot.core import commands
 
-log = logging.getLogger("red.BadwolfCogs.sql_assistant")
+log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
-class AssistantCommands(SQLAssistant):
+class AssistantCommands():
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
         self.bot = bot
         super().__init__(bot)
-        bot.loop.create_task(self.sql.initialize())
 
     @commands.group()
     @commands.guild_only()
