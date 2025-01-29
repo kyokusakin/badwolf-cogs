@@ -163,11 +163,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         sysprompt = (
             f"{prompt}\n"
             f"You are {bot_name}\n"
-            "- Respond naturally in the same language as the user\n"
-            "- Do not state who said what or repeat the user ID\n"
-            "- Respond directly without repeating the user's message\n"
-            "- Format code using Discord's markdown\n"
-            "- Maintain consistent personality across interactions\n"
+            "Respond naturally in the same language as the user\n"
+            "Do not state who said what or repeat the user ID\n"
+            "Respond directly without repeating the user's message\n"
+            "Format code using Discord's markdown\n"
+            "Use Discord supported markdown\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
