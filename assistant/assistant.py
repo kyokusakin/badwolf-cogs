@@ -23,7 +23,7 @@ class OpenAIChat(
     """A RedBot cog for OpenAI API integration with advanced features."""
 
     def __init__(self, bot: Red):
-        self.bot = bot
+        super().__init__(bot)
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
             "api_key": None,
