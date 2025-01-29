@@ -1,5 +1,5 @@
 # c_assistant.py
-
+import os
 import discord
 import logging
 from redbot.core import commands
