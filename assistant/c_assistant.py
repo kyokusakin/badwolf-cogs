@@ -1,3 +1,5 @@
+# c_assistant.py
+
 import discord
 from redbot.core import commands
 from .sql_assistant import SQLAssistant
@@ -92,7 +94,7 @@ class AssistantCommands(SQLAssistant):
         )
         await ctx.reply(response)
 
-    @commands.group()
+    @openai.group(name="sql")
     @commands.is_owner()
     async def openai_sql(self, ctx: commands.Context):
         """設定 OpenAI 相關的 SQL 資訊"""
