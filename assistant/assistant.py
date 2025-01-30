@@ -116,15 +116,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            log.error(f"Error querying OpenAI: {e}")
-            return None
+        response = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
+        )
+        return response.choices[0].message.content
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
