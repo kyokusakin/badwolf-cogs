@@ -113,14 +113,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         with concurrent.futures.ThreadPoolExecutor() as pool:
             return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt, guild_history, user_input)
     
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
-    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
-        client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
-        response = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
-        )
-        return response.choices[0].message.content
+    def _blocking_openai_request(self,message: discord.Message , api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
+        try:
+            client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
+            )
+            return response.choices[0].message.content
+        except openai.error.OpenAIError as e:
+            log.error(f"OpenAI error: {e}")
+            return f"An error occurred while processing the request. {e}"
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
