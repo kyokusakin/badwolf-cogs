@@ -123,7 +123,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
             )
             return response.choices[0].message.content
-        except openai.error.OpenAIError as e:
+        except openai.OpenAIError as e:
             log.error(f"OpenAI error: {e}")
             return None
 
