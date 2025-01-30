@@ -108,12 +108,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
-    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
             return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt, guild_history, user_input)
-
+    
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
         try:
