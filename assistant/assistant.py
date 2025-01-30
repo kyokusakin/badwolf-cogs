@@ -71,6 +71,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     if response:
                         await self.send_response(message, response)
                         await self.save_chat_history(message.author.id, message.content, response)
+                    else:
+                        await message.channel.send("An error occurred while processing the request.")
                     
                     self.queue.task_done()
 
@@ -113,7 +115,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         with concurrent.futures.ThreadPoolExecutor() as pool:
             return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt, guild_history, user_input)
     
-    def _blocking_openai_request(self,message: discord.Message , api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
+    def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         try:
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
@@ -123,7 +125,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return response.choices[0].message.content
         except openai.error.OpenAIError as e:
             log.error(f"OpenAI error: {e}")
-            return f"An error occurred while processing the request. {e}"
+            return None
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
