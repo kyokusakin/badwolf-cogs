@@ -15,6 +15,7 @@ from .c_assistant import AssistantCommands
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 class OpenAIChat(commands.Cog, AssistantCommands):
     """A RedBot cog for OpenAI API integration with advanced features."""
