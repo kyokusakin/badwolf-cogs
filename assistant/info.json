@@ -13,9 +13,10 @@
         1
     ],
     "name": "OpenAIChat",
-    "requirements": [
-        "openai"
-    ],
+  "requirements": [
+    "openai",
+    "tenacity"
+  ],
     "short": "Advanced AI Chatbot Integration",
     "tags": [
         "ai",

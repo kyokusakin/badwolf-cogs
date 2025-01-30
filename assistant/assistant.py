@@ -5,6 +5,7 @@ import os
 import json
 import concurrent.futures
 from typing import Optional
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 import discord
 import openai
@@ -106,6 +107,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
+    @retry(stop=stop_after_attempt(3), wait=wait_fixed(5))
     async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         loop = asyncio.get_running_loop()
         with concurrent.futures.ThreadPoolExecutor() as pool:
