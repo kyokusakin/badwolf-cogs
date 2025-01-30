@@ -178,6 +178,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if response:
             await self.send_response(message, response)
             await self.save_chat_history(message.guild.id, user_id, user_name, user_input, response)
+        else:
+            await message.channel.send("An error occurred while processing the request.")
 
     async def load_chat_history(self, guild_id: int):
         file_path = os.path.join("chat_histories", f"{guild_id}.json")
