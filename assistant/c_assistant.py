@@ -98,10 +98,10 @@ class AssistantCommands():
     @commands.guild_only()
     @commands.has_permissions(administrator=True)
     async def clearhistory(self, ctx: commands.Context):
-        """Clear chat history for the guild."""
+        """清除伺服器的聊天歷史記錄。"""
         file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{ctx.guild.id}.json")
         if os.path.exists(file_path):
             os.remove(file_path)
-            await ctx.send("Chat history cleared.")
+            await ctx.send("聊天歷史記錄已清除。")
         else:
-            await ctx.send("No chat history found.")
+            await ctx.send("找不到聊天歷史記錄。")
