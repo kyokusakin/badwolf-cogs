@@ -121,7 +121,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "user", "content": guild_history}, {"role": "user", "content": user_input}]
+                messages=[{"role": "system", "content": prompt}, {"role": "assistant", "content": "Chat histories:\n" + guild_history}, {"role": "user", "content": user_input}]
             )
             return response.choices[0].message.content
         except openai.OpenAIError as e:
