@@ -1,5 +1,6 @@
 import discord
 import logging
+import os
 from redbot.core import commands
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
@@ -92,3 +93,15 @@ class AssistantCommands():
             user_input
         )
         await ctx.reply(response)
+
+    @openai.command(name="clearhistory")
+    @commands.guild_only()
+    @commands.has_permissions(administrator=True)
+    async def clearhistory(self, ctx: commands.Context):
+        """Clear chat history for the guild."""
+        file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{ctx.guild.id}.json")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+            await ctx.send("Chat history cleared.")
+        else:
+            await ctx.send("No chat history found.")
