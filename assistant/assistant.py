@@ -50,7 +50,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def initialize(self):
         """Initialize components."""
-        os.makedirs("chat_histories", exist_ok=True)
+        chat_histories_path = os.path.join(os.path.dirname(__file__), "chat_histories")
+        os.makedirs(chat_histories_path, exist_ok=True)
 
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
@@ -182,7 +183,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             await message.channel.send("An error occurred while processing the request.")
 
     async def load_chat_history(self, guild_id: int):
-        file_path = os.path.join("chat_histories", f"{guild_id}.json")
+        file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as file:
                 return json.load(file)
@@ -190,7 +191,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
 
     async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str):
-        file_path = os.path.join("chat_histories", f"{guild_id}.json")
+        file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
 
         if len(history) >= 20:
