@@ -135,8 +135,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         config = await self.config.guild(message.guild).all()
         channels = config["channels"]
-    
-        if message.content.startswith(self.bot.command_prefix or self.get_valid_prefixes(message.guild)):
+
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
             return
         
         if str(message.channel.id) not in channels:
