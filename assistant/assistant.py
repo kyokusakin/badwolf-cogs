@@ -5,7 +5,6 @@ import os
 import json
 import concurrent.futures
 from typing import Optional
-from tenacity import retry, stop_after_attempt, wait_fixed
 
 import discord
 import openai
@@ -111,10 +110,46 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
-    async def query_openai(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
-        loop = asyncio.get_running_loop()
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return await loop.run_in_executor(pool, self._blocking_openai_request, api_key, api_url_base, model, prompt, guild_history, user_input)
+    async def query_openai(self, message: discord.Message) -> Optional[str]:
+        user_input = message.content
+        if not user_input:
+            return None
+
+        api_key = await self.config.api_key()
+        if not api_key:
+            await message.channel.send("API key not set. Only the bot owner can set the key.")
+            return None
+
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
+
+        user_name = message.author.display_name
+        user_id = message.author.id
+        bot_name = self.bot.user.display_name
+
+        config = await self.config.guild(message.guild).all()
+        prompt = config["prompt"]
+    
+        history = await self.load_chat_history(message.guild.id)
+        if not history:
+            history = []
+
+        guild_history = ""
+        for entry in history:
+            guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
+
+        sysprompt = (
+            f"{prompt}\n"
+            f"You are {bot_name}\n"
+            "Respond naturally in the same language as the user\n"
+            "Do not state who said what or repeat the user ID\n"
+            "Respond directly without repeating the user's message\n"
+            "Format code using Discord's markdown\n"
+        )
+        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
+
+        return await self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
     
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         try:
@@ -139,52 +174,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
-        
+    
         if str(message.channel.id) not in channels:
             return
 
-        user_input = message.content
-        if not user_input:
-            return
-        api_key = await self.config.api_key()
-
-        if not api_key:
-            await message.channel.send("API key not set. Only the bot owner can set the key.")
-            return
-    
-        api_key = self.decode_key(api_key)
-        api_url_base = await self.config.api_url_base()
-        model = await self.config.model()
-
-        user_name = message.author.display_name
-        user_id = message.author.id
-        bot_name = self.bot.user.display_name
-
-        history = await self.load_chat_history(message.guild.id)
-        if not history:
-            history = []
-
-        prompt = config["prompt"]
-        guild_history = ""
-        for entry in history:
-            guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
-
-        sysprompt = (
-            f"{prompt}\n"
-            f"You are {bot_name}\n"
-            "Respond naturally in the same language as the user\n"
-            "Do not state who said what or repeat the user ID\n"
-            "Respond directly without repeating the user's message\n"
-            "Format code using Discord's markdown\n"
-        )
-        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
-
-        response = await self.query_openai(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+        response = await self.query_openai(message)
         if response:
             await self.send_response(message, response)
-            await self.save_chat_history(message.guild.id, user_id, user_name, user_input, response)
+            await self.save_chat_history(message.guild.id, message.author.id, message.author.display_name, message.content, response)
         else:
             await message.channel.send("An error occurred while processing the request.")
+
 
     async def load_chat_history(self, guild_id: int):
         file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")

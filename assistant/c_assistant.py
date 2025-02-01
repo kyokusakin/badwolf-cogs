@@ -83,18 +83,14 @@ class AssistantCommands():
 
     @openai.command(name="chat")
     @commands.guild_only()
-    async def chat_command(self, ctx: commands.Context, *, user_input: str):
+    async def chat_command(self, ctx: commands.Context):
         """發送訊息至 OpenAI 並獲得回應。"""
         cog = self.bot.get_cog("OpenAIChat")
-        response = await cog.query_openai(
-            await cog.config.api_key(),
-            await cog.config.api_url_base(),
-            await cog.config.model(),
-            await cog.config.guild(ctx.guild).prompt(),
-            guild_history = None,
-            user_input = user_input
-        )
-        await ctx.reply(response)
+        response = await cog.chat(ctx.message)
+        if response:
+            await ctx.send(response)
+        else:
+            await ctx.send("無法獲得回應。")
 
     @openai.command(name="clearhistory")
     @commands.guild_only()
