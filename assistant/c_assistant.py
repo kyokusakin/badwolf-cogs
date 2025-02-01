@@ -90,6 +90,8 @@ class AssistantCommands():
             await cog.config.api_key(),
             await cog.config.api_url_base(),
             await cog.config.model(),
+            await cog.config.guild(ctx.guild).prompt(),
+            await cog.load_chat_history(ctx.guild.id),
             user_input
         )
         await ctx.reply(response)
