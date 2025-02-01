@@ -42,8 +42,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         self.queue = asyncio.Queue()
         self.queue_task = None
-        self.is_processing = False
-        self.should_process = True
         
         asyncio.create_task(self.initialize())
 
@@ -57,37 +55,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     def decode_key(self, encoded_key: str) -> str:
         return base64.b64decode(encoded_key.encode()).decode()
-
-    async def process_queue(self):
-        """Process message queue, wait for some time after each processing."""
-        try:
-            while self.should_process:
-                try:
-                    message, api_key, api_url_base, model, prompt = await asyncio.wait_for(
-                        self.queue.get(), 
-                        timeout=30
-                    )
-                    response = await self.query_openai(api_key, api_url_base, model, prompt)
-                    if response:
-                        await self.send_response(message, response)
-                        await self.save_chat_history(message.author.id, message.content, response)
-                    else:
-                        await message.channel.send("An error occurred while processing the request.")
-                    
-                    self.queue.task_done()
-
-                    delay = await self.calculate_delay(response, await self.config.default_delay())
-
-                    await asyncio.sleep(delay)
-                    
-                except asyncio.TimeoutError:
-                    if self.queue.empty():
-                        self.is_processing = False
-                        break
-                        
-        except Exception as e:
-            log.error(f"Error in process_queue: {e}")
-            self.is_processing = False
 
     async def calculate_delay(self, response: Optional[dict], default_delay: float) -> float:
         if response and "x-ratelimit-limit-requests" in response:
@@ -149,7 +116,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
-        return await self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+        return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
     
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         try:
