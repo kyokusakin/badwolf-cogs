@@ -78,45 +78,52 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Error sending response: {e}")
 
     async def query_openai(self, message: discord.Message) -> Optional[str]:
-        user_input = message.content
-        if not user_input:
+        try:
+            user_input = message.content
+            if not user_input:
+                return None
+
+            api_key = await self.config.api_key()
+            if not api_key:
+                await message.channel.send("API key not set. Only the bot owner can set the key.")
+                return None
+
+            api_key = self.decode_key(api_key)
+            api_url_base = await self.config.api_url_base()
+            model = await self.config.model()
+
+            user_name = message.author.display_name
+            user_id = message.author.id
+            bot_name = self.bot.user.display_name
+
+            config = await self.config.guild(message.guild).all()
+            prompt = config["prompt"]
+        
+            history = await self.load_chat_history(message.guild.id)
+            if not history:
+                history = []
+
+            guild_history = ""
+            for entry in history:
+                guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
+
+            sysprompt = (
+                f"{prompt}\n"
+                f"You are {bot_name}\n"
+                "Respond naturally in the same language as the user\n"
+                "Do not state who said what or repeat the user ID\n"
+                "Respond directly without repeating the user's message\n"
+                "Format code using Discord's markdown\n"
+            )
+            formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
+            response = await self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+            if response:
+                return await message.reply(response)
+        except openai.OpenAIError as e:
+            await message.channel.send(f"OpenAI error: {e}")
+            log.error(f"OpenAI error: {e}")
             return None
-
-        api_key = await self.config.api_key()
-        if not api_key:
-            await message.channel.send("API key not set. Only the bot owner can set the key.")
-            return None
-
-        api_key = self.decode_key(api_key)
-        api_url_base = await self.config.api_url_base()
-        model = await self.config.model()
-
-        user_name = message.author.display_name
-        user_id = message.author.id
-        bot_name = self.bot.user.display_name
-
-        config = await self.config.guild(message.guild).all()
-        prompt = config["prompt"]
-    
-        history = await self.load_chat_history(message.guild.id)
-        if not history:
-            history = []
-
-        guild_history = ""
-        for entry in history:
-            guild_history += f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}\n{bot_name}: {entry['bot_response']}"
-
-        sysprompt = (
-            f"{prompt}\n"
-            f"You are {bot_name}\n"
-            "Respond naturally in the same language as the user\n"
-            "Do not state who said what or repeat the user ID\n"
-            "Respond directly without repeating the user's message\n"
-            "Format code using Discord's markdown\n"
-        )
-        formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
-
-        return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+ 
     
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         try:
@@ -127,7 +134,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             )
             return response.choices[0].message.content
         except openai.OpenAIError as e:
-            log.error(f"OpenAI error: {e}")
             return None
 
     @commands.Cog.listener()

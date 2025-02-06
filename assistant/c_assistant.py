@@ -86,7 +86,7 @@ class AssistantCommands():
     async def chat_command(self, ctx: commands.Context):
         """發送訊息至 OpenAI 並獲得回應。"""
         cog = self.bot.get_cog("OpenAIChat")
-        response = await cog.chat(ctx.message)
+        response = await cog.query_openai(ctx.message)
         if response:
             await ctx.send(response)
         else:
