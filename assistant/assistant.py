@@ -118,9 +118,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
             response = await self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
             if response:
-                return await message.reply(response)
+                return message.reply(response)
         except openai.OpenAIError as e:
-            await message.channel.send(f"OpenAI error: {e}")
+            message.channel.send(f"OpenAI error: {e}")
             log.error(f"OpenAI error: {e}")
             return None
  
