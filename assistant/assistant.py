@@ -116,7 +116,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 "Format code using Discord's markdown\n"
             )
             formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
-            response = await self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+            response = self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
             if response:
                 return message.reply(response)
         except openai.OpenAIError as e:
