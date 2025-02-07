@@ -124,12 +124,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
                 model=model,
-                messages=[{"role": "system", "content": prompt}, {"role": "assistant", "content": "Chat histories:\n" + guild_history}, {"role": "user", "content": user_input}]
+                messages=[{"role": "system", "content": prompt}, {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."}, {"role": "user", "content": user_input}]
             )
             return response.choices[0].message.content
         except openai.OpenAIError as e:
             log.error(f"OpenAI error: {e}")
-            return None
+            return f"⚠️ API 錯誤：{e}"
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -147,11 +147,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return
 
         response = await self.query_openai(message)
-        if response:
-            await self.send_response(message, response)
-            await self.save_chat_history(message.guild.id, message.author.id, message.author.display_name, message.content, response)
-        else:
-            await message.channel.send("An error occurred while processing the request.")
+
+        await message.reply(response if response else "⚠️ 發生錯誤，請稍後再試。")
+
 
 
     async def load_chat_history(self, guild_id: int):
