@@ -137,6 +137,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if message.author.bot or not message.guild:
             return
 
+        if message.stickers:
+            return
+
         config = await self.config.guild(message.guild).all()
         channels = config["channels"]
 
