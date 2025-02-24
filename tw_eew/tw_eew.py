@@ -13,10 +13,10 @@ class tweew(commands.Cog):
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
-        self.config.register_guild(channel_id=None)  # 每個伺服器的預設頻道 ID 為 None
-        self.latest_earthquake_no = None  # 儲存最近一次的地震編號
+        self.config.register_guild(channel_id=None)
         self.global_config = Config.get_conf(None, identifier=1234567890, cog_name="tweew")
-        self.global_config.register_global(api_key=None)
+        self.global_config.register_global(api_key=None, latest_earthquake_no=None)
+        self.latest_earthquake_no = None
         self.init_tasks()
 
     def init_tasks(self):
@@ -48,6 +48,8 @@ class tweew(commands.Cog):
     async def updateeewno(self, ctx, earthquake_no: int):
         """手動更新地震編號"""
         self.latest_earthquake_no = earthquake_no
+        # 同步寫入全域 Config
+        await self.global_config.latest_earthquake_no.set(earthquake_no)
         await ctx.send(f"地震編號已更新為: {earthquake_no}")
 
     @commands.is_owner()
@@ -61,7 +63,7 @@ class tweew(commands.Cog):
     async def check_earthquake_map(self):
         """檢查等震度圖是否有更新並在設定的頻道中發布"""
         try:
-            # 從全局配置中獲取 API 權杖
+            # 從全域配置中獲取 API 權杖
             api_key = await self.global_config.api_key()
             if not api_key:
                 log.error("未設定 API key")
@@ -89,12 +91,11 @@ class tweew(commands.Cog):
 
             # 檢查地震編號是否與上次不同
             if earthquake_no != self.latest_earthquake_no:
-                self.latest_earthquake_no = earthquake_no  # 更新地震編號
+                self.latest_earthquake_no = earthquake_no
+                await self.global_config.latest_earthquake_no.set(earthquake_no)
 
-                # 找到地震報告的圖片 URL
                 report_image_url = earthquake.get('ReportImageURI', '')
 
-                # 構建地震報告內容
                 description = (
                     f"**地震編號**: {earthquake_no}\n"
                     f"**報告內容**: {report_content_cleaned}\n"
@@ -103,25 +104,21 @@ class tweew(commands.Cog):
                     "\n**震度分布**:\n"
                 )
 
-                # 收集每個有回報震度的縣市，避免重複
                 intensity_areas = earthquake.get('Intensity', {}).get('ShakingArea', [])
                 intensity_dict = {}
                 for area in intensity_areas:
-                    counties = area.get('CountyName', '未知').split('、')  # 分割可能的多個縣市
+                    counties = area.get('CountyName', '未知').split('、')
                     area_intensity = area.get('AreaIntensity', '未知')
                     for county in counties:
                         if area_intensity not in intensity_dict:
                             intensity_dict[area_intensity] = set()
                         intensity_dict[area_intensity].add(county)
 
-                # 根據震度從大到小排序
                 sorted_intensities = sorted(intensity_dict.items(), key=lambda x: x[0], reverse=True)
 
-                # 按震度級別生成震度分布內容
                 for intensity, counties in sorted_intensities:
                     description += f"{', '.join(counties)} {intensity}\n"
 
-                # 為所有設定了頻道的伺服器發送更新
                 for guild in self.bot.guilds:
                     channel_id = await self.config.guild(guild).channel_id()
                     if channel_id:
@@ -134,7 +131,7 @@ class tweew(commands.Cog):
                             )
                             if report_image_url:
                                 embed.set_image(url=report_image_url)
-                            embed.set_footer(text=f"資料為中華民國中央氣象署提供")
+                            embed.set_footer(text="資料為中華民國中央氣象署提供")
                             await channel.send(embed=embed)
 
         except aiohttp.ClientError as e:
@@ -147,3 +144,4 @@ class tweew(commands.Cog):
     @check_earthquake_map.before_loop
     async def before_check_earthquake_map(self):
         await self.bot.wait_until_ready()
+        self.latest_earthquake_no = await self.global_config.latest_earthquake_no()
