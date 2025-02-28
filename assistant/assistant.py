@@ -113,11 +113,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
-        response = self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
-
         await asyncio.sleep(default_delay)
 
-        return response
+        return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
 
     
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
