@@ -57,7 +57,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return base64.b64decode(encoded_key.encode()).decode()
 
     async def send_response(self, message: discord.Message, response: str):
-        asyncio.create_task(self._send_in_chunks(message, response))
+        await asyncio.create_task(self._send_in_chunks(message, response))
 
     async def _send_in_chunks(self, message: discord.Message, response: str):
         try:
