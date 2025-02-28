@@ -153,17 +153,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         response = await self.query_openai(message)
 
         if response:
-            await send_response(message, response)
+            await self.send_response(message, response)
         else:
             await message.reply("⚠️ 發生錯誤，請稍後再試。")
-
-        async def send_response(message: discord.Message, response: str):
-            chunk_size = 2000
-            chunks = [response[i : i + chunk_size] for i in range(0, len(response), chunk_size)]
-            
-            for chunk in chunks:
-                await message.channel.send(chunk)
-                await asyncio.sleep(1)
 
     async def load_chat_history(self, guild_id: int):
         file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")
