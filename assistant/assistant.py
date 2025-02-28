@@ -57,7 +57,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return base64.b64decode(encoded_key.encode()).decode()
 
     async def send_response(self, message: discord.Message, response: str):
-        await asyncio.create_task(self._send_in_chunks(message, response))
+        await self._send_in_chunks(message, response)
 
     async def _send_in_chunks(self, message: discord.Message, response: str):
         try:
@@ -113,9 +113,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
+        response = self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+
         await asyncio.sleep(default_delay)
 
-        return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+        return response
+
     
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
         try:
