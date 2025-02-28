@@ -132,6 +132,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def process_queue(self):
         """背景任務：處理排程中的訊息"""
+        delay = self.config.default_delay()
         while True:
             try:
                 message = await self.queue.get()
@@ -142,7 +143,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 if response:
                     await self.process_response(message, response)
                 
-                await asyncio.sleep(4)
+                await asyncio.sleep(delay)
             except Exception as e:
                 log.error(f"處理排程時出錯: {e}")
 
