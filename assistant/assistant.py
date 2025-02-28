@@ -56,12 +56,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     def decode_key(self, encoded_key: str) -> str:
         return base64.b64decode(encoded_key.encode()).decode()
 
-    async def calculate_delay(self, response: Optional[dict], default_delay: float) -> float:
-        if response and "x-ratelimit-limit-requests" in response:
-            rate_limit = int(response["x-ratelimit-limit-requests"])
-            return max(60 / rate_limit, 1)
-        return default_delay
-
     async def send_response(self, message: discord.Message, response: str):
         asyncio.create_task(self._send_in_chunks(message, response))
 
@@ -94,6 +88,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_name = message.author.display_name
         user_id = message.author.id
         bot_name = self.bot.user.display_name
+        default_delay = await self.config.default_delay()
 
         config = await self.config.guild(message.guild).all()
         prompt = config["prompt"]
@@ -117,6 +112,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "Avoid the same responses as history\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
+
+        await asyncio.sleep(default_delay)
 
         return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
     
