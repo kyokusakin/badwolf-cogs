@@ -41,8 +41,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.config.register_guild(**default_guild)
 
         self.queue = asyncio.Queue()
-        self.queue_task = None
-        
+        self.processing = False
+        self.queue_task = asyncio.create_task(self.process_queue())
+
         asyncio.create_task(self.initialize())
 
     async def initialize(self):
@@ -129,6 +130,22 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"OpenAI error: {e}")
             return f"⚠️ API 錯誤：{e}"
 
+    async def process_queue(self):
+        """背景任務：處理排程中的訊息"""
+        while True:
+            try:
+                message = await self.queue.get()
+                if message is None:
+                    break
+
+                response = await self.query_openai(message)
+                if response:
+                    await self.process_response(message, response)
+                
+                await asyncio.sleep(4)
+            except Exception as e:
+                log.error(f"處理排程時出錯: {e}")
+
     async def process_response(self, message: discord.Message, response: str):
         """Handle the response and save chat history."""
         if response:
@@ -160,11 +177,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if str(message.channel.id) not in channels:
             return
 
-        response = await self.query_openai(message)
-        if response:
-            await self.process_response(message, response)
-        
-        await asyncio.sleep(4)
+        await self.queue.put(message)
 
     async def load_chat_history(self, guild_id: int):
         """Load chat history for a guild."""
@@ -194,10 +207,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def cog_unload(self):
         """Clean up resources."""
-        self.should_process = False
+        # 停止排程任務
         if self.queue_task and not self.queue_task.done():
-            self.queue_task.cancel()
-            try:
-                await self.queue_task
-            except asyncio.CancelledError:
-                pass
+            await self.queue.put(None)  # 發送終止信號
+            await self.queue_task
