@@ -132,7 +132,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def process_queue(self):
         """背景任務：處理排程中的訊息"""
-        delay = self.config.default_delay()
+        delay = await self.config.default_delay()
         while True:
             try:
                 message = await self.queue.get()
