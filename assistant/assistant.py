@@ -72,6 +72,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Error sending response: {e}")
 
     async def query_openai(self, message: discord.Message) -> Optional[str]:
+        """Query OpenAI API and return the response."""
         user_input = message.content
         if not user_input:
             return None
@@ -117,8 +118,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
 
-    
     def _blocking_openai_request(self, api_key: str, api_url_base: str, model: str, prompt: str, guild_history: str, user_input: str) -> Optional[str]:
+        """Make a blocking request to OpenAI API."""
         try:
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
@@ -130,8 +131,21 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"OpenAI error: {e}")
             return f"⚠️ API 錯誤：{e}"
 
+    async def process_response(self, message: discord.Message, response: str):
+        """Handle the response and save chat history."""
+        if response:
+            await self.send_response(message, response)
+            await self.save_chat_history(
+                guild_id=message.guild.id,
+                user_id=message.author.id,
+                user_name=message.author.display_name,
+                user_message=message.content,
+                bot_response=response
+            )
+
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        """Handle incoming messages."""
         if message.author.bot or not message.guild:
             return
 
@@ -149,21 +163,18 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return
 
         response = await self.query_openai(message)
-
-        if response:
-            await self.send_response(message, response)
-        else:
-            await message.reply("⚠️ 發生錯誤，請稍後再試。")
+        await self.process_response(message, response)
 
     async def load_chat_history(self, guild_id: int):
+        """Load chat history for a guild."""
         file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as file:
                 return json.load(file)
         return []
 
-
     async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str):
+        """Save chat history for a guild."""
         file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
 
