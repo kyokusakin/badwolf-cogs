@@ -261,6 +261,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         同步呼叫 OpenAI API 評估記憶重要性，
         請求格式要求僅回覆一個數字（0~5）
         """
+        api_key = self.decode_key(api_key)
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
         try:
             prompt = (
                 "請評估以下對話的記憶重要性，"
@@ -270,9 +273,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 "請僅回覆一個數字，不需要其他文字。"
             )
             # 使用 client 呼叫評估 API
-            client = openai.OpenAI(api_key=openai.api_key, base_url=openai.api_base)
+            client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
-                model="gpt-4",
+                model=model,
                 messages = [
                     {"role": "system", "content": "你是一個記憶評估助手，僅回答 0 到 5 的數字"},
                     {"role": "user", "content": f"請評估以下對話的重要性：\n\n用戶: {user_message}\n機器人: {bot_response}"}
