@@ -116,18 +116,19 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self, api_key: str, api_url_base: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """同步呼叫 OpenAI API，改用新版介面"""
+        """同步呼叫 OpenAI API，直接使用新版 API"""
         try:
-            # 設定全域 API 金鑰與基底網址
+            # 設定全域 API 金鑰與 API 基底網址
             openai.api_key = api_key
             openai.api_base = api_url_base
+            messages = [
+                {"role": "system", "content": prompt},
+                {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."},
+                {"role": "user", "content": user_input}
+            ]
             response = openai.ChatCompletion.create(
                 model=model,
-                messages=[
-                    {"role": "system", "content": prompt},
-                    {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."},
-                    {"role": "user", "content": user_input}
-                ]
+                messages=messages
             )
             return response.choices[0].message.content
         except openai.OpenAIError as e:
@@ -226,7 +227,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         短期記憶：最近 short_term_seconds 秒內的記錄
         長期記憶：其餘記錄中依重要性排序，取最高重要性的記錄，且總筆數不超過 max_records
         """
-        # 分離短期記憶與長期記憶
         short_term = [
             record for record in history 
             if current_time - record.get("timestamp", 0) <= short_term_seconds
@@ -236,20 +236,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             if current_time - record.get("timestamp", 0) > short_term_seconds
         ]
 
-        # 對長期記憶依重要性及時間排序（重要性高且較新的優先）
         long_term.sort(key=lambda x: (x.get("importance", 1), x.get("timestamp", 0)), reverse=True)
-
-        # 計算可容納的長期記憶數量
         remaining_slots = max_records - len(short_term)
         selected_long_term = long_term[:remaining_slots] if remaining_slots > 0 else []
-
-        # 合併短期與長期記憶並依時間排序（由舊到新）
         combined = short_term + selected_long_term
         combined.sort(key=lambda x: x.get("timestamp", 0))
 
-        # 建構歷史字串，每筆記錄格式：
-        # {user_name} (ID: {user_id}): {user_message}
-        # {bot_name}: {bot_response}
         history_str = ""
         for entry in combined:
             history_str += (
@@ -263,12 +255,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         讓 AI 評估此次對話的記憶重要性，回傳 0~5 的數值
         0 表示不重要，不儲存；數字越高表示重要性越高
         """
-        # 以 asyncio.to_thread 包裝同步函式
         return await asyncio.to_thread(self._blocking_evaluate_memory, user_message, bot_response)
 
     def _blocking_evaluate_memory(self, user_message: str, bot_response: str) -> int:
         """
-        同步呼叫 OpenAI API 評估記憶重要性
+        同步呼叫 OpenAI API 評估記憶重要性，
         請求格式要求僅回覆一個數字（0~5）
         """
         try:
@@ -285,9 +276,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             )
             result = response.choices[0].message.content.strip()
             importance = int(result)
-            # 限制評分範圍 0~5
-            importance = max(0, min(5, importance))
-            return importance
+            return max(0, min(5, importance))
         except Exception as e:
             log.error(f"記憶評估錯誤: {e}")
             return 1  # 若評估失敗，預設重要性為 1
