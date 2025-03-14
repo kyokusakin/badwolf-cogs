@@ -291,7 +291,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             response = client.chat.completions.create(
                 model=model,
                 messages = [
-                    {"role": "system", "content": "You are a memory evaluation assistant, respond only with a number from 0 to 5"},
+                    {"role": "system", "content": "You are a memory evaluation assistant and only respond with a number from 0 to 5. 5 represents the most important, and 0 represents not important."},
                     {"role": "user", "content": f"Please evaluate the importance of the following conversation:\n\nUser: {user_message}\nBot: {bot_response}"}
                 ]
             )
