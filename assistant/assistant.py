@@ -254,16 +254,37 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         讓 AI 評估此次對話的記憶重要性，回傳 0~5 的數值
         0 表示不重要，不儲存；數字越高表示重要性越高
         """
-        return await asyncio.to_thread(self._blocking_evaluate_memory, user_message, bot_response)
+        # Get API key before passing to the blocking method
+        api_key = await self.config.api_key()
+        if not api_key:
+            return 1  # Default to low importance if API key not set
+        api_key = self.decode_key(api_key)
+        
+        # Get other config values
+        api_url_base = await self.config.api_url_base()
+        model = await self.config.model()
+        
+        return await asyncio.to_thread(
+            self._blocking_evaluate_memory, 
+            user_message, 
+            bot_response, 
+            api_key, 
+            api_url_base, 
+            model
+        )
 
-    def _blocking_evaluate_memory(self, user_message: str, bot_response: str) -> int:
+    def _blocking_evaluate_memory(
+        self, 
+        user_message: str, 
+        bot_response: str, 
+        api_key: str, 
+        api_url_base: str, 
+        model: str
+    ) -> int:
         """
         同步呼叫 OpenAI API 評估記憶重要性，
         請求格式要求僅回覆一個數字（0~5）
         """
-        api_key = self.decode_key(api_key)
-        api_url_base = self.config.api_url_base()
-        model = self.config.model()
         try:
             prompt = (
                 "請評估以下對話的記憶重要性，"
