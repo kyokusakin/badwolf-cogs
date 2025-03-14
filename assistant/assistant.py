@@ -291,8 +291,23 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             response = client.chat.completions.create(
                 model=model,
                 messages = [
-                    {"role": "system", "content": "You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.\nIMPORTANCE SCALE:\n0 = Not important at all (everyday greetings, small talk)\n1 = Slightly important (basic information, simple questions)\n2 = Moderately important (specific information that might be referenced later)\n3 = Important (personal details, preferences, significant information)\n4 = Very important (critical information, complex questions, emotional content)\n5 = Extremely important (essential information that must be remembered)\n\nMost casual conversations should be rated 0-2.\nReserve ratings of 3-5 for truly significant interactions.\nBe strict and realistic in your evaluation.\nRespond ONLY with a single digit from 0-5."},
-                    {"role": "user", "content": f"Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
+                    {"role": "system", "content": """You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.
+                    IMPORTANCE SCALE:
+                    0 = Not important at all (e.g., everyday greetings, casual small talk)
+                    1 = Slightly important (e.g., basic information, simple questions)
+                    2 = Moderately important (e.g., specific details that may be referenced later)
+                    3 = Important (e.g., personal preferences, significant details)
+                    4 = Very important (e.g., critical information, complex emotional topics)
+                    5 = Extremely important (e.g., essential information that must be remembered for future interactions)
+    
+                    Examples:
+                    - "Hi, how are you?" → Rating: 0
+                    - "What's your favorite color?" → Rating: 1
+                    - "I like pizza, and I’m allergic to nuts." → Rating: 3
+                    - "I'm going through a tough time and need someone to talk to." → Rating: 4
+    
+                    Please evaluate the following conversation carefully. Most casual conversations will rate between 0-2, while more significant interactions should be rated 3-5."""},
+                    {"role": "user", "content": "Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
                 ],
                 temperature=0.3  # Lower temperature for more consistent ratings
             )
