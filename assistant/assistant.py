@@ -262,8 +262,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         請求格式要求僅回覆一個數字（0~5）
         """
         api_key = self.decode_key(api_key)
-        api_url_base = await self.config.api_url_base()
-        model = await self.config.model()
+        api_url_base = self.config.api_url_base()
+        model = self.config.model()
         try:
             prompt = (
                 "請評估以下對話的記憶重要性，"
