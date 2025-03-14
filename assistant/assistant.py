@@ -116,10 +116,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self, api_key: str, api_url_base: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """同步呼叫 OpenAI API"""
+        """同步呼叫 OpenAI API，改用新版介面"""
         try:
-            client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
-            response = client.chat.completions.create(
+            # 設定全域 API 金鑰與基底網址
+            openai.api_key = api_key
+            openai.api_base = api_url_base
+            response = openai.ChatCompletion.create(
                 model=model,
                 messages=[
                     {"role": "system", "content": prompt},
