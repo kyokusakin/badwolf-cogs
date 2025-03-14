@@ -286,18 +286,26 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         Request format requires only a number (0-5) response
         """
         try:
-            # Create client and call evaluation API
+            # Create client and call evaluation API with improved prompt
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
                 model=model,
                 messages = [
-                    {"role": "system", "content": "You are a memory evaluation assistant and only respond with a number from 0 to 5. 5 represents the most important, and 0 represents not important."},
-                    {"role": "user", "content": f"Please evaluate the importance of the following conversation:\n\nUser: {user_message}\nBot: {bot_response}"}
-                ]
+                    {"role": "system", "content": "You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.\nIMPORTANCE SCALE:\n0 = Not important at all (everyday greetings, small talk)\n1 = Slightly important (basic information, simple questions)\n2 = Moderately important (specific information that might be referenced later)\n3 = Important (personal details, preferences, significant information)\n4 = Very important (critical information, complex questions, emotional content)\n5 = Extremely important (essential information that must be remembered)\n\nMost casual conversations should be rated 0-2.\nReserve ratings of 3-5 for truly significant interactions.\nBe strict and realistic in your evaluation.\nRespond ONLY with a single digit from 0-5."},
+                    {"role": "user", "content": f"Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
+                ],
+                temperature=0.3  # Lower temperature for more consistent ratings
             )
             result = response.choices[0].message.content.strip()
-            importance = int(result)
-            return max(0, min(5, importance))
+            
+            # Extract just the first digit if there's other text
+            for char in result:
+                if char.isdigit() and int(char) >= 0 and int(char) <= 5:
+                    return int(char)
+            
+            # If no valid digit is found, default to 1
+            return 1
+            
         except Exception as e:
             log.error(f"Memory evaluation error: {e}")
             return 1  # Default importance if evaluation fails
