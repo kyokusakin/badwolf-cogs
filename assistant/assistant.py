@@ -116,17 +116,16 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self, api_key: str, api_url_base: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """同步呼叫 OpenAI API，直接使用新版 API"""
+        """同步呼叫 OpenAI API，使用 client.chat.completions.create"""
         try:
-            # 設定全域 API 金鑰與 API 基底網址
-            openai.api_key = api_key
-            openai.api_base = api_url_base
+            # 建立 client 並設定 API 金鑰與 base URL
+            client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             messages = [
                 {"role": "system", "content": prompt},
                 {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."},
                 {"role": "user", "content": user_input}
             ]
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model=model,
                 messages=messages
             )
@@ -270,7 +269,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 f"機器人回應: {bot_response}\n\n"
                 "請僅回覆一個數字，不需要其他文字。"
             )
-            response = openai.ChatCompletion.create(
+            # 使用 client 呼叫評估 API
+            client = openai.OpenAI(api_key=openai.api_key, base_url=openai.api_base)
+            response = client.chat.completions.create(
                 model="gpt-4",
                 messages=[{"role": "system", "content": prompt}]
             )
