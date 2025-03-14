@@ -11,6 +11,7 @@ from redbot.core import Config, commands
 from redbot.core.bot import Red
 from .c_assistant import AssistantCommands
 from typing import Optional, List, Dict
+from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -39,10 +40,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         self.queue = asyncio.Queue()
         self.queue_task = asyncio.create_task(self.process_queue())
+        self.executor = ThreadPoolExecutor(max_workers=4)
         asyncio.create_task(self.initialize())
     
     async def initialize(self):
-        """初始化組件並建立聊天歷史資料夾"""
+        """Initialize component and create chat history folder"""
         chat_histories_path = os.path.join(os.path.dirname(__file__), "chat_histories")
         os.makedirs(chat_histories_path, exist_ok=True)
         self.chat_histories_path = chat_histories_path
@@ -67,7 +69,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Error sending response: {e}")
 
     async def query_openai(self, message: discord.Message) -> Optional[str]:
-        """向 OpenAI API 查詢並回傳回應內容"""
+        """Query OpenAI API and return response content"""
         user_input = message.content
         if not user_input:
             return None
@@ -87,12 +89,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         config = await self.config.guild(message.guild).all()
         prompt = config["prompt"]
 
-        # 載入聊天歷史
+        # Load chat history
         history = await self.load_chat_history(message.guild.id)
         if not history:
             history = []
 
-        # 建構分層記憶內容，使用短期與長期記憶動態裁剪
+        # Build layered memory content with dynamic trimming
         current_time = time.time()
         guild_history = await self.build_guild_history(
             history, current_time, short_term_seconds=600, max_records=20, bot_name=bot_name
@@ -110,15 +112,21 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
-        return self._blocking_openai_request(api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input)
+        # Use thread executor for blocking API call
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self.executor,
+            self._blocking_openai_request,
+            api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input
+        )
 
     def _blocking_openai_request(
         self, api_key: str, api_url_base: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """同步呼叫 OpenAI API，使用 client.chat.completions.create"""
+        """Synchronous call to OpenAI API using client.chat.completions.create"""
         try:
-            # 建立 client 並設定 API 金鑰與 base URL
+            # Create client and set API key and base URL
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             messages = [
                 {"role": "system", "content": prompt},
@@ -132,10 +140,10 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return response.choices[0].message.content
         except openai.OpenAIError as e:
             log.error(f"OpenAI error: {e}")
-            return f"⚠️ API 錯誤：{e}"
+            return f"⚠️ API Error: {e}"
 
     async def process_queue(self):
-        """背景任務：處理排程中的訊息"""
+        """Background task: process messages in queue"""
         delay = await self.config.default_delay()
         while True:
             try:
@@ -147,13 +155,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     await self.process_response(message, response)
                 await asyncio.sleep(delay)
             except Exception as e:
-                log.error(f"處理排程時出錯: {e}")
+                log.error(f"Error processing queue: {e}")
 
     async def process_response(self, message: discord.Message, response: str):
-        """處理回應並依據 AI 評估結果決定是否儲存記憶"""
+        """Process response and decide whether to store memory based on AI evaluation"""
         if response:
             await self.send_response(message, response)
-            # 讓 AI 評估此次對話的重要性
+            # Let AI evaluate the importance of this conversation
             importance = await self.evaluate_memory(message.content, response)
             if importance > 0:
                 await self.save_chat_history(
@@ -165,11 +173,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     importance=importance
                 )
             else:
-                log.info("AI 評估此對話不需要儲存記憶")
+                log.info("AI evaluated this conversation as not needing to be stored in memory")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        """監聽訊息事件"""
+        """Listen for message events"""
         if message.author.bot or not message.guild:
             return
         if message.stickers:
@@ -187,7 +195,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         await self.queue.put(message)
 
     async def load_chat_history(self, guild_id: int) -> List[Dict]:
-        """非同步載入指定公會的聊天歷史"""
+        """Asynchronously load chat history for specified guild"""
         file_path = os.path.join(self.chat_histories_path, f"{guild_id}.json")
         if os.path.exists(file_path):
             try:
@@ -195,13 +203,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     content = await file.read()
                     return json.loads(content)
             except Exception as e:
-                log.error(f"載入聊天歷史錯誤: {e}")
+                log.error(f"Error loading chat history: {e}")
                 return []
         return []
 
     async def save_chat_history(self, guild_id: int, user_id: int, user_name: str,
                                 user_message: str, bot_response: str, importance: int = 1):
-        """非同步儲存聊天歷史，加入時間戳記與重要性評分"""
+        """Asynchronously save chat history with timestamp and importance rating"""
         file_path = os.path.join(self.chat_histories_path, f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
         record = {
@@ -217,14 +225,15 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             async with aiofiles.open(file_path, 'w', encoding='utf-8') as file:
                 await file.write(json.dumps(history, indent=4, ensure_ascii=False))
         except Exception as e:
-            log.error(f"儲存聊天歷史錯誤: {e}")
+            log.error(f"Error saving chat history: {e}")
 
     async def build_guild_history(self, history: List[Dict], current_time: float,
                                   short_term_seconds: int, max_records: int, bot_name: str) -> str:
         """
-        根據短期與長期記憶動態裁剪聊天歷史，返回用於上下文的字串。
-        短期記憶：最近 short_term_seconds 秒內的記錄
-        長期記憶：其餘記錄中依重要性排序，取最高重要性的記錄，且總筆數不超過 max_records
+        Dynamically trim chat history based on short-term and long-term memory, return string for context.
+        Short-term memory: Records within short_term_seconds
+        Long-term memory: Remaining records sorted by importance, taking highest importance records
+        up to max_records total
         """
         short_term = [
             record for record in history 
@@ -251,66 +260,51 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
         """
-        讓 AI 評估此次對話的記憶重要性，回傳 0~5 的數值
-        0 表示不重要，不儲存；數字越高表示重要性越高
+        Let AI evaluate the memory importance of this conversation, return value 0-5
+        0 means not important, don't store; higher number means more important
         """
-        # Get API key before passing to the blocking method
         api_key = await self.config.api_key()
         if not api_key:
-            return 1  # Default to low importance if API key not set
-        api_key = self.decode_key(api_key)
+            return 1  # Default importance if API key not set
         
-        # Get other config values
+        api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
         
-        return await asyncio.to_thread(
-            self._blocking_evaluate_memory, 
-            user_message, 
-            bot_response, 
-            api_key, 
-            api_url_base, 
-            model
+        # Use thread executor for blocking API call
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(
+            self.executor,
+            self._blocking_evaluate_memory,
+            api_key, api_url_base, model, user_message, bot_response
         )
 
-    def _blocking_evaluate_memory(
-        self, 
-        user_message: str, 
-        bot_response: str, 
-        api_key: str, 
-        api_url_base: str, 
-        model: str
-    ) -> int:
+    def _blocking_evaluate_memory(self, api_key: str, api_url_base: str, model: str,
+                                 user_message: str, bot_response: str) -> int:
         """
-        同步呼叫 OpenAI API 評估記憶重要性，
-        請求格式要求僅回覆一個數字（0~5）
+        Synchronous OpenAI API call to evaluate memory importance,
+        Request format requires only a number (0-5) response
         """
         try:
-            prompt = (
-                "請評估以下對話的記憶重要性，"
-                "並以數字表示（0 表示不重要，不儲存；1 至 5 表示重要性程度，數字越高表示越重要）。\n\n"
-                f"用戶訊息: {user_message}\n"
-                f"機器人回應: {bot_response}\n\n"
-                "請僅回覆一個數字，不需要其他文字。"
-            )
-            # 使用 client 呼叫評估 API
+            # Create client and call evaluation API
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
                 model=model,
                 messages = [
-                    {"role": "system", "content": "你是一個記憶評估助手，僅回答 0 到 5 的數字"},
-                    {"role": "user", "content": f"請評估以下對話的重要性：\n\n用戶: {user_message}\n機器人: {bot_response}"}
+                    {"role": "system", "content": "You are a memory evaluation assistant, respond only with a number from 0 to 5"},
+                    {"role": "user", "content": f"Please evaluate the importance of the following conversation:\n\nUser: {user_message}\nBot: {bot_response}"}
                 ]
             )
             result = response.choices[0].message.content.strip()
             importance = int(result)
             return max(0, min(5, importance))
         except Exception as e:
-            log.error(f"記憶評估錯誤: {e}")
-            return 1  # 若評估失敗，預設重要性為 1
+            log.error(f"Memory evaluation error: {e}")
+            return 1  # Default importance if evaluation fails
 
     async def cog_unload(self):
-        """Cog 卸載時停止背景任務"""
+        """Stop background tasks when Cog is unloaded"""
         if self.queue_task and not self.queue_task.done():
             await self.queue.put(None)
             await self.queue_task
+        self.executor.shutdown(wait=False)
