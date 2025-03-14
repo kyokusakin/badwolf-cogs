@@ -273,7 +273,10 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             client = openai.OpenAI(api_key=openai.api_key, base_url=openai.api_base)
             response = client.chat.completions.create(
                 model="gpt-4",
-                messages=[{"role": "system", "content": prompt}]
+                messages = [
+                    {"role": "system", "content": "你是一個記憶評估助手，僅回答 0 到 5 的數字"},
+                    {"role": "user", "content": f"請評估以下對話的重要性：\n\n用戶: {user_message}\n機器人: {bot_response}"}
+                ]
             )
             result = response.choices[0].message.content.strip()
             importance = int(result)
