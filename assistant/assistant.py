@@ -172,7 +172,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     bot_response=response,
                     importance=importance
                 )
-            log.info(f"\nGuild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message: {message.content}\nBot response: {response}\nImportance: {importance}")
+            #log.info(f"\nGuild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message: {message.content}\nBot response: {response}\nImportance: {importance}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
