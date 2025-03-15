@@ -172,8 +172,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     bot_response=response,
                     importance=importance
                 )
-            else:
-                log.info(f"Guild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message:{message.content}\nAI evaluated this conversation as not needing to be stored in memory")
+            log.info(f"\nGuild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message: {message.content}\nBot response: {response}\n Importance: {importance}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
