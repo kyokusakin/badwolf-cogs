@@ -227,8 +227,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except Exception as e:
             log.error(f"Error saving chat history: {e}")
 
-    async def build_guild_history(self, history: List[Dict], current_time: float,
-                                  short_term_seconds: int, max_records: int, bot_name: str) -> str:
+    async def build_guild_history(self, history: List[Dict], current_time: float, short_term_seconds: int, max_records: int, bot_name: str) -> str:
         """
         Dynamically trim chat history based on short-term and long-term memory, return string for context.
         Short-term memory: Records within short_term_seconds
@@ -271,7 +270,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
         
-        # Use thread executor for blocking API call
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             self.executor,
@@ -279,8 +277,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             api_key, api_url_base, model, user_message, bot_response
         )
 
-    def _blocking_evaluate_memory(self, api_key: str, api_url_base: str, model: str,
-                                 user_message: str, bot_response: str) -> int:
+    def _blocking_evaluate_memory(self, api_key: str, api_url_base: str, model: str, user_message: str, bot_response: str) -> int:
         """
         Synchronous OpenAI API call to evaluate memory importance,
         Request format requires only a number (0-5) response
@@ -307,23 +304,20 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     - "I'm going through a tough time and need someone to talk to." → Rating: 4
     
                     Please evaluate the following conversation carefully. Most casual conversations will rate between 0-2, while more significant interactions should be rated 3-5."""},
-                    {"role": "user", "content": "Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
+                    {"role": "user", "content": f"Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
                 ],
-                temperature=0.3  # Lower temperature for more consistent ratings
+                temperature=0.3
             )
             result = response.choices[0].message.content.strip()
             
-            # Extract just the first digit if there's other text
             for char in result:
                 if char.isdigit() and int(char) >= 0 and int(char) <= 5:
                     return int(char)
-            
-            # If no valid digit is found, default to 1
             return 1
             
         except Exception as e:
             log.error(f"Memory evaluation error: {e}")
-            return 1  # Default importance if evaluation fails
+            return 1
 
     async def cog_unload(self):
         """Stop background tasks when Cog is unloaded"""
