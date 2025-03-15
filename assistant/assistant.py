@@ -173,7 +173,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     importance=importance
                 )
             else:
-                log.info("AI evaluated this conversation as not needing to be stored in memory")
+                log.info(f"Guild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message:{message.content}\nAI evaluated this conversation as not needing to be stored in memory")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
