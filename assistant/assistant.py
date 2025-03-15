@@ -288,7 +288,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             response = client.chat.completions.create(
                 model=model,
                 messages = [
-                    {"role": "system", "content": """You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.
+                    {"role": "system", "content": """
+                    You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.
                     IMPORTANCE SCALE:
                     0 = Not important at all (e.g., everyday greetings, casual small talk)
                     1 = Slightly important (e.g., basic information, simple questions)
@@ -303,7 +304,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     - "I like pizza, and I’m allergic to nuts." → Rating: 3
                     - "I'm going through a tough time and need someone to talk to." → Rating: 4
     
-                    Please evaluate the following conversation carefully. Most casual conversations will rate between 0-2, while more significant interactions should be rated 3-5."""},
+                    Please evaluate the following conversation carefully. Most casual conversations will rate between 0-2, while more significant interactions should be rated 3-5.
+                    """},
                     {"role": "user", "content": f"Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
                 ],
                 temperature=0.3
