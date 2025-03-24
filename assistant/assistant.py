@@ -7,7 +7,8 @@ import aiofiles
 import time
 import discord
 import openai
-from redbot.core import Config, commands
+import pathlib
+from redbot.core import Config, commands, data_manager
 from redbot.core.bot import Red
 from .c_assistant import AssistantCommands
 from typing import Optional, List, Dict
@@ -43,17 +44,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.executor = ThreadPoolExecutor(max_workers=4)
         asyncio.create_task(self.initialize())
     
-    async def initialize(self):
-        """Initialize component and create chat history folder"""
-        chat_histories_path = os.path.join(os.path.dirname(__file__), "chat_histories")
-        os.makedirs(chat_histories_path, exist_ok=True)
-        self.chat_histories_path = chat_histories_path
-
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
 
     def decode_key(self, encoded_key: str) -> str:
         return base64.b64decode(encoded_key.encode()).decode()
+
+    def chat_histories_path(self) -> pathlib.Path:
+        base_path = data_manager.cog_data_path(raw_name="OpenAIChat")
+        chat_histories_folder = base_path / "chat_histories"
+        os.makedirs(chat_histories_folder, exist_ok=True)
+        return chat_histories_folder
 
     async def send_response(self, message: discord.Message, response: str):
         await self._send_in_chunks(message, response)
@@ -206,8 +207,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 return []
         return []
 
-    async def save_chat_history(self, guild_id: int, user_id: int, user_name: str,
-                                user_message: str, bot_response: str, importance: int = 1):
+    async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str, importance: int = 1):
         """Asynchronously save chat history with timestamp and importance rating"""
         file_path = os.path.join(self.chat_histories_path, f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
