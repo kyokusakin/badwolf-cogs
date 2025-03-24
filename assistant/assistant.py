@@ -42,7 +42,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.queue = asyncio.Queue()
         self.queue_task = asyncio.create_task(self.process_queue())
         self.executor = ThreadPoolExecutor(max_workers=4)
-        asyncio.create_task(self.initialize())
     
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
