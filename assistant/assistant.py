@@ -195,7 +195,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def load_chat_history(self, guild_id: int) -> List[Dict]:
         """Asynchronously load chat history for specified guild"""
-        file_path = os.path.join(self.chat_histories_path(), f"{guild_id}.json")
+        file_path = os.path.join(str(self.chat_histories_path()), f"{guild_id}.json")
         if os.path.exists(file_path):
             try:
                 async with aiofiles.open(file_path, 'r', encoding='utf-8') as file:
@@ -208,7 +208,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str, importance: int = 1):
         """Asynchronously save chat history with timestamp and importance rating"""
-        file_path = os.path.join(self.chat_histories_path(), f"{guild_id}.json")
+        file_path = os.path.join(str(self.chat_histories_path()), f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
         record = {
             "user_id": user_id,
