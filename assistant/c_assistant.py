@@ -2,16 +2,21 @@ import discord
 import logging
 import os
 from redbot.core import commands
-import assistant
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
-class AssistantCommands(assistant.OpenAIChat):
+class AssistantCommands():
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
         self.bot = bot
         super().__init__()
+
+    def chat_histories_path(self) -> pathlib.Path:
+        base_path = data_manager.cog_data_path(raw_name="OpenAIChat")
+        chat_histories_folder = base_path / "chat_histories"
+        os.makedirs(chat_histories_folder, exist_ok=True)
+        return chat_histories_folder
 
     @commands.group()
     @commands.guild_only()
