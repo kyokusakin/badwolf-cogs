@@ -2,11 +2,11 @@ import discord
 import logging
 import os
 from redbot.core import commands
-from assistant import OpenAIChat
+import assistant
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
-class AssistantCommands(OpenAIChat):
+class AssistantCommands(assistant.OpenAIChat):
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
