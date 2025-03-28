@@ -1,7 +1,8 @@
 import discord
 import logging
 import os
-from redbot.core import commands
+from redbot.core import commands, data_manager
+import pathlib
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
