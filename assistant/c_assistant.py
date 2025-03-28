@@ -2,10 +2,11 @@ import discord
 import logging
 import os
 from redbot.core import commands
+from assistant import OpenAIChat
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
-class AssistantCommands():
+class AssistantCommands(OpenAIChat):
     """提供 OpenAI 聊天相關的指令。"""
 
     def __init__(self, bot):
@@ -97,7 +98,8 @@ class AssistantCommands():
     @commands.has_permissions(administrator=True)
     async def clearhistory(self, ctx: commands.Context):
         """清除伺服器的聊天歷史記錄。"""
-        file_path = os.path.join(os.path.dirname(__file__), "chat_histories", f"{ctx.guild.id}.json")
+        guild_id = ctx.guild.id
+        file_path = os.path.join(str(self.chat_histories_path()), f"{guild_id}.json")
         if os.path.exists(file_path):
             os.remove(file_path)
             await ctx.send("聊天歷史記錄已清除。")
