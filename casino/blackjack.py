@@ -60,7 +60,7 @@ class BlackjackGame:
             color=discord.Color.blue()
         )
         await self.message.edit(embed=embed, view=view)
-
+ 
 class BlackjackView(discord.ui.View):
     def __init__(self, game: BlackjackGame):
         super().__init__(timeout=60)
