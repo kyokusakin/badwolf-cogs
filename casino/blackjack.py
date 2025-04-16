@@ -10,56 +10,60 @@ class BlackjackGame:
         self.player_hand = []
         self.dealer_hand = []
         self.message = None
-        
-        # 建立標準 52 張牌的牌組，每張牌都包含數值與花色
+
+        # 預設建立牌組（也可在 start() 中重新建立）
+        self.deck = []  # 這裡先不建構 deck
+
+    def new_deck(self):
+        """建立並洗牌一副新的52張撲克牌 (最後一個字元是 rank)"""
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         suits = ['♠', '♥', '♦', '♣']
-        self.deck = [f"{suit}{rank}" for rank in ranks for suit in suits]
+        self.deck = [f"{suit}{rank}" for suit in suits for rank in ranks]
         random.shuffle(self.deck)
 
     def draw_card(self):
-        """從牌組中抽一張牌，如果牌組用完可以選擇重建或回傳 None"""
-        if len(self.deck) == 0:
-            # 此處可以根據需求選擇重建牌組或直接回傳 None
-            # 例如重新洗牌所有牌（不過通常在 21 點中不會用完牌組）
-            # 這裡採用重新建立牌組的方式
-            ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-            suits = ['♠', '♥', '♦', '♣']
-            self.deck = [f"{suit}{rank}" for rank in ranks for suit in suits]
-            random.shuffle(self.deck)
+        """從牌組中抽一張牌，如果牌組用完則重新建立牌組"""
+        if not self.deck:
+            self.new_deck()
         return self.deck.pop()
 
     def card_value(self, card):
         """
-        取得卡牌數值：
-        - 檢查是否以 "10" 開頭（因為 10 為兩位數），否則取第一個字元。
-        - J, Q, K 的點數皆為 10；A 預設為 11（略過軟 A 處理）。
+        取得卡牌數值：只看最後一個字元 (rank)。
+        - J, Q, K 的點數皆為 10；A 預設為 11（略過軟/硬 A 處理）。
         """
-        rank = "10" if card.startswith("10") else card[0]
+        rank = card[-1]
         if rank in ['J', 'Q', 'K']:
             return 10
         elif rank == 'A':
-            return 11  # 簡化處理，不區分軟/硬 A
+            return 11
         else:
-            return int(rank)
+            try:
+                return int(rank)
+            except ValueError:
+                # 這不應該發生，但為了安全起見，打印錯誤並返回 0
+                print(f"ValueError: 嘗試轉換無效的牌面值: '{rank}' (完整卡牌: '{card}')")
+                return 0
 
     def hand_value(self, hand):
         total = sum(self.card_value(c) for c in hand)
         # 當總點數超過 21 時，將 A 的值從 11 調整為 1
-        aces = sum(1 for c in hand if ("10" if c.startswith("10") else c[0]) == 'A')
+        aces = sum(1 for c in hand if c[-1] == 'A')
         while total > 21 and aces:
             total -= 10
             aces -= 1
         return total
 
     async def start(self):
+        # 每輪遊戲都建立一副新的牌組
+        self.new_deck()
         # 先扣除下注金額
         await self.cog.update_balance(self.ctx.author, -self.bet)
         # 初始發牌：玩家發 2 張，莊家發 2 張（其中一張隱藏）
         self.player_hand = [self.draw_card(), self.draw_card()]
         self.dealer_hand = [self.draw_card(), self.draw_card()]
         embed = discord.Embed(
-            title="21點遊戲",
+            title="21點遊戲 (最後字元為 Rank)",
             description=(
                 f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
                 f"莊家的牌: {self.dealer_hand[0]}，未知牌。"
@@ -79,7 +83,7 @@ class BlackjackGame:
             color=discord.Color.blue()
         )
         await self.message.edit(embed=embed, view=view)
- 
+
 class BlackjackView(discord.ui.View):
     def __init__(self, game: BlackjackGame):
         super().__init__(timeout=60)
@@ -92,7 +96,7 @@ class BlackjackView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="叫牌", style=discord.ButtonStyle.green)
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.game.player_hand.append(self.game.draw_card())
         total = self.game.hand_value(self.game.player_hand)
@@ -105,7 +109,7 @@ class BlackjackView(discord.ui.View):
             await self.game.update_message(self)
             await interaction.response.defer()
 
-    @discord.ui.button(label="Stand", style=discord.ButtonStyle.grey)
+    @discord.ui.button(label="停牌", style=discord.ButtonStyle.grey)
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.disable_all_items()
         await interaction.response.edit_message(view=self)
