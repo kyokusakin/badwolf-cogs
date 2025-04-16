@@ -54,6 +54,39 @@ class BlackjackGame:
             aces -= 1
         return total
 
+    async def determine_initial_blackjack(self):
+        player_total = self.hand_value(self.player_hand)
+        dealer_total = self.hand_value(self.dealer_hand)
+
+        if player_total == 21 and dealer_total == 21:
+            await self.show_final_hands("雙方都是 21 點！平手，退回下注。")
+            await self.cog.update_balance(self.ctx.author, self.bet)
+            return True
+        elif player_total == 21:
+            await self.show_final_hands("玩家 21 點！你贏了！")
+            winnings = self.bet * 1.5  # Blackjack 通常有 1.5 倍的賠率
+            await self.cog.update_balance(self.ctx.author, self.bet + int(winnings))
+            return True
+        elif dealer_total == 21:
+            await self.show_final_hands("莊家 21 點！你輸了。")
+            return True
+        return False
+
+    async def show_final_hands(self, result_message):
+        embed = discord.Embed(
+            title="21點遊戲 - 結果",
+            description=(
+                f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
+                f"莊家的牌: {', '.join(self.dealer_hand)} (總點數：{self.hand_value(self.dealer_hand)})\n"
+                f"{result_message}"
+            ),
+            color=discord.Color.green() if "贏" in result_message else (discord.Color.red() if "輸" in result_message else discord.Color.grey())
+        )
+        if self.message:
+            await self.message.edit(embed=embed, view=None)
+        else:
+            await self.ctx.send(embed=embed)
+
     async def start(self):
         # 每輪遊戲都建立一副新的牌組
         self.new_deck()
@@ -62,8 +95,13 @@ class BlackjackGame:
         # 初始發牌：玩家發 2 張，莊家發 2 張（其中一張隱藏）
         self.player_hand = [self.draw_card(), self.draw_card()]
         self.dealer_hand = [self.draw_card(), self.draw_card()]
+
+        # 檢查開局是否有人達到 21 點
+        if await self.determine_initial_blackjack():
+            return
+
         embed = discord.Embed(
-            title="21點遊戲 (最後字元為 Rank)",
+            title="21點遊戲",
             description=(
                 f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
                 f"莊家的牌: {self.dealer_hand[0]}，未知牌。"
@@ -113,33 +151,37 @@ class BlackjackView(discord.ui.View):
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.disable_all_items()
         await interaction.response.edit_message(view=self)
-        # 莊家抽牌直到總點數達 17
+        await self.dealer_turn()
+        self.stop()
+
+    async def dealer_turn(self):
         dealer_total = self.game.hand_value(self.game.dealer_hand)
+        player_total = self.game.hand_value(self.game.player_hand)
+
         while dealer_total < 17:
             self.game.dealer_hand.append(self.game.draw_card())
             dealer_total = self.game.hand_value(self.game.dealer_hand)
-        player_total = self.game.hand_value(self.game.player_hand)
-        result_desc = (
-            f"莊家的牌: {', '.join(self.game.dealer_hand)} (總點數：{dealer_total})\n"
-            f"你的點數：{player_total}\n"
-        )
-        if dealer_total > 21 or player_total > dealer_total:
-            result_desc += "你贏了！"
-            winnings = self.game.bet * 2
-            await self.game.cog.update_balance(self.game.ctx.author, winnings)
+
+        await self.show_final_hands(self.determine_winner(player_total, dealer_total))
+
+    def determine_winner(self, player_total, dealer_total):
+        if dealer_total > 21:
+            return "莊家爆牌！你贏了！"
+        elif player_total > dealer_total or dealer_total == 21 and player_total != 21: # 莊家 21 點優先
+            return "你贏了！"
         elif player_total == dealer_total:
-            result_desc += "平手！退回下注。"
-            await self.game.cog.update_balance(self.game.ctx.author, self.game.bet)
+            return "平手！退回下注。"
         else:
-            result_desc += "你輸了。"
-        await self.game.update_message(self, extra_desc=result_desc)
-        self.stop()
+            return "你輸了。"
 
     async def on_timeout(self) -> None:
         if self.message:
             for item in self.children:
                 item.disabled = True
             await self.message.edit(view=self)
+            if self.game.bet > 0:
+                await self.game.cog.update_balance(self.game.ctx.author, self.game.bet)
+                await self.game.ctx.send(f"{self.game.ctx.author.mention} 由於超時，21點遊戲已結束，並退回你的下注 {self.game.bet}。")
 
     def disable_all_items(self):
         for item in self.children:
