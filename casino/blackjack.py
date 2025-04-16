@@ -10,24 +10,43 @@ class BlackjackGame:
         self.player_hand = []
         self.dealer_hand = []
         self.message = None
+        
+        # 建立標準 52 張牌的牌組，每張牌都包含數值與花色
+        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+        suits = ['♠', '♥', '♦', '♣']
+        self.deck = [f"{rank}{suit}" for rank in ranks for suit in suits]
+        random.shuffle(self.deck)
 
     def draw_card(self):
-        """隨機抽取一張牌，包含數字和 J, Q, K, A"""
-        cards = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-        return random.choice(cards)
+        """從牌組中抽一張牌，如果牌組用完可以選擇重建或回傳 None"""
+        if len(self.deck) == 0:
+            # 此處可以根據需求選擇重建牌組或直接回傳 None
+            # 例如重新洗牌所有牌（不過通常在 21 點中不會用完牌組）
+            # 這裡採用重新建立牌組的方式
+            ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
+            suits = ['♠', '♥', '♦', '♣']
+            self.deck = [f"{rank}{suit}" for rank in ranks for suit in suits]
+            random.shuffle(self.deck)
+        return self.deck.pop()
 
     def card_value(self, card):
-        if card in ['J', 'Q', 'K']:
+        """
+        取得卡牌數值：
+        - 檢查是否以 "10" 開頭（因為 10 為兩位數），否則取第一個字元。
+        - J, Q, K 的點數皆為 10；A 預設為 11（略過軟 A 處理）。
+        """
+        rank = "10" if card.startswith("10") else card[0]
+        if rank in ['J', 'Q', 'K']:
             return 10
-        elif card == 'A':
+        elif rank == 'A':
             return 11  # 簡化處理，不區分軟/硬 A
         else:
-            return int(card)
+            return int(rank)
 
     def hand_value(self, hand):
         total = sum(self.card_value(c) for c in hand)
         # 當總點數超過 21 時，將 A 的值從 11 調整為 1
-        aces = hand.count('A')
+        aces = sum(1 for c in hand if ("10" if c.startswith("10") else c[0]) == 'A')
         while total > 21 and aces:
             total -= 10
             aces -= 1
