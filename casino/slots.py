@@ -4,7 +4,7 @@ import random
 
 class SlotGame:
     EMOJIS = [":cherries:", ":lemon:", ":grapes:", ":watermelon:", ":seven:"]
-    
+
     def __init__(self, ctx: commands.Context, cog, bet: int):
         self.ctx = ctx
         self.cog = cog  # 主模組，提供更新餘額等方法
@@ -34,23 +34,39 @@ class SlotView(discord.ui.View):
     def __init__(self, game: SlotGame):
         super().__init__(timeout=30)
         self.game = game
+        self.spin_button = discord.ui.Button(label="Spin", style=discord.ButtonStyle.blurple)
+        self.spin_button.callback = self.spin
+        self.add_item(self.spin_button)
 
-    @discord.ui.button(label="Spin", style=discord.ButtonStyle.blurple)
-    async def spin(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def spin(self, interaction: discord.Interaction):
         if interaction.user != self.game.ctx.author:
             await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
             return
+
+        # 禁用按鈕防止重複點擊
+        self.spin_button.disabled = True
+        await interaction.response.edit_message(view=self)
+
         # 隨機選出三個符號
         result = [random.choice(self.game.EMOJIS) for _ in range(3)]
         result_str = " ".join(result)
+        winnings = 0
+
         if result.count(result[0]) == 3:
             result_desc = f"{result_str}\n恭喜中大獎！你獲得 {self.game.bet * 3} 的獎金。"
-            await self.game.cog.update_balance(self.game.ctx.author, self.game.bet * 3)
-        elif any(result.count(emoji) == 2 for emoji in result):
+            winnings = self.game.bet * 3
+        elif any(result.count(emoji) == 2 for emoji in self.game.EMOJIS):
             result_desc = f"{result_str}\n部分中獎！退回下注金額 {self.game.bet}。"
-            await self.game.cog.update_balance(self.game.ctx.author, self.game.bet)
+            winnings = self.game.bet
         else:
             result_desc = f"{result_str}\n未中獎。"
+
+        await self.game.cog.update_balance(self.game.ctx.author, winnings)
         await self.game.update_message(result_desc)
         self.stop()
-        await interaction.response.defer()
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            for item in self.children:
+                item.disabled = True
+            await self.message.edit(view=self)

@@ -75,16 +75,20 @@ class BlackjackView(discord.ui.View):
         total = self.game.hand_value(self.game.player_hand)
         if total > 21:
             await self.game.update_message(self, extra_desc="你爆牌了！遊戲結束。")
+            self.disable_all_items()
+            await interaction.response.edit_message(view=self)
             self.stop()
         else:
             await self.game.update_message(self)
-        await interaction.response.defer()
+            await interaction.response.defer()
 
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.grey)
     async def stand(self, button: discord.ui.Button, interaction: discord.Interaction):
         if interaction.user != self.game.ctx.author:
             await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
             return
+        self.disable_all_items()
+        await interaction.response.edit_message(view=self)
         # 莊家抽牌直到總點數達 17
         dealer_total = self.game.hand_value(self.game.dealer_hand)
         while dealer_total < 17:
@@ -106,4 +110,9 @@ class BlackjackView(discord.ui.View):
             result_desc += "你輸了。"
         await self.game.update_message(self, extra_desc=result_desc)
         self.stop()
-        await interaction.response.defer()
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            for item in self.children:
+                item.disabled = True
+            await self.message.edit(view=self)

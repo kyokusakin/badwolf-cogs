@@ -40,39 +40,45 @@ class GuessView(discord.ui.View):
 
     async def process_guess(self, guess_type: str, new_card: int, interaction: discord.Interaction):
         result = ""
+        multiplier = 1  # 預設賠率為 1 (猜錯不賠不贏，但實際上會輸掉下注金)
+        winnings = 0
+
         if guess_type == "larger":
+            multiplier = await self.game.cog.config.global_().guess_large_multiplier()
             if new_card > self.game.current_card:
-                multiplier = await self.game.cog.config.global_().guess_large_multiplier()
                 result = f"下一張牌為 {new_card}，你猜對了！"
-                win_amount = self.game.bet * multiplier
-                await self.game.cog.update_balance(self.game.ctx.author, win_amount)
+                winnings = self.game.bet * multiplier
+                await self.game.cog.update_balance(self.game.ctx.author, winnings)
             else:
                 result = f"下一張牌為 {new_card}，你猜錯了。"
         elif guess_type == "smaller":
+            multiplier = await self.game.cog.config.global_().guess_small_multiplier()
             if new_card < self.game.current_card:
-                multiplier = await self.game.cog.config.global_().guess_small_multiplier()
                 result = f"下一張牌為 {new_card}，你猜對了！"
-                win_amount = self.game.bet * multiplier
-                await self.game.cog.update_balance(self.game.ctx.author, win_amount)
+                winnings = self.game.bet * multiplier
+                await self.game.cog.update_balance(self.game.ctx.author, winnings)
             else:
                 result = f"下一張牌為 {new_card}，你猜錯了。"
         elif guess_type == "odd":
+            multiplier = await self.game.cog.config.global_().guess_odd_multiplier()
             if new_card % 2 == 1:
-                multiplier = await self.game.cog.config.global_().guess_odd_multiplier()
-                result = f"下一張牌為 {new_card}（奇數），你猜對了！"
-                win_amount = self.game.bet * multiplier
-                await self.game.cog.update_balance(self.game.ctx.author, win_amount)
+                result = f"下一張牌為 {new_card}（單數），你猜對了！"
+                winnings = self.game.bet * multiplier
+                await self.game.cog.update_balance(self.game.ctx.author, winnings)
             else:
-                result = f"下一張牌為 {new_card}（偶數），你猜錯了。"
+                result = f"下一張牌為 {new_card}（雙數），你猜錯了。"
         elif guess_type == "even":
+            multiplier = await self.game.cog.config.global_().guess_even_multiplier()
             if new_card % 2 == 0:
-                multiplier = await self.game.cog.config.global_().guess_even_multiplier()
-                result = f"下一張牌為 {new_card}（偶數），你猜對了！"
-                win_amount = self.game.bet * multiplier
-                await self.game.cog.update_balance(self.game.ctx.author, win_amount)
+                result = f"下一張牌為 {new_card}（雙數），你猜對了！"
+                winnings = self.game.bet * multiplier
+                await self.game.cog.update_balance(self.game.ctx.author, winnings)
             else:
-                result = f"下一張牌為 {new_card}（奇數），你猜錯了。"
+                result = f"下一張牌為 {new_card}（單數），你猜錯了。"
+
         await self.game.update_message(result)
+        self.disable_all_items() # 禁用所有按鈕
+        await interaction.response.edit_message(view=self)
         self.stop()
         await interaction.response.defer()
 
@@ -107,3 +113,9 @@ class GuessView(discord.ui.View):
             return
         new_card = random.randint(1, 13)
         await self.process_guess("even", new_card, interaction)
+
+    async def on_timeout(self) -> None:
+        if self.message:
+            for item in self.children:
+                item.disabled = True
+            await self.message.edit(view=self)

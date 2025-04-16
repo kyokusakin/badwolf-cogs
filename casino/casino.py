@@ -4,7 +4,9 @@ from redbot.core.bot import Red
 import logging
 
 # 匯入其他子模組
-from . import blackjack, guesssize, slots
+from .blackjack import BlackjackGame
+from .guesssize import GuessGame
+from .slots import SlotGame
 
 log = logging.getLogger("red.BadwolfCogs.casino")
 
@@ -41,8 +43,13 @@ class Casino(commands.Cog):
         return newbal
 
     @commands.command(name="blackjack")
-    async def blackjack(self, ctx: commands.Context, bet: int):
-        """使用指令觸發 21 點遊戲。"""
+    async def blackjack(self, ctx: commands.Context, bet: int = None):
+        """使用指令觸發 21 點遊戲。
+
+        若未指定下注金額，則使用預設下注金額。
+        """
+        if bet is None:
+            bet = self.default_blackjack_bet
         if bet <= 0:
             await ctx.send("下注金額必須大於零。")
             return
@@ -50,12 +57,17 @@ class Casino(commands.Cog):
         if bet > balance:
             await ctx.send("你的餘額不足。")
             return
-        game = blackjack.BlackjackGame(ctx, self, bet)
+        game = BlackjackGame(ctx, self, bet)
         await game.start()
 
     @commands.command(name="guesssize")
-    async def guesssize(self, ctx: commands.Context, bet: int):
-        """使用指令觸發猜大小遊戲（含猜單雙）。"""
+    async def guesssize(self, ctx: commands.Context, bet: int = None):
+        """使用指令觸發猜大小遊戲（含猜單雙）。
+
+        若未指定下注金額，則使用預設下注金額。
+        """
+        if bet is None:
+            bet = self.default_guesssize_bet
         if bet <= 0:
             await ctx.send("下注金額必須大於零。")
             return
@@ -63,12 +75,17 @@ class Casino(commands.Cog):
         if bet > balance:
             await ctx.send("你的餘額不足。")
             return
-        game = guesssize.GuessGame(ctx, self, bet)
+        game = GuessGame(ctx, self, bet)
         await game.start()
 
     @commands.command(name="slots")
-    async def slots(self, ctx: commands.Context, bet: int):
-        """使用指令觸發拉霸遊戲。"""
+    async def slots(self, ctx: commands.Context, bet: int = None):
+        """使用指令觸發拉霸遊戲。
+
+        若未指定下注金額，則使用預設下注金額。
+        """
+        if bet is None:
+            bet = self.default_slots_bet
         if bet <= 0:
             await ctx.send("下注金額必須大於零。")
             return
@@ -76,7 +93,7 @@ class Casino(commands.Cog):
         if bet > balance:
             await ctx.send("你的餘額不足。")
             return
-        game = slots.SlotGame(ctx, self, bet)
+        game = SlotGame(ctx, self, bet)
         await game.start()
 
     @commands.Cog.listener()
@@ -92,8 +109,8 @@ class Casino(commands.Cog):
             if ctx.valid:
                 return
             if content == "21點":
-                await ctx.invoke(self.blackjack, bet=self.default_blackjack_bet)
+                await ctx.invoke(self.blackjack)
             elif content == "猜大小":
-                await ctx.invoke(self.guesssize, bet=self.default_guesssize_bet)
+                await ctx.invoke(self.guesssize)
             elif content == "拉霸":
-                await ctx.invoke(self.slots, bet=self.default_slots_bet)
+                await ctx.invoke(self.slots)
