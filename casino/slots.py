@@ -37,12 +37,15 @@ class SlotView(discord.ui.View):
         self.spin_button = discord.ui.Button(label="Spin", style=discord.ButtonStyle.blurple)
         self.spin_button.callback = self.spin
         self.add_item(self.spin_button)
+        self.message: discord.Message = None
 
-    async def spin(self, interaction: discord.Interaction):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.game.ctx.author:
             await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
+            return False
+        return True
 
+    async def spin(self, interaction: discord.Interaction):
         # 禁用按鈕防止重複點擊
         self.spin_button.disabled = True
         await interaction.response.edit_message(view=self)
@@ -64,6 +67,7 @@ class SlotView(discord.ui.View):
         await self.game.cog.update_balance(self.game.ctx.author, winnings)
         await self.game.update_message(result_desc)
         self.stop()
+        await interaction.response.defer()
 
     async def on_timeout(self) -> None:
         if self.message:

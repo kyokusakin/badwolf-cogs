@@ -23,10 +23,10 @@ class Casino(commands.Cog):
         self.config.register_user(**default_user)
         # 全域設定：猜大小各選項的賠率，預設均為 2 倍
         self.config.register_global(
-            guess_large_multiplier=2,
-            guess_small_multiplier=2,
-            guess_odd_multiplier=2,
-            guess_even_multiplier=2
+            guess_large_multiplier=1.8,
+            guess_small_multiplier=1.8,
+            guess_odd_multiplier=1.5,
+            guess_even_multiplier=1.5
         )
         # 預設下注金額（可依需求調整）
         self.default_blackjack_bet = 100
@@ -42,6 +42,7 @@ class Casino(commands.Cog):
         await self.config.user(user).balance.set(newbal)
         return newbal
 
+    @commands.guild_only()
     @commands.command(name="blackjack")
     async def blackjack(self, ctx: commands.Context, bet: int = None):
         """使用指令觸發 21 點遊戲。
@@ -60,6 +61,7 @@ class Casino(commands.Cog):
         game = BlackjackGame(ctx, self, bet)
         await game.start()
 
+    @commands.guild_only()
     @commands.command(name="guesssize")
     async def guesssize(self, ctx: commands.Context, bet: int = None):
         """使用指令觸發猜大小遊戲（含猜單雙）。
@@ -78,6 +80,7 @@ class Casino(commands.Cog):
         game = GuessGame(ctx, self, bet)
         await game.start()
 
+    @commands.guild_only()
     @commands.command(name="slots")
     async def slots(self, ctx: commands.Context, bet: int = None):
         """使用指令觸發拉霸遊戲。
@@ -99,7 +102,7 @@ class Casino(commands.Cog):
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         # 忽略機器人訊息
-        if message.author.bot:
+        if message.author.bot or not message.guild:
             return
 
         content = message.content.strip()
@@ -108,9 +111,19 @@ class Casino(commands.Cog):
             ctx = await self.bot.get_context(message)
             if ctx.valid:
                 return
+            balance = await self.get_balance(ctx.author)
             if content == "21點":
+                if self.default_blackjack_bet > balance:
+                    await ctx.send(f"你的餘額不足以進行預設 {self.default_blackjack_bet} 的 21 點下注。")
+                    return
                 await ctx.invoke(self.blackjack)
             elif content == "猜大小":
+                if self.default_guesssize_bet > balance:
+                    await ctx.send(f"你的餘額不足以進行預設 {self.default_guesssize_bet} 的猜大小下注。")
+                    return
                 await ctx.invoke(self.guesssize)
             elif content == "拉霸":
+                if self.default_slots_bet > balance:
+                    await ctx.send(f"你的餘額不足以進行預設 {self.default_slots_bet} 的拉霸下注。")
+                    return
                 await ctx.invoke(self.slots)

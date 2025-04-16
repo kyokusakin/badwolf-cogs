@@ -65,12 +65,16 @@ class BlackjackView(discord.ui.View):
     def __init__(self, game: BlackjackGame):
         super().__init__(timeout=60)
         self.game = game
+        self.message: discord.Message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user != self.game.ctx.author:    
+            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
+            return False
+        return True
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
     async def hit(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         self.game.player_hand.append(self.game.draw_card())
         total = self.game.hand_value(self.game.player_hand)
         if total > 21:
@@ -84,9 +88,6 @@ class BlackjackView(discord.ui.View):
 
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.grey)
     async def stand(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         self.disable_all_items()
         await interaction.response.edit_message(view=self)
         # 莊家抽牌直到總點數達 17

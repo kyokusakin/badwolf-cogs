@@ -37,6 +37,13 @@ class GuessView(discord.ui.View):
     def __init__(self, game: GuessGame):
         super().__init__(timeout=30)
         self.game = game
+        self.message: discord.Message = None
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user != self.game.ctx.author:
+            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
+            return False
+        return True
 
     async def process_guess(self, guess_type: str, new_card: int, interaction: discord.Interaction):
         result = ""
@@ -84,33 +91,21 @@ class GuessView(discord.ui.View):
 
     @discord.ui.button(label="較大", style=discord.ButtonStyle.green)
     async def larger(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         new_card = random.randint(1, 13)
         await self.process_guess("larger", new_card, interaction)
 
     @discord.ui.button(label="較小", style=discord.ButtonStyle.green)
     async def smaller(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         new_card = random.randint(1, 13)
         await self.process_guess("smaller", new_card, interaction)
 
     @discord.ui.button(label="單數", style=discord.ButtonStyle.blurple)
     async def odd(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         new_card = random.randint(1, 13)
         await self.process_guess("odd", new_card, interaction)
 
     @discord.ui.button(label="雙數", style=discord.ButtonStyle.blurple)
     async def even(self, button: discord.ui.Button, interaction: discord.Interaction):
-        if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
-            return
         new_card = random.randint(1, 13)
         await self.process_guess("even", new_card, interaction)
 
