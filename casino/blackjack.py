@@ -14,7 +14,7 @@ class BlackjackGame:
         # 建立標準 52 張牌的牌組，每張牌都包含數值與花色
         ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
         suits = ['♠', '♥', '♦', '♣']
-        self.deck = [f"{rank}{suit}" for rank in ranks for suit in suits]
+        self.deck = [f"{suit}{rank}" for rank in ranks for suit in suits]
         random.shuffle(self.deck)
 
     def draw_card(self):
@@ -25,7 +25,7 @@ class BlackjackGame:
             # 這裡採用重新建立牌組的方式
             ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
             suits = ['♠', '♥', '♦', '♣']
-            self.deck = [f"{rank}{suit}" for rank in ranks for suit in suits]
+            self.deck = [f"{suit}{rank}" for rank in ranks for suit in suits]
             random.shuffle(self.deck)
         return self.deck.pop()
 
