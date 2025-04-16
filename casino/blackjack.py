@@ -74,7 +74,7 @@ class BlackjackView(discord.ui.View):
         return True
 
     @discord.ui.button(label="Hit", style=discord.ButtonStyle.green)
-    async def hit(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.game.player_hand.append(self.game.draw_card())
         total = self.game.hand_value(self.game.player_hand)
         if total > 21:
@@ -87,7 +87,7 @@ class BlackjackView(discord.ui.View):
             await interaction.response.defer()
 
     @discord.ui.button(label="Stand", style=discord.ButtonStyle.grey)
-    async def stand(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.disable_all_items()
         await interaction.response.edit_message(view=self)
         # 莊家抽牌直到總點數達 17
