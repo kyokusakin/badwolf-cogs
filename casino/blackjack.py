@@ -68,7 +68,7 @@ class BlackjackView(discord.ui.View):
         self.message: discord.Message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if interaction.user != self.game.ctx.author:    
+        if interaction.user != self.game.ctx.author:
             await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
             return False
         return True
@@ -117,3 +117,7 @@ class BlackjackView(discord.ui.View):
             for item in self.children:
                 item.disabled = True
             await self.message.edit(view=self)
+
+    def disable_all_items(self):
+        for item in self.children:
+            item.disabled = True
