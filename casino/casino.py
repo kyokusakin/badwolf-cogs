@@ -106,24 +106,45 @@ class Casino(commands.Cog):
             return
 
         content = message.content.strip()
-        # 若僅輸入關鍵字且非已呼叫指令，則以預設下注金額觸發遊戲
-        if content in ("21點", "猜大小", "拉霸"):
+        parts = content.split()
+        keyword = parts[0]
+
+        if keyword in ("21點", "猜大小", "拉霸"):
             ctx = await self.bot.get_context(message)
             if ctx.valid:
                 return
+
             balance = await self.get_balance(ctx.author)
-            if content == "21點":
-                if self.default_blackjack_bet > balance:
-                    await ctx.send(f"你的餘額不足以進行預設 {self.default_blackjack_bet} 的 21 點下注。")
+            bet_amount = None
+
+            if len(parts) > 1:
+                try:
+                    bet_amount = int(parts[1])
+                    if bet_amount <= 0:
+                        await ctx.send("下注金額必須大於 0。")
+                        return
+                    if bet_amount > balance:
+                        await ctx.send(f"你的餘額不足以進行 {bet_amount} 的下注。")
+                        return
+                except ValueError:
+                    await ctx.send("請輸入有效的下注金額。")
                     return
-                await ctx.invoke(self.blackjack)
-            elif content == "猜大小":
-                if self.default_guesssize_bet > balance:
-                    await ctx.send(f"你的餘額不足以進行預設 {self.default_guesssize_bet} 的猜大小下注。")
+
+            if keyword == "21點":
+                bet = bet_amount if bet_amount is not None else self.default_blackjack_bet
+                if bet > balance:
+                    await ctx.send(f"你的餘額不足以進行 {bet} 的 21 點下注。")
                     return
-                await ctx.invoke(self.guesssize)
-            elif content == "拉霸":
-                if self.default_slots_bet > balance:
-                    await ctx.send(f"你的餘額不足以進行預設 {self.default_slots_bet} 的拉霸下注。")
+                await ctx.invoke(self.blackjack, bet=bet)
+            elif keyword == "猜大小":
+                bet = bet_amount if bet_amount is not None else self.default_guesssize_bet
+                if bet > balance:
+                    await ctx.send(f"你的餘額不足以進行 {bet} 的猜大小下注。")
                     return
-                await ctx.invoke(self.slots)
+                await ctx.invoke(self.guesssize, bet=bet)
+            elif keyword == "拉霸":
+                bet = bet_amount if bet_amount is not None else self.default_slots_bet
+                if bet > balance:
+                    await ctx.send(f"你的餘額不足以進行 {bet} 的拉霸下注。")
+                    return
+                await ctx.invoke(self.slots, bet=bet)
