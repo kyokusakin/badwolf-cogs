@@ -1,0 +1,23 @@
+{
+    "author": [
+        "Badwolf_TW"
+    ],
+    "description": "發布中央氣象局地震報告的cog。",
+    "install_msg": "感謝安裝 tw_EEW cog。請使用 `[p]help earthquake` 獲取更多信息。",
+    "short": "自動發布最新地震報告。",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "requirements": [
+        "requests",
+        "discord.py"
+    ],
+    "tags": [
+        "earthquake",
+        "monitoring"
+    ],
+    "type": "COG",
+    "end_user_data_statement": "這個 cog 不會持久儲存用戶的數據或元數據。"
+}
