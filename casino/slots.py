@@ -160,9 +160,15 @@ class SlotView(discord.ui.View):
     def cleanup(self):
         self.game.cog.end_game(self.game.ctx.author.id)
 
-    async def on_timeout(self) -> None:
-        self.cleanup()
-        if self.message:
-            for item in self.children:
-                item.disabled = True
-            await self.message.edit(view=self)
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.game.message:
+            await self.game.message.edit(view=None)
+        refund = self.game.bet
+        await self.game.cog.update_balance(self.game.ctx.author, refund)
+        await self.game.ctx.send(
+            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
+            f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
+        )
+        self.game.cleanup()
