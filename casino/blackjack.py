@@ -91,6 +91,7 @@ class BlackjackGame:
 
         # 如果有自然 Blackjack，就結算並清理
         if await self.check_blackjack():
+            await self.message.edit(embed=embed, view=None)
             self.cleanup()
             return
 
@@ -108,6 +109,7 @@ class BlackjackGame:
                 await self.cog.update_balance(self.ctx.author, self.bet + payout)
             else:
                 msg, round_delta, win = "莊家 Blackjack，你輸了。", -self.bet, False
+                await self.cog.update_balance(self.ctx.author, -self.bet)
 
             total_balance = await self.cog.get_balance(self.ctx.author)
             desc = (
