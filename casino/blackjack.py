@@ -87,24 +87,29 @@ class BlackjackGame:
         embed = self.embed("21 點遊戲", desc)
         self.message = await self.ctx.reply(embed=embed, view=view, mention_author=False)
 
-        # 如果有自然 Blackjack，就結算並清理
-        if await self.check_blackjack():
-            await self.message.edit(embed=embed, view=None)
-
-    async def check_blackjack(self) -> bool:
-        p_tot = self.calc_total(self.player_hand)
-        d_tot = self.calc_total(self.dealer_hand)
-
-        if p_tot == 21 or d_tot == 21:
-            if p_tot == d_tot:
-                await self.finalize("平手，退回下注。", win=None)
-            elif p_tot == 21:
+        blackjack_result = await self.check_blackjack()
+        if blackjack_result:
+            if blackjack_result == "push":
+                await self.finalize("雙方皆為 Blackjack，平手退還下注。", win=None)
+            elif blackjack_result == "player":
                 payout = int(self.bet * self.blackjack_payout_multiplier)
-                await self.finalize("玩家 Blackjack！", win=True, payout=payout)
-            else:
-                await self.finalize("莊家 Blackjack，你輸了。", win=False)
-            return True
-        return False
+                await self.finalize("玩家擁有自然 Blackjack，獲勝！", win=True, payout=payout)
+            elif blackjack_result == "dealer":
+                await self.finalize("莊家擁有自然 Blackjack，你輸了。", win=False)
+            return
+
+    async def check_blackjack(self) -> Optional[str]:
+        """檢查是否有人擁有自然 Blackjack。"""
+        p_blackjack = self.calc_total(self.player_hand) == 21 and len(self.player_hand) == 2
+        d_blackjack = self.calc_total(self.dealer_hand) == 21 and len(self.dealer_hand) == 2
+
+        if p_blackjack and d_blackjack:
+            return "push"
+        elif p_blackjack:
+            return "player"
+        elif d_blackjack:
+            return "dealer"
+        return None
 
     async def finalize(self, result: str, win: Optional[bool] = None, payout: int = 0):
         """當玩家停牌或爆牌後的最終結算。"""
