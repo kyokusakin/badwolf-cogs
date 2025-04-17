@@ -13,7 +13,7 @@ PAYOUT_SMALL_LARGE = 1  # 1:1 payout
 PAYOUT_ODD_EVEN = 0.8     # 1:1 payout
 
 # Triples
-PAYOUT_ANY_TRIPLE = 24     # Common payout is 30:1 or 24:1
+PAYOUT_ANY_TRIPLE = 30     # Common payout is 30:1 or 24:1
 PAYOUT_SPECIFIC_TRIPLE = 150 # Common payout is 180:1 or 150:1
 
 # Doubles
@@ -98,9 +98,10 @@ class GuessGame:
         # --- Two Dice Combo ---
         if bet_type == "two_dice_combo" and not is_triple:
             d1, d2 = numbers if len(numbers) == 2 else (None, None)
-            if d1 in dice and d2 in dice and d1 != d2:
-                win_multiplier = PAYOUT_TWO_DICE_COMBO
-
+            if d1 and d2 and d1 != d2:
+                if d1 in dice and d2 in dice:
+                    win_multiplier = PAYOUT_TWO_DICE_COMBO
+        
         # --- Specific Three Dice (Non-Triple) ---
         if bet_type == "three_dice_specific" and not is_triple:
             if sorted(dice) == sorted(numbers):
