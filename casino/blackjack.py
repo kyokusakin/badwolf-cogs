@@ -1,132 +1,161 @@
 import discord
 from redbot.core import commands
 import random
+from typing import List, Optional, Union
+
+# 全域牌組模板
+RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'J', 'Q', 'K', 'A']
+SUITS = ['♠', '♥', '♦', '♣']
 
 class BlackjackGame:
-    def __init__(self, ctx: commands.Context, cog, bet: int):
-        self.ctx = ctx
-        self.cog = cog  # 主模組（用來呼叫 get_balance/update_balance 等方法）
+    def __init__(
+        self,
+        ctx: Union[commands.Context, discord.Interaction],
+        cog,
+        bet: int,
+        double_totals: Optional[List[int]] = None
+    ):
+        # 初始時必填 ctx（Context 或者 Interaction）
+        self.ctx = ctx  
+        self.cog = cog
         self.bet = bet
-        self.player_hand = []
-        self.dealer_hand = []
-        self.message = None
+        self.double_totals = double_totals or [11]
+        self.player_hand: List[str] = []
+        self.dealer_hand: List[str] = []
+        self.deck: List[str] = []
+        self.message: Optional[discord.Message] = None
+        self.doubled = False
 
-        # 預設建立牌組（也可在 start() 中重新建立）
-        self.deck = []  # 這裡先不建構 deck
-
-    def new_deck(self):
-        """建立並洗牌一副新的52張撲克牌 (最後一個字元是 rank)"""
-        ranks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A']
-        suits = ['♠', '♥', '♦', '♣']
-        self.deck = [f"{suit}{rank}" for suit in suits for rank in ranks]
+    def build_deck(self) -> None:
+        self.deck = [f"{s}{r}" for s in SUITS for r in RANKS]
         random.shuffle(self.deck)
 
-    def draw_card(self):
-        """從牌組中抽一張牌，如果牌組用完則重新建立牌組"""
+    def draw(self) -> str:
         if not self.deck:
-            self.new_deck()
+            self.build_deck()
         return self.deck.pop()
 
-    def card_value(self, card):
-        """
-        取得卡牌數值：只看最後一個字元 (rank)。
-        - J, Q, K 的點數皆為 10；A 預設為 11（略過軟/硬 A 處理）。
-        """
-        rank = card[-1]
-        if rank in ['J', 'Q', 'K']:
+    @staticmethod
+    def value_of(card: str) -> int:
+        r = card[-1]
+        if r in 'JQK':
             return 10
-        elif rank == 'A':
+        if r == 'A':
             return 11
-        else:
-            try:
-                return int(rank)
-            except ValueError:
-                # 這不應該發生，但為了安全起見，打印錯誤並返回 0
-                print(f"ValueError: 嘗試轉換無效的牌面值: '{rank}' (完整卡牌: '{card}')")
-                return 0
+        return int(r)
 
-    def hand_value(self, hand):
-        total = sum(self.card_value(c) for c in hand)
-        # 當總點數超過 21 時，將 A 的值從 11 調整為 1
+    def calc_total(self, hand: List[str]) -> int:
+        total = sum(self.value_of(c) for c in hand)
         aces = sum(1 for c in hand if c[-1] == 'A')
         while total > 21 and aces:
             total -= 10
             aces -= 1
         return total
 
-    async def determine_initial_blackjack(self):
-        player_total = self.hand_value(self.player_hand)
-        dealer_total = self.hand_value(self.dealer_hand)
+    def embed(self, title: str, desc: str, win: Optional[bool] = None) -> discord.Embed:
+        if win is True:
+            color = discord.Color.green()
+        elif win is False:
+            color = discord.Color.red()
+        else:
+            color = discord.Color.dark_grey()
+        return discord.Embed(title=title, description=desc, color=color)
 
-        if player_total == 21 and dealer_total == 21:
-            await self.show_final_hands("雙方都是 21 點！平手，退回下注。")
-            await self.cog.update_balance(self.ctx.author, self.bet)
-            return True
-        elif player_total == 21:
-            await self.show_final_hands("玩家 21 點！你贏了！")
-            winnings = self.bet * 1.5  # Blackjack 通常有 1.5 倍的賠率
-            await self.cog.update_balance(self.ctx.author, self.bet + int(winnings))
-            return True
-        elif dealer_total == 21:
-            await self.show_final_hands("莊家 21 點！你輸了。")
+    async def start(self, ctx: Union[commands.Context, discord.Interaction] = None):
+        """開始遊戲。可選傳入新的 Context/Interaction 來覆寫 self.ctx。"""
+        if ctx is not None:
+            self.ctx = ctx  # 支援 on_message 的 interaction 或 command ctx
+
+        # 扣款與初始牌，顯示下注
+        await self.cog.update_balance(self.ctx.author, -self.bet)
+        self.build_deck()
+        self.doubled = False
+        self.player_hand = [self.draw(), self.draw()]
+        self.dealer_hand = [self.draw(), self.draw()]
+
+        desc = (
+            f"本輪下注: {self.bet} 狗幣\n\n"
+            f"你的牌:\n {', '.join(self.player_hand)} ({self.calc_total(self.player_hand)})\n\n"
+            f"莊家:\n {self.dealer_hand[0]} , ??"
+        )
+        view = BlackjackView(self)
+        embed = self.embed("21 點遊戲", desc)
+        self.message = await self.ctx.send(embed=embed, view=view)
+
+        # 如果有自然 Blackjack，就結算並清理
+        if await self.check_blackjack():
+            self.cleanup()
+            return
+
+    async def check_blackjack(self) -> bool:
+        p_tot = self.calc_total(self.player_hand)
+        d_tot = self.calc_total(self.dealer_hand)
+        if p_tot == 21 or d_tot == 21:
+            if p_tot == d_tot:
+                msg, round_delta, win = "平手，退回下注。", 0, None
+                await self.cog.update_balance(self.ctx.author, self.bet)
+            elif p_tot == 21:
+                payout = int(self.bet * 1.5)
+                msg, round_delta, win = f"玩家 Blackjack！獲得 {payout}。", payout, True
+                await self.cog.update_balance(self.ctx.author, self.bet + payout)
+            else:
+                msg, round_delta, win = "莊家 Blackjack，你輸了。", -self.bet, False
+
+            total_balance = await self.cog.get_balance(self.ctx.author)
+            desc = (
+                f"本輪下注: {self.bet} 狗幣\n\n"
+                f"你的牌:\n {', '.join(self.player_hand)} ({p_tot})\n\n"
+                f"莊家牌:\n {', '.join(self.dealer_hand)} ({d_tot})\n\n"
+                f"{msg}\n"
+                f"本輪盈虧: {round_delta:+} 狗幣\n"
+                f"總狗幣: {total_balance}"
+            )
+            await self.ctx.send(embed=self.embed("遊戲結算", desc, win))
             return True
         return False
 
-    async def show_final_hands(self, result_message):
-        embed = discord.Embed(
-            title="21點遊戲 - 結果",
-            description=(
-                f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
-                f"莊家的牌: {', '.join(self.dealer_hand)} (總點數：{self.hand_value(self.dealer_hand)})\n"
-                f"{result_message}"
-            ),
-            color=discord.Color.green() if "贏" in result_message else (discord.Color.red() if "輸" in result_message else discord.Color.grey())
+    async def finalize(self, result: str, win: Optional[bool] = None, payout: int = 0):
+        """當玩家停牌或爆牌後的最終結算。"""
+        if win is True:
+            await self.cog.update_balance(self.ctx.author, self.bet + payout)
+            round_delta = self.bet + payout
+        elif win is None:
+            await self.cog.update_balance(self.ctx.author, self.bet)
+            round_delta = 0
+        else:
+            round_delta = -self.bet
+
+        total_balance = await self.cog.get_balance(self.ctx.author)
+        desc = (
+            f"本輪下注: {self.bet} 狗幣\n\n"
+            f"你的牌:\n {', '.join(self.player_hand)} ({self.calc_total(self.player_hand)})\n\n"
+            f"莊家牌:\n {', '.join(self.dealer_hand)} ({self.calc_total(self.dealer_hand)})\n\n"
+            f"{result}\n"
+            f"本輪盈虧: {round_delta:+} 狗幣\n"
+            f"總狗幣: {total_balance}"
         )
+        embed = self.embed("遊戲結束", desc, win)
         if self.message:
             await self.message.edit(embed=embed, view=None)
         else:
             await self.ctx.send(embed=embed)
 
-    async def start(self):
-        # 每輪遊戲都建立一副新的牌組
-        self.new_deck()
-        # 先扣除下注金額
-        await self.cog.update_balance(self.ctx.author, -self.bet)
-        # 初始發牌：玩家發 2 張，莊家發 2 張（其中一張隱藏）
-        self.player_hand = [self.draw_card(), self.draw_card()]
-        self.dealer_hand = [self.draw_card(), self.draw_card()]
+        self.cleanup()
 
-        # 檢查開局是否有人達到 21 點
-        if await self.determine_initial_blackjack():
-            return
+    def cleanup(self):
+        """遊戲結束時呼叫：移除 active_games 鎖定"""
+        self.cog.end_game(self.ctx.author.id)
 
-        embed = discord.Embed(
-            title="21點遊戲",
-            description=(
-                f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
-                f"莊家的牌: {self.dealer_hand[0]}，未知牌。"
-            ),
-            color=discord.Color.blue()
-        )
-        view = BlackjackView(self)
-        self.message = await self.ctx.send(embed=embed, view=view)
-
-    async def update_message(self, view: discord.ui.View, extra_desc=""):
-        embed = discord.Embed(
-            title="21點遊戲",
-            description=(
-                f"你的牌: {', '.join(self.player_hand)} (總點數：{self.hand_value(self.player_hand)})\n"
-                f"莊家的牌: {self.dealer_hand[0]}，未知牌。\n{extra_desc}"
-            ),
-            color=discord.Color.blue()
-        )
-        await self.message.edit(embed=embed, view=view)
 
 class BlackjackView(discord.ui.View):
     def __init__(self, game: BlackjackGame):
         super().__init__(timeout=60)
         self.game = game
-        self.message: discord.Message = None
+        # 初始化時處理雙倍下注按鈕是否可用
+        for item in self.children:
+            if getattr(item, 'custom_id', None) == 'double':
+                total = self.game.calc_total(self.game.player_hand)
+                item.disabled = not (len(self.game.player_hand) == 2 and total in self.game.double_totals)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.game.ctx.author:
@@ -134,55 +163,76 @@ class BlackjackView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="叫牌", style=discord.ButtonStyle.green)
+    @discord.ui.button(label="叫牌", style=discord.ButtonStyle.green, custom_id="hit")
     async def hit(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.game.player_hand.append(self.game.draw_card())
-        total = self.game.hand_value(self.game.player_hand)
+        self.game.player_hand.append(self.game.draw())
+        total = self.game.calc_total(self.game.player_hand)
         if total > 21:
-            await self.game.update_message(self, extra_desc="你爆牌了！遊戲結束。")
-            self.disable_all_items()
-            await interaction.response.edit_message(view=self)
+            await self.game.finalize("你爆牌了！", win=False)
+            self.stop()
+        elif len(self.game.player_hand) >= 5 and total <= 21:
+            await self.game.finalize("五龍勝利！賠率 2 倍。", win=True, payout=self.game.bet)
             self.stop()
         else:
-            await self.game.update_message(self)
-            await interaction.response.defer()
+            desc = (
+                f"本輪下注: {self.game.bet} 狗幣\n\n"
+                f"你的牌:\n {', '.join(self.game.player_hand)} ({self.game.calc_total(self.game.player_hand)})\n\n"
+                f"莊家:\n {self.game.dealer_hand[0]}, ??"
+            )
+            await interaction.response.edit_message(embed=self.game.embed("21 點遊戲", desc), view=self)
 
-    @discord.ui.button(label="停牌", style=discord.ButtonStyle.grey)
+    @discord.ui.button(label="停牌", style=discord.ButtonStyle.grey, custom_id="stand")
     async def stand(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.disable_all_items()
-        await interaction.response.edit_message(view=self)
-        await self.dealer_turn()
+        await self.dealer_play(interaction)
         self.stop()
 
-    async def dealer_turn(self):
-        dealer_total = self.game.hand_value(self.game.dealer_hand)
-        player_total = self.game.hand_value(self.game.player_hand)
-
-        while dealer_total < 17:
-            self.game.dealer_hand.append(self.game.draw_card())
-            dealer_total = self.game.hand_value(self.game.dealer_hand)
-
-        await self.show_final_hands(self.determine_winner(player_total, dealer_total))
-
-    def determine_winner(self, player_total, dealer_total):
-        if dealer_total > 21:
-            return "莊家爆牌！你贏了！"
-        elif player_total > dealer_total or dealer_total == 21 and player_total != 21: # 莊家 21 點優先
-            return "你贏了！"
-        elif player_total == dealer_total:
-            return "平手！退回下注。"
+    @discord.ui.button(label="雙倍下注", style=discord.ButtonStyle.blurple, custom_id="double")
+    async def double(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.game.doubled:
+            await interaction.response.send_message("已執行雙倍下注！", ephemeral=True)
+            return
+        bal = await self.game.cog.get_balance(self.game.ctx.author)
+        if bal < self.game.bet:
+            await interaction.response.send_message("餘額不足，無法雙倍下注！", ephemeral=True)
+            return
+        self.game.doubled = True
+        await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
+        self.game.player_hand.append(self.game.draw())
+        total = self.game.calc_total(self.game.player_hand)
+        if total > 21:
+            await self.game.finalize("雙倍後爆牌！", win=False)
         else:
-            return "你輸了。"
+            await self.dealer_play(interaction, extra="(已雙倍下注)")
+        self.stop()
 
-    async def on_timeout(self) -> None:
-        if self.message:
-            for item in self.children:
-                item.disabled = True
-            await self.message.edit(view=self)
-            if self.game.bet > 0:
-                await self.game.cog.update_balance(self.game.ctx.author, self.game.bet)
-                await self.game.ctx.send(f"{self.game.ctx.author.mention} 由於超時，21點遊戲已結束，並退回你的下注 {self.game.bet}。")
-
-    def disable_all_items(self):
+    async def dealer_play(self, interaction: discord.Interaction, extra: str = ""):
         for item in self.children:
             item.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        while self.game.calc_total(self.game.dealer_hand) < 17:
+            self.game.dealer_hand.append(self.game.draw())
+
+        p_tot = self.game.calc_total(self.game.player_hand)
+        d_tot = self.game.calc_total(self.game.dealer_hand)
+
+        if d_tot > 21 or p_tot > d_tot:
+            payout = self.game.bet * (2 if self.game.doubled else 1)
+            await self.game.finalize(f"你贏了！{extra}", win=True, payout=payout)
+        elif p_tot == d_tot:
+            await self.game.finalize("平手，退回下注。", win=None)
+        else:
+            await self.game.finalize("你輸了。", win=False)
+
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.game.message:
+            await self.game.message.edit(view=self)
+        # 退還下注
+        refund = self.game.bet * (2 if self.game.doubled else 1)
+        await self.game.cog.update_balance(self.game.ctx.author, refund)
+        await self.game.ctx.send(
+            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。"
+        )
+        self.game.cleanup()
