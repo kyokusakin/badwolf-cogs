@@ -3,7 +3,7 @@ import random
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 
-class CasinoCommands(commands.Cog):
+class CasinoCommands():
     """賭場輔助指令：查詢籌碼與轉移籌碼"""
 
     def __init__(self, bot: Red, casino_cog):
