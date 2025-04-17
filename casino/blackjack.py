@@ -87,7 +87,7 @@ class BlackjackGame:
         )
         view = BlackjackView(self)
         embed = self.embed("21 點遊戲", desc)
-        self.message = await self.ctx.send(embed=embed, view=view)
+        self.message = await self.ctx.reply(embed=embed, view=view, mention_author=False)
 
         # 如果有自然 Blackjack，就結算並清理
         if await self.check_blackjack():
@@ -98,7 +98,7 @@ class BlackjackGame:
     async def check_blackjack(self) -> bool:
         p_tot = self.calc_total(self.player_hand)
         d_tot = self.calc_total(self.dealer_hand)
-    
+
         if p_tot == 21 or d_tot == 21:
             if p_tot == d_tot:
                 await self.update_balance(self.ctx.author, self.bet)
