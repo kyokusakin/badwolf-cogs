@@ -44,7 +44,7 @@ class CasinoCommands():
         random_income = random.randint(100, 1000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.send(f"你工作賺取了 💰 {total_income} 籌碼！")
+        await ctx.reply(f"你工作賺取了 💰 {total_income} 狗幣！")
 
     @work.error
     async def work_error(self, ctx: commands.Context, error):
@@ -52,6 +52,26 @@ class CasinoCommands():
             seconds = int(error.retry_after)
             minutes = seconds // 60
             remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-            await ctx.send(f"你已經工作過了，請在 {remaining} 後再試。")
+            await ctx.reply(f"你已經工作過了，請在 {remaining}後再試。")
+        else:
+            raise error
+        
+    @commands.cooldown(1, 86400, commands.BucketType.user)
+    @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
+    async def dogmeat(self, ctx: commands.Context):
+        """工作賺取籌碼，每小時可執行一次。"""
+        base_income = 10000
+        random_income = random.randint(500, 10000)
+        total_income = base_income + random_income
+        await self.casino.update_balance(ctx.author, total_income)
+        await ctx.reply(f"賣EXE的肉賺取了 💰 {total_income} 狗幣！")
+
+    @dogmeat.error
+    async def dogmeat_error(self, ctx: commands.Context, error):
+        if isinstance(error, commands.CommandOnCooldown):
+            seconds = int(error.retry_after)
+            minutes = seconds // 60
+            remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
+            await ctx.reply(f"你已經工作過了，請在 {remaining}後再試。")
         else:
             raise error
