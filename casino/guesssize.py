@@ -95,7 +95,7 @@ class GuessGame:
         # --- Combination Bets ---
         elif bet_type == "two_dice_combo":
             d1, d2 = self.player_bet.get("numbers", (None, None))
-            if d1 in dice and d2 in dice:
+            if d1 in dice and d2 in dice and len(set(dice)) >= 2:
                 win_multiplier = PAYOUT_TWO_DICE_COMBO
 
         # --- Specific Three Dice (Non-Triple) ---
