@@ -95,6 +95,11 @@ class SlotView(discord.ui.View):
             await interaction.response.send_message(f"請稍後再試！冷卻時間還剩 {remaining_time:.1f} 秒。", ephemeral=True)
             return
 
+        current_balance = await self.game.cog.get_balance(interaction.user)
+        if current_balance < self.game.bet:
+            await interaction.response.send_message(f"你的籌碼不足！本次下注需要 {self.game.bet} 籌碼，但你只有 {current_balance} 籌碼。", ephemeral=True)
+            return
+
         self.game.last_spin_time[user_id] = current_time
 
         await interaction.response.defer(ephemeral=True)  # 顯示「正在思考」並防止觀眾看到
@@ -142,7 +147,7 @@ class SlotView(discord.ui.View):
 
         await self.game.update_message("\n".join(result_desc_parts))
         await interaction.message.edit(view=self)
-    
+
 
     async def end_game(self, interaction: discord.Interaction):
         for item in self.children:
