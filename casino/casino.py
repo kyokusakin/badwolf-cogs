@@ -61,9 +61,9 @@ class Casino(commands.Cog, CasinoCommands):
     # ——— 指令觸發 ————————————————————————
 
     @commands.guild_only()
-    @commands.command(name="blackjack")
+    @commands.command(name="blackjack", aliases=["21點", "二十一點"])
     async def blackjack(self, ctx: commands.Context, bet: int = None):
-        """21 點"""
+        """21 點。使令[p]blackjack <下注金額>"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -86,9 +86,9 @@ class Casino(commands.Cog, CasinoCommands):
             await ctx.send("啟動 21 點遊戲時發生錯誤，請稍後再試。")
 
     @commands.guild_only()
-    @commands.command(name="guesssize")
+    @commands.command(name="guesssize", aliases=["猜大小", "骰寶"])
     async def guesssize(self, ctx: commands.Context, bet: int = None):
-        """猜大小"""
+        """猜大小。 使令[p]guesssize <下注金額>"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -113,7 +113,7 @@ class Casino(commands.Cog, CasinoCommands):
     @commands.guild_only()
     @commands.command(name="slots")
     async def slots(self, ctx: commands.Context, bet: int = None):
-        """拉霸"""
+        """拉霸 未完工"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
