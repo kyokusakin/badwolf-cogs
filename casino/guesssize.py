@@ -547,8 +547,16 @@ class DiceBetModal(discord.ui.Modal):
             await self.game.finalize("因內部錯誤導致遊戲中止，已退款。", -self.game.bet)
 
 
-    async def on_timeout(self) -> None:
-        # Modal timeout means user didn't submit it in time.
-        # The main GuessView timeout will handle the game cancellation and refund.
-        log.info(f"DiceBetModal for game by {self.game.ctx.author.id} timed out (user did not submit).")
-        # No specific action usually needed here.
+    async def on_timeout(self):
+        for item in self.children:
+            item.disabled = True
+        if self.game.message:
+            await self.game.message.edit(view=None)
+        # 退還下注
+        refund = self.game.bet
+        await self.game.cog.update_balance(self.game.ctx.author, refund)
+        await self.game.ctx.send(
+            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
+            f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
+        )
+        self.game.cleanup()
