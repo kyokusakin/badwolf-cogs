@@ -118,7 +118,7 @@ class BlackjackGame:
                 f"莊家牌:\n `{'  '.join(self.dealer_hand)}` ({d_tot})\n\n"
                 f"{msg}\n"
                 f"本輪盈虧: {round_delta:+} 狗幣\n"
-                f"總狗幣: {total_balance}"
+                f"總狗幣: {round(total_balance):,}"
             )
             await self.ctx.send(embed=self.embed("遊戲結算", desc, win))
             return True
@@ -142,7 +142,7 @@ class BlackjackGame:
             f"莊家牌:\n `{'  '.join(self.dealer_hand)}` \n莊家的點數: {self.calc_total(self.dealer_hand)}\n\n"
             f"{result}\n"
             f"本輪盈虧: {round_delta:+} 狗幣\n"
-            f"總狗幣: {total_balance}"
+            f"總狗幣: {round(total_balance):,}"
         )
         embed = self.embed("遊戲結束", desc, win)
         if self.message:
@@ -245,6 +245,7 @@ class BlackjackView(discord.ui.View):
         refund = self.game.bet * refund_multiplier
         await self.game.cog.update_balance(self.game.ctx.author, refund)
         await self.game.ctx.send(
-            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。"
+            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
+            f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
         )
         self.game.cleanup()
