@@ -165,7 +165,7 @@ class BlackjackView(discord.ui.View):
             await self.game.finalize("你爆牌了！", win=False)
             self.stop()
         elif len(self.game.player_hand) >= 5 and total <= 21:
-            payout = int(self.game.bet * self.game.five_card_charlie_payout_multiplier)
+            payout = int(self.game.bet * (self.game.five_card_charlie_payout_multiplier + 1))
             await self.game.finalize(f"五龍勝利！", win=True, payout=payout)
             self.stop()
         else:
@@ -212,7 +212,7 @@ class BlackjackView(discord.ui.View):
         d_tot = self.game.calc_total(self.game.dealer_hand)
 
         if d_tot > 21 or p_tot > d_tot:
-            payout = self.game.bet * (self.game.double_win_multiplier if self.game.doubled else 1)
+            payout = int(self.game.bet * (self.game.five_card_charlie_payout_multiplier + 1))
             await self.game.finalize(f"你贏了！{extra}", win=True, payout=payout)
         elif p_tot == d_tot:
             await self.game.finalize("平手，退回下注。", win=None)
