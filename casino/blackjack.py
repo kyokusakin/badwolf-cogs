@@ -239,7 +239,7 @@ class BlackjackView(discord.ui.View):
         for item in self.children:
             item.disabled = True
         if self.game.message:
-            await self.game.message.edit(view=self)
+            await self.game.message.edit(view=None)
         # 退還下注
         refund_multiplier = 2 if self.game.doubled else 1
         refund = self.game.bet * refund_multiplier
