@@ -98,29 +98,18 @@ class BlackjackGame:
     async def check_blackjack(self) -> bool:
         p_tot = self.calc_total(self.player_hand)
         d_tot = self.calc_total(self.dealer_hand)
-
+    
         if p_tot == 21 or d_tot == 21:
             if p_tot == d_tot:
-                msg, round_delta, win = "平手，退回下注。", 0, None
-                await self.cog.update_balance(self.ctx.author, self.bet)
+                await self.update_balance(self.ctx.author, self.bet)
+                await self.finalize("平手，退回下注。", win=None)
             elif p_tot == 21:
                 payout = int(self.bet * self.blackjack_payout_multiplier)
-                msg, round_delta, win = f"玩家 Blackjack！", payout, True
-                await self.cog.update_balance(self.ctx.author, self.bet + payout)
+                await self.update_balance(self.ctx.author, self.bet + payout)
+                await self.finalize("玩家 Blackjack！", win=True, payout=payout)
             else:
-                msg, round_delta, win = "莊家 Blackjack，你輸了。", -self.bet, False
-                await self.cog.update_balance(self.ctx.author, -self.bet)
-
-            total_balance = await self.cog.get_balance(self.ctx.author)
-            desc = (
-                f"本輪下注: {self.bet} 狗幣\n\n"
-                f"你的牌:\n `{'  '.join(self.player_hand)}` ({p_tot})\n\n"
-                f"莊家牌:\n `{'  '.join(self.dealer_hand)}` ({d_tot})\n\n"
-                f"{msg}\n"
-                f"本輪盈虧: {round_delta:+} 狗幣\n"
-                f"總狗幣: {round(total_balance):,}"
-            )
-            await self.message.edit(embed=self.embed("遊戲結算", desc, win))
+                await self.update_balance(self.ctx.author, -self.bet)
+                await self.finalize("莊家 Blackjack，你輸了。", win=False)
             return True
         return False
 
