@@ -559,4 +559,4 @@ class DiceBetModal(discord.ui.Modal):
             f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
             f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
         )
-        self.game.cleanup()
+        self.game.cog.end_game(self.game.ctx.author.id)
