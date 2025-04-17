@@ -28,7 +28,7 @@ class BlackjackGame:
         self.doubled = False
         #賠率
         self.blackjack_payout_multiplier = 1.5
-        self.double_win_multiplier = 1.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
+        self.double_win_multiplier = 2.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
         self.five_card_charlie_payout_multiplier = 2.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
 
     def build_deck(self) -> None:
@@ -101,7 +101,7 @@ class BlackjackGame:
             if p_tot == d_tot:
                 await self.finalize("平手，退回下注。", win=None)
             elif p_tot == 21:
-                payout = int(self.bet * (self.blackjack_payout_multiplier + 1))
+                payout = int(self.bet * self.blackjack_payout_multiplier)
                 await self.finalize("玩家 Blackjack！", win=True, payout=payout)
             else:
                 await self.finalize("莊家 Blackjack，你輸了。", win=False)
@@ -110,18 +110,21 @@ class BlackjackGame:
 
     async def finalize(self, result: str, win: Optional[bool] = None, payout: int = 0):
         """當玩家停牌或爆牌後的最終結算。"""
+        total_bet = self.bet * (2 if self.doubled else 1)
+
         if win is True:
-            await self.cog.update_balance(self.ctx.author, self.bet + payout)
+            total_gain = total_bet + payout
+            await self.cog.update_balance(self.ctx.author, total_gain)
             round_delta = payout
         elif win is None:
-            await self.cog.update_balance(self.ctx.author, self.bet)
+            await self.cog.update_balance(self.ctx.author, total_bet)
             round_delta = 0
         else:
-            round_delta = -self.bet
+            round_delta = -total_bet
 
         total_balance = await self.cog.get_balance(self.ctx.author)
         desc = (
-            f"本輪下注: {self.bet} 狗幣\n\n"
+            f"本輪下注: {total_bet} 狗幣\n\n"
             f"你的牌:\n `{'  '.join(self.player_hand)}` \n你的點數: {self.calc_total(self.player_hand)}\n\n"
             f"莊家牌:\n `{'  '.join(self.dealer_hand)}` \n莊家的點數: {self.calc_total(self.dealer_hand)}\n\n"
             f"{result}\n"
@@ -135,6 +138,7 @@ class BlackjackGame:
             await self.ctx.send(embed=embed)
 
         self.cleanup()
+
 
     def cleanup(self):
         """遊戲結束時呼叫：移除 active_games 鎖定"""
@@ -165,7 +169,7 @@ class BlackjackView(discord.ui.View):
             await self.game.finalize("你爆牌了！", win=False)
             self.stop()
         elif len(self.game.player_hand) >= 5 and total <= 21:
-            payout = int(self.game.bet * (self.game.five_card_charlie_payout_multiplier + 1))
+            payout = int(self.game.bet * self.game.five_card_charlie_payout_multiplier)
             await self.game.finalize(f"五龍勝利！", win=True, payout=payout)
             self.stop()
         else:
@@ -212,7 +216,7 @@ class BlackjackView(discord.ui.View):
         d_tot = self.game.calc_total(self.game.dealer_hand)
 
         if d_tot > 21 or p_tot > d_tot:
-            payout = int(self.game.bet * (self.game.five_card_charlie_payout_multiplier + 1))
+            payout = self.game.bet
             await self.game.finalize(f"你贏了！{extra}", win=True, payout=payout)
         elif p_tot == d_tot:
             await self.game.finalize("平手，退回下注。", win=None)
