@@ -54,10 +54,10 @@ class CasinoMessageListener:
         # 金融類指令（balance、transfer、work、dogmeat）
         elif keyword in ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"]:
             await ctx.invoke(self.cog.balance)
-        elif keyword in ["工作", "打工", "work"]:
-            await ctx.invoke(self.cog.work)
-        elif keyword in ["賣狗肉", "賣狗哥", "dogmeat"]:
-            await ctx.invoke(self.cog.dogmeat)
+#        elif keyword in ["工作", "打工", "work"]:
+#            await ctx.invoke(self.cog.work)
+#        elif keyword in ["賣狗肉", "賣狗哥", "dogmeat"]:
+#            await ctx.invoke(self.cog.dogmeat)
         elif keyword in ["V","轉帳","transfer"] and len(content) >= 3:
             try:
                 member_mention = content[1]
