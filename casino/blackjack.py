@@ -77,6 +77,8 @@ class BlackjackGame:
         self.doubled = False
         self.player_hand = [self.draw(), self.draw()]
         self.dealer_hand = [self.draw(), self.draw()]
+        self.view = BlackjackView(self)
+        
 
         desc = (
             f"本輪下注: {self.bet} 狗幣\n\n"
@@ -85,7 +87,7 @@ class BlackjackGame:
         )
         view = BlackjackView(self)
         embed = self.embed("21 點遊戲", desc)
-        self.message = await self.ctx.reply(embed=embed, view=view, mention_author=False)
+        self.message = await self.ctx.reply(embed=embed, view=self.view, mention_author=False)
 
         blackjack_result = await self.check_blackjack()
         if blackjack_result:
@@ -110,6 +112,7 @@ class BlackjackGame:
         elif d_blackjack:
             return "dealer"
         return None
+    
     async def finalize(self, result: str, win: Optional[bool] = None, payout: int = 0):
         """當玩家停牌或爆牌後的最終結算。"""
         total_bet = self.bet * (2 if self.doubled else 1)
@@ -138,13 +141,14 @@ class BlackjackGame:
             await self.message.edit(embed=embed, view=None)
         else:
             await self.ctx.send(embed=embed)
-
         self.cleanup()
 
 
     def cleanup(self):
         """遊戲結束時呼叫：移除 active_games 鎖定"""
         self.cog.end_game(self.ctx.author.id)
+        if hasattr(self, 'view'):
+            self.view.stop()
 
 
 class BlackjackView(discord.ui.View):
