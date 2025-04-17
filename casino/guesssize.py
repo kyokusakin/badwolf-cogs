@@ -50,72 +50,69 @@ class GuessGame:
 
     def calculate_net_payout(self) -> int:
         """
-        Calculates the net win/loss based on the player's bet and dice result.
-        Returns:
-            Net amount won (positive) or lost (negative, typically -self.bet).
-            Returns 0 if dice haven't been rolled or no bet placed.
+        計算淨贏/虧損額，根據玩家下注與骰子結果。
+        回傳：
+            正數為贏得金額，負數為輸掉本金。
+            若未下注或未擲骰，則回傳 0。
         """
         if not self.dice_result or not self.player_bet:
-            log.warning(f"calculate_net_payout called with no dice ({self.dice_result}) or bet ({self.player_bet})")
-            return 0 # Or perhaps -self.bet if no bet means loss? Define behavior.
+            log.warning(f"calculate_net_payout called with no dice ({self.dice_result}), bet ({self.player_bet}), stake ({self.bet})")
+            return 0
 
         dice = self.dice_result
         dice_sum = sum(dice)
         counts = {i: dice.count(i) for i in range(1, 7)}
-        is_triple = len(counts) == 1 # Only one distinct number means it's a triple
-        is_double = len(counts) == 2 # Two distinct numbers means a double and a single
-        is_specific_triple = is_triple and dice[0] == self.player_bet.get("number")
-
+        unique_values = set(dice)
         bet_type = self.player_bet.get("type")
-        win_multiplier = 0 # Payout multiplier (e.g., 1 for 1:1, 30 for 30:1)
+        number = self.player_bet.get("number")
+        numbers = self.player_bet.get("numbers", [])
+
+        is_triple = len(unique_values) == 1
+        is_double = 2 in counts.values() and not is_triple
+        is_specific_triple = is_triple and dice[0] == number
+
+        win_multiplier = 0
 
         # --- Triple Bets ---
         if bet_type == "any_triple" and is_triple:
             win_multiplier = PAYOUT_ANY_TRIPLE
-        elif bet_type == "specific_triple" and is_specific_triple:
+        if bet_type == "specific_triple" and is_specific_triple:
             win_multiplier = PAYOUT_SPECIFIC_TRIPLE
 
-        # --- Standard Bets (Lose on any triple) ---
+        # --- Standard Bets ---
         if not is_triple:
             if bet_type == "small" and 4 <= dice_sum <= 10:
                 win_multiplier = PAYOUT_SMALL_LARGE
-            elif bet_type == "large" and 11 <= dice_sum <= 17:
+            if bet_type == "large" and 11 <= dice_sum <= 17:
                 win_multiplier = PAYOUT_SMALL_LARGE
-            elif bet_type == "odd" and dice_sum % 2 != 0:
+            if bet_type == "odd" and dice_sum % 2 != 0:
                 win_multiplier = PAYOUT_ODD_EVEN
-            elif bet_type == "even" and dice_sum % 2 == 0:
+            if bet_type == "even" and dice_sum % 2 == 0:
                 win_multiplier = PAYOUT_ODD_EVEN
 
-        # --- Double Bets ---
-        elif bet_type == "specific_double":
-            num = self.player_bet.get("number")
-            if counts.get(num, 0) >= 2: # Checks if the specific number appears at least twice
-                    win_multiplier = PAYOUT_SPECIFIC_DOUBLE
+        # --- Specific Double ---
+        if bet_type == "specific_double" and not is_triple:
+            if counts.get(number, 0) >= 2:
+                win_multiplier = PAYOUT_SPECIFIC_DOUBLE
 
-        # --- Combination Bets ---
-        elif bet_type == "two_dice_combo":
-            d1, d2 = self.player_bet.get("numbers", (None, None))
-            if d1 in dice and d2 in dice and len(set(dice)) >= 2:
+        # --- Two Dice Combo ---
+        if bet_type == "two_dice_combo" and not is_triple:
+            d1, d2 = numbers if len(numbers) == 2 else (None, None)
+            if d1 in dice and d2 in dice and d1 != d2:
                 win_multiplier = PAYOUT_TWO_DICE_COMBO
 
         # --- Specific Three Dice (Non-Triple) ---
-        elif bet_type == "three_dice_specific":
-             # Ensure it's not a triple and matches the specific numbers
-             if not is_triple and sorted(dice) == sorted(self.player_bet.get("numbers", [])):
-                 win_multiplier = PAYOUT_THREE_DICE_SPECIFIC
+        if bet_type == "three_dice_specific" and not is_triple:
+            if sorted(dice) == sorted(numbers):
+                win_multiplier = PAYOUT_THREE_DICE_SPECIFIC
 
-        # --- Straight (Example "光管" rule) ---
-        elif bet_type == "straight":
-             if not is_triple and not is_double: # Must be three distinct numbers
-                 s_dice = sorted(dice)
-                 if s_dice[0] + 1 == s_dice[1] and s_dice[1] + 1 == s_dice[2]:
-                     win_multiplier = PAYOUT_STRAIGHT
+        # --- Straight (e.g., 1-2-3, 4-5-6) ---
+        if bet_type == "straight" and len(unique_values) == 3 and not is_triple:
+            sorted_dice = sorted(dice)
+            if sorted_dice[0] + 1 == sorted_dice[1] and sorted_dice[1] + 1 == sorted_dice[2]:
+                win_multiplier = PAYOUT_STRAIGHT
 
-        # --- Calculate Net Result ---
-        if win_multiplier > 0:
-            return self.bet * win_multiplier # Net profit
-        else:
-            return -self.bet # Loss of stake
+        return self.bet * win_multiplier if win_multiplier > 0 else -self.bet
 
     def embed(self, title: str, desc: str, color: discord.Color = discord.Color.dark_grey()) -> discord.Embed:
         """Helper to create embeds."""
