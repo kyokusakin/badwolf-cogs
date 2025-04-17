@@ -1,5 +1,9 @@
 import discord
 from redbot.core import commands
+import logging
+from typing import Optional
+
+log = logging.getLogger("red.BadwolfCogs.casino.listener")
 
 class CasinoMessageListener:
     def __init__(self, bot: commands.Bot, cog: commands.Cog):
@@ -62,3 +66,4 @@ class CasinoMessageListener:
                 await ctx.invoke(self.cog.commands_cog.transfer, member=member, amount=amount)
             except Exception as e:
                 await message.channel.send("❌ 格式錯誤，請使用 `轉移 @使用者 金額`。")
+                log.error(f"轉移指令錯誤：{e}")
