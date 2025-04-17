@@ -8,29 +8,23 @@ from .blackjack import BlackjackGame
 from .guesssize import GuessGame
 from .slots import SlotGame
 from .listener import CasinoMessageListener
+from .command_casino import CasinoCommands
 
 log = logging.getLogger("red.BadwolfCogs.casino")
 
-class Casino(commands.Cog):
-    """綜合賭場插件，整合 21 點、猜大小（含猜單雙）與拉霸遊戲，並支援 on_message 觸發。"""
+class Casino(commands.Cog, CasinoCommands):
+    """綜合賭場插件"""
 
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
-        self.active_games = set()
         self.active_blackjack_games: dict[int, BlackjackGame] = {}
         self.active_guesssize_games: dict[int, GuessGame] = {}
         self.active_slots_games: dict[int, SlotGame] = {}
-        self.listener = CasinoMessageListener(bot, self, self.allowed_channel_ids)
+        self.listener = CasinoMessageListener(bot, self)
 
         default_user = {"balance": 1000}
         self.config.register_user(**default_user)
-        self.config.register_global(
-            guess_large_multiplier=1.8,
-            guess_small_multiplier=1.8,
-            guess_odd_multiplier=1.5,
-            guess_even_multiplier=1.5
-        )
         self.config.register_guild(allowed_channels=[])
 
         self.default_blackjack_bet = 100
@@ -40,13 +34,19 @@ class Casino(commands.Cog):
     # ——— 遊戲狀態管理 ————————————————————————
 
     def is_playing(self, user_id: int) -> bool:
-        return user_id in self.active_games
-
-    def start_game(self, user_id: int):
-        self.active_games.add(user_id)
+        return (
+            user_id in self.active_blackjack_games or
+            user_id in self.active_guesssize_games or
+            user_id in self.active_slots_games
+        )
 
     def end_game(self, user_id: int):
-        self.active_games.discard(user_id)
+        if user_id in self.active_blackjack_games:
+            del self.active_blackjack_games[user_id]
+        elif user_id in self.active_guesssize_games:
+            del self.active_guesssize_games[user_id]
+        elif user_id in self.active_slots_games:
+            del self.active_slots_games[user_id]
 
     async def get_balance(self, user: discord.Member) -> int:
         return await self.config.user(user).balance()
@@ -62,7 +62,7 @@ class Casino(commands.Cog):
     @commands.guild_only()
     @commands.command(name="blackjack")
     async def blackjack(self, ctx: commands.Context, bet: int = None):
-        """使用指令觸發 21 點遊戲。"""
+        """21 點"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -76,18 +76,18 @@ class Casino(commands.Cog):
             await ctx.send("你的餘額不足。")
             return
 
-        self.start_game(ctx.author.id)
         try:
             game = BlackjackGame(ctx, self, bet)
             self.active_blackjack_games[ctx.author.id] = game
             await game.start()
-        finally:
-            self.end_game(ctx.author.id)
+        except Exception as e:
+            log.error(f"啟動 21 點遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 21 點遊戲時發生錯誤，請稍後再試。")
 
     @commands.guild_only()
     @commands.command(name="guesssize")
     async def guesssize(self, ctx: commands.Context, bet: int = None):
-        """使用指令觸發猜大小遊戲（含猜單雙）。"""
+        """猜大小"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -101,18 +101,18 @@ class Casino(commands.Cog):
             await ctx.send("你的餘額不足。")
             return
 
-        self.start_game(ctx.author.id)
         try:
             game = GuessGame(ctx, self, bet)
             self.active_guesssize_games[ctx.author.id] = game
             await game.start()
-        finally:
-            self.end_game(ctx.author.id)
+        except Exception as e:
+            log.error(f"啟動 猜大小 遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 猜大小 遊戲時發生錯誤，請稍後再試。")
 
     @commands.guild_only()
     @commands.command(name="slots")
     async def slots(self, ctx: commands.Context, bet: int = None):
-        """使用指令觸發拉霸遊戲。"""
+        """拉霸"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -126,13 +126,13 @@ class Casino(commands.Cog):
             await ctx.send("你的餘額不足。")
             return
 
-        self.start_game(ctx.author.id)
         try:
             game = SlotGame(ctx, self, bet)
             self.active_slots_games[ctx.author.id] = game
             await game.start()
-        finally:
-            self.end_game(ctx.author.id)
+        except Exception as e:
+            log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
 
     # ——— 頻道白名單檢查 ———————————————————————
 
@@ -193,16 +193,17 @@ class Casino(commands.Cog):
             self.bot.loop.create_task(
                 game.ctx.send("⚠️ 插件已重新載入，你的 21 點 遊戲已中止並退還下注。")
             )
-        for game in self.active_guesssize_games.values():
-            self.bot.loop.create_task(
-                game.ctx.send("⚠️ 插件已重新載入，你的猜大小遊戲已中止並退還下注。")
-            )
-        for game in self.active_slots_games.values():
-            self.bot.loop.create_task(
-                game.ctx.send("⚠️ 插件已重新載入，你的拉霸遊戲已中止並退還下注。")
-            )
+        for game in list(self.active_guesssize_games.values()): # 使用 list 避免迭代時字典大小改變
+            if hasattr(game, 'ctx'):
+                self.bot.loop.create_task(
+                    game.ctx.send("⚠️ 插件已重新載入，你的猜大小遊戲已中止並退還下注。")
+                )
+        for game in list(self.active_slots_games.values()): # 使用 list 避免迭代時字典大小改變
+            if hasattr(game, 'ctx'):
+                self.bot.loop.create_task(
+                    game.ctx.send("⚠️ 插件已重新載入，你的拉霸遊戲已中止並退還下注。")
+                )
         self.active_blackjack_games.clear()
         self.active_guesssize_games.clear()
         self.active_slots_games.clear()
-        self.active_games.clear()
         log.info("Casino cog 已成功卸載，並清除所有遊戲資料。")

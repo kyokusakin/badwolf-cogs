@@ -2,18 +2,21 @@ import discord
 from redbot.core import commands
 
 class CasinoMessageListener:
-    def __init__(self, bot: commands.Bot, cog: commands.Cog, allowed_channel_ids: list[int]):
+    def __init__(self, bot: commands.Bot, cog: commands.Cog):
         self.bot = bot
         self.cog = cog
-        self.allowed_channel_ids = allowed_channel_ids
 
     async def handle_message(self, message: discord.Message):
         # 忽略 Bot 自己或非公會訊息
         if message.author.bot or not message.guild:
             return
 
+        # 檢查玩家是否正在進行遊戲
+        if self.cog.is_playing(message.author.id):
+            return
+
         # 限制頻道
-        if message.channel.id not in self.allowed_channel_ids:
+        if not await self.cog.is_allowed_channel(message):
             return
 
         content = message.content.strip().split()

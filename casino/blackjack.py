@@ -1,11 +1,14 @@
 import discord
 from redbot.core import commands
 import random
+import logging
 from typing import List, Optional, Union
 
 # 全域牌組模板
 RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', 'J', 'Q', 'K', 'A']
 SUITS = ['♠', '♥', '♦', '♣']
+
+log = logging.getLogger("red.BadwolfCogs.casino.Blackjack")
 
 class BlackjackGame:
     def __init__(
@@ -16,7 +19,7 @@ class BlackjackGame:
         double_totals: Optional[List[int]] = None
     ):
         # 初始時必填 ctx（Context 或者 Interaction）
-        self.ctx = ctx  
+        self.ctx = ctx
         self.cog = cog
         self.bet = bet
         self.double_totals = double_totals or [11]
@@ -25,6 +28,10 @@ class BlackjackGame:
         self.deck: List[str] = []
         self.message: Optional[discord.Message] = None
         self.doubled = False
+        #賠率
+        self.blackjack_payout_multiplier = 1.5
+        self.double_win_multiplier = 1.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
+        self.five_card_charlie_payout_multiplier = 2.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
 
     def build_deck(self) -> None:
         self.deck = [f"{s}{r}" for s in SUITS for r in RANKS]
@@ -75,8 +82,8 @@ class BlackjackGame:
 
         desc = (
             f"本輪下注: {self.bet} 狗幣\n\n"
-            f"你的牌:\n {', '.join(self.player_hand)} ({self.calc_total(self.player_hand)})\n\n"
-            f"莊家:\n {self.dealer_hand[0]} , ??"
+            f"你的牌:\n `{'  '.join(self.player_hand)}` \n你的點數: {self.calc_total(self.player_hand)}\n\n"
+            f"莊家:\n `{self.dealer_hand[0]}  ??`"
         )
         view = BlackjackView(self)
         embed = self.embed("21 點遊戲", desc)
@@ -90,13 +97,14 @@ class BlackjackGame:
     async def check_blackjack(self) -> bool:
         p_tot = self.calc_total(self.player_hand)
         d_tot = self.calc_total(self.dealer_hand)
+
         if p_tot == 21 or d_tot == 21:
             if p_tot == d_tot:
                 msg, round_delta, win = "平手，退回下注。", 0, None
                 await self.cog.update_balance(self.ctx.author, self.bet)
             elif p_tot == 21:
-                payout = int(self.bet * 1.5)
-                msg, round_delta, win = f"玩家 Blackjack！獲得 {payout}。", payout, True
+                payout = int(self.bet * self.blackjack_payout_multiplier)
+                msg, round_delta, win = f"玩家 Blackjack！", payout, True
                 await self.cog.update_balance(self.ctx.author, self.bet + payout)
             else:
                 msg, round_delta, win = "莊家 Blackjack，你輸了。", -self.bet, False
@@ -104,8 +112,8 @@ class BlackjackGame:
             total_balance = await self.cog.get_balance(self.ctx.author)
             desc = (
                 f"本輪下注: {self.bet} 狗幣\n\n"
-                f"你的牌:\n {', '.join(self.player_hand)} ({p_tot})\n\n"
-                f"莊家牌:\n {', '.join(self.dealer_hand)} ({d_tot})\n\n"
+                f"你的牌:\n `{'  '.join(self.player_hand)}` ({p_tot})\n\n"
+                f"莊家牌:\n `{'  '.join(self.dealer_hand)}` ({d_tot})\n\n"
                 f"{msg}\n"
                 f"本輪盈虧: {round_delta:+} 狗幣\n"
                 f"總狗幣: {total_balance}"
@@ -118,7 +126,7 @@ class BlackjackGame:
         """當玩家停牌或爆牌後的最終結算。"""
         if win is True:
             await self.cog.update_balance(self.ctx.author, self.bet + payout)
-            round_delta = self.bet + payout
+            round_delta = payout
         elif win is None:
             await self.cog.update_balance(self.ctx.author, self.bet)
             round_delta = 0
@@ -128,8 +136,8 @@ class BlackjackGame:
         total_balance = await self.cog.get_balance(self.ctx.author)
         desc = (
             f"本輪下注: {self.bet} 狗幣\n\n"
-            f"你的牌:\n {', '.join(self.player_hand)} ({self.calc_total(self.player_hand)})\n\n"
-            f"莊家牌:\n {', '.join(self.dealer_hand)} ({self.calc_total(self.dealer_hand)})\n\n"
+            f"你的牌:\n `{'  '.join(self.player_hand)}` \n你的點數: {self.calc_total(self.player_hand)}\n\n"
+            f"莊家牌:\n `{'  '.join(self.dealer_hand)}` \n莊家的點數: {self.calc_total(self.dealer_hand)}\n\n"
             f"{result}\n"
             f"本輪盈虧: {round_delta:+} 狗幣\n"
             f"總狗幣: {total_balance}"
@@ -171,13 +179,14 @@ class BlackjackView(discord.ui.View):
             await self.game.finalize("你爆牌了！", win=False)
             self.stop()
         elif len(self.game.player_hand) >= 5 and total <= 21:
-            await self.game.finalize("五龍勝利！賠率 2 倍。", win=True, payout=self.game.bet)
+            payout = int(self.game.bet * self.game.five_card_charlie_payout_multiplier)
+            await self.game.finalize(f"五龍勝利！", win=True, payout=payout)
             self.stop()
         else:
             desc = (
                 f"本輪下注: {self.game.bet} 狗幣\n\n"
-                f"你的牌:\n {', '.join(self.game.player_hand)} ({self.game.calc_total(self.game.player_hand)})\n\n"
-                f"莊家:\n {self.game.dealer_hand[0]}, ??"
+                f"你的牌:\n `{'  '.join(self.game.player_hand)}` \n你的點數: {self.game.calc_total(self.game.player_hand)}\n\n"
+                f"莊家:\n `{self.game.dealer_hand[0]}  ??`"
             )
             await interaction.response.edit_message(embed=self.game.embed("21 點遊戲", desc), view=self)
 
@@ -217,7 +226,7 @@ class BlackjackView(discord.ui.View):
         d_tot = self.game.calc_total(self.game.dealer_hand)
 
         if d_tot > 21 or p_tot > d_tot:
-            payout = self.game.bet * (2 if self.game.doubled else 1)
+            payout = self.game.bet * (self.game.double_win_multiplier if self.game.doubled else 1)
             await self.game.finalize(f"你贏了！{extra}", win=True, payout=payout)
         elif p_tot == d_tot:
             await self.game.finalize("平手，退回下注。", win=None)
@@ -230,7 +239,8 @@ class BlackjackView(discord.ui.View):
         if self.game.message:
             await self.game.message.edit(view=self)
         # 退還下注
-        refund = self.game.bet * (2 if self.game.doubled else 1)
+        refund_multiplier = 2 if self.game.doubled else 1
+        refund = self.game.bet * refund_multiplier
         await self.game.cog.update_balance(self.game.ctx.author, refund)
         await self.game.ctx.send(
             f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。"
