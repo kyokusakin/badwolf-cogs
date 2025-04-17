@@ -110,17 +110,16 @@ class BlackjackGame:
         elif d_blackjack:
             return "dealer"
         return None
-
     async def finalize(self, result: str, win: Optional[bool] = None, payout: int = 0):
         """當玩家停牌或爆牌後的最終結算。"""
         total_bet = self.bet * (2 if self.doubled else 1)
 
         if win is True:
-            total_gain = total_bet + payout
+            total_gain = total_bet + payout  # 包含下注本金與贏得的獎金
             await self.cog.update_balance(self.ctx.author, total_gain)
-            round_delta = total_gain - total_bet  # 淨賺 = 贏得 - 投注
+            round_delta = payout
         elif win is None:
-            await self.cog.update_balance(self.ctx.author, total_bet)
+            await self.cog.update_balance(self.ctx.author, total_bet)  # 平手退回本金
             round_delta = 0
         else:
             round_delta = -total_bet
@@ -219,7 +218,7 @@ class BlackjackView(discord.ui.View):
         d_tot = self.game.calc_total(self.game.dealer_hand)
 
         if d_tot > 21 or p_tot > d_tot:
-            payout = self.game.bet
+            payout = self.game.bet * (2 if self.game.doubled else 1)
             await self.game.finalize(f"你贏了！{extra}", win=True, payout=payout)
         elif p_tot == d_tot:
             await self.game.finalize("平手，退回下注。", win=None)
