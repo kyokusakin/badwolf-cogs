@@ -21,7 +21,7 @@ class CasinoCommands():
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
         """轉移籌碼給其他使用者。"""
         if member.id == ctx.author.id:
-            await ctx.send("你不能轉移籌碼給自己。")
+            await ctx.send("你不能轉移給自己。")
             return
         if amount <= 0:
             await ctx.send("轉移金額必須大於零。")
@@ -29,12 +29,12 @@ class CasinoCommands():
 
         sender_balance = await self.casino.get_balance(ctx.author)
         if sender_balance < amount:
-            await ctx.send("你的籌碼不足以轉移。")
+            await ctx.send("你的狗幣不足。")
             return
 
         await self.casino.update_balance(ctx.author, -amount)
         await self.casino.update_balance(member, amount)
-        await ctx.send(f"✅ 已成功轉移 💰 {amount} 籌碼給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
+        await ctx.send(f"✅ 已成功轉移 💰 {amount} 狗幣給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
     
     @commands.cooldown(1, 3600, commands.BucketType.user)
     @commands.command(name="work", aliases=["工作", "打工"])
