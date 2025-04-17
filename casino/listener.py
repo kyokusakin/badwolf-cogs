@@ -53,17 +53,17 @@ class CasinoMessageListener:
 
         # 金融類指令（balance、transfer、work、dogmeat）
         elif keyword in ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"]:
-            await ctx.invoke(self.cog.commands_cog.balance)
+            await ctx.invoke(self.cog.balance)
         elif keyword in ["工作", "打工", "work"]:
-            await ctx.invoke(self.cog.commands_cog.work)
+            await ctx.invoke(self.cog.work)
         elif keyword in ["賣狗肉", "賣狗哥", "dogmeat"]:
-            await ctx.invoke(self.cog.commands_cog.dogmeat)
+            await ctx.invoke(self.cog.dogmeat)
         elif keyword in ["V","轉帳","transfer"] and len(content) >= 3:
             try:
                 member_mention = content[1]
                 amount = int(content[2])
                 member = await commands.MemberConverter().convert(ctx, member_mention)
-                await ctx.invoke(self.cog.commands_cog.transfer, member=member, amount=amount)
+                await ctx.invoke(self.cog.transfer, member=member, amount=amount)
             except Exception as e:
                 await message.channel.send("❌ 格式錯誤，請使用 `轉移 @使用者 金額`。")
                 log.error(f"轉移指令錯誤：{e}")
