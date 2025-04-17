@@ -34,7 +34,7 @@ class CasinoCommands():
 
         await self.casino.update_balance(ctx.author, -amount)
         await self.casino.update_balance(member, amount)
-        await ctx.send(f"✅ 已成功轉移 💰 {amount} 籌碼給 {member.display_name}。 \n -# 感謝您使用狗窩中央銀行服務")
+        await ctx.send(f"✅ 已成功轉移 💰 {amount} 籌碼給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
     
     @commands.cooldown(1, 3600, commands.BucketType.user)
     @commands.command(name="work", aliases=["工作", "打工"])
