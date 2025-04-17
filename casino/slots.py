@@ -152,8 +152,8 @@ class SlotView(discord.ui.View):
     async def end_game(self, interaction: discord.Interaction):
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(view=self)
-        await interaction.followup.send("你已結束拉霸遊戲。")
+        await interaction.response.edit_message(view=None)
+        await interaction.followup.send("你已結束拉霸遊戲。", ephemeral=True)
         self.cleanup()
         self.stop()
 

@@ -145,7 +145,7 @@ class GuessGame:
         )
         self.view_instance = GuessView(self) # Create and store the view
         try:
-            self.message = await self.ctx.send(embed=embed, view=self.view_instance)
+            self.message = await self.ctx.reply(embed=embed, view=self.view_instance, mention_author=False)
             # Add to active games *only* after sending message successfully
             self.cog.active_guesssize_games[self.ctx.author.id] = self
         except (discord.HTTPException, discord.Forbidden) as e:
