@@ -99,14 +99,11 @@ class BlackjackGame:
 
         if p_tot == 21 or d_tot == 21:
             if p_tot == d_tot:
-                await self.update_balance(self.ctx.author, self.bet)
                 await self.finalize("平手，退回下注。", win=None)
             elif p_tot == 21:
-                payout = int(self.bet * self.blackjack_payout_multiplier)
-                await self.update_balance(self.ctx.author, self.bet + payout)
+                payout = int(self.bet * (self.blackjack_payout_multiplier + 1))
                 await self.finalize("玩家 Blackjack！", win=True, payout=payout)
             else:
-                await self.update_balance(self.ctx.author, -self.bet)
                 await self.finalize("莊家 Blackjack，你輸了。", win=False)
             return True
         return False
