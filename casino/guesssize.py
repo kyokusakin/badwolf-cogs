@@ -69,6 +69,12 @@ class GuessGame:
         bet_type = self.player_bet.get("type")
         win_multiplier = 0 # Payout multiplier (e.g., 1 for 1:1, 30 for 30:1)
 
+        # --- Triple Bets ---
+        if bet_type == "any_triple" and is_triple:
+            win_multiplier = PAYOUT_ANY_TRIPLE
+        elif bet_type == "specific_triple" and is_specific_triple:
+            win_multiplier = PAYOUT_SPECIFIC_TRIPLE
+
         # --- Standard Bets (Lose on any triple) ---
         if not is_triple:
             if bet_type == "small" and 4 <= dice_sum <= 10:
@@ -79,12 +85,6 @@ class GuessGame:
                 win_multiplier = PAYOUT_ODD_EVEN
             elif bet_type == "even" and dice_sum % 2 == 0:
                 win_multiplier = PAYOUT_ODD_EVEN
-
-        # --- Triple Bets ---
-        elif bet_type == "any_triple" and is_triple:
-            win_multiplier = PAYOUT_ANY_TRIPLE
-        elif bet_type == "specific_triple" and is_specific_triple:
-            win_multiplier = PAYOUT_SPECIFIC_TRIPLE
 
         # --- Double Bets ---
         elif bet_type == "specific_double":
