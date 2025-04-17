@@ -118,7 +118,7 @@ class BlackjackGame:
         if win is True:
             total_gain = total_bet + payout
             await self.cog.update_balance(self.ctx.author, total_gain)
-            round_delta = payout
+            round_delta = total_gain
         elif win is None:
             await self.cog.update_balance(self.ctx.author, total_bet)
             round_delta = 0
