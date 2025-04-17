@@ -15,7 +15,7 @@ class CasinoCommands():
         """查看你的或他人的籌碼數量。"""
         user = user or ctx.author
         balance = await self.casino.get_balance(user)
-        await ctx.send(f"{user.display_name} 擁有 💰 {balance} 籌碼。\n -# 感謝您使用狗窩中央銀行服務")
+        await ctx.send(f"{user.display_name} 擁有 💰 {balance} 籌碼。\n-# 感謝您使用狗窩中央銀行服務")
 
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
@@ -37,7 +37,7 @@ class CasinoCommands():
         await ctx.send(f"✅ 已成功轉移 💰 {amount} 籌碼給 {member.display_name}。 \n -# 感謝您使用狗窩中央銀行服務")
     
     @commands.cooldown(1, 3600, commands.BucketType.user)
-    @commands.command(name="work", aliases=["工作","打工"])
+    @commands.command(name="work", aliases=["工作", "打工"])
     async def work(self, ctx: commands.Context):
         """工作賺取籌碼，每小時可執行一次。"""
         base_income = 1000
@@ -52,19 +52,19 @@ class CasinoCommands():
             seconds = int(error.retry_after)
             minutes = seconds // 60
             remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-            await ctx.reply(f"你已經工作過了，請在 {remaining}後再試。")
+            await ctx.reply(f"你已經工作過了，請在 {remaining} 後再試。")
         else:
             raise error
-        
+
     @commands.cooldown(1, 86400, commands.BucketType.user)
     @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
     async def dogmeat(self, ctx: commands.Context):
-        """工作賺取籌碼，每小時可執行一次。"""
+        """賣狗肉賺取籌碼，每天可執行一次。"""
         base_income = 10000
         random_income = random.randint(500, 10000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.reply(f"賣EXE的肉賺取了 💰 {total_income} 狗幣！")
+        await ctx.reply(f"賣狗肉賺取了 💰 {total_income} 狗幣！")
 
     @dogmeat.error
     async def dogmeat_error(self, ctx: commands.Context, error):
@@ -72,6 +72,6 @@ class CasinoCommands():
             seconds = int(error.retry_after)
             minutes = seconds // 60
             remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-            await ctx.reply(f"你已經工作過了，請在 {remaining}後再試。")
+            await ctx.reply(f"你已經賣過狗肉了，請在 {remaining} 後再試。")
         else:
             raise error

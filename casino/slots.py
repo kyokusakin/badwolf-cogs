@@ -1,22 +1,55 @@
 import discord
 from redbot.core import commands
 import random
+from typing import List, Optional, Union
+import time
+import asyncio
 
 class SlotGame:
-    EMOJIS = [":cherries:", ":lemon:", ":grapes:", ":watermelon:", ":seven:"]
+    EMOJIS = [":skull:", ":cherries:", ":lemon:", ":grapes:", ":watermelon:", ":seven:"]
 
     def __init__(self, ctx: commands.Context, cog, bet: int):
         self.ctx = ctx
         self.cog = cog  # 主模組，提供更新餘額等方法
         self.bet = bet
         self.message = None
+        self.payouts = {
+            "three_same": {
+                ":cherries:": 0.5,
+                ":lemon:": 1,
+                ":grapes:": 5,
+                ":watermelon:": 10,
+                ":seven:": 30,
+            },
+            "two_same": {
+                ":cherries:": 0.2,
+                ":lemon:": 0.5,
+                ":grapes:": 1,
+                ":watermelon:": 2,
+                ":seven:": 5,
+            },
+        }
+        self.emoji_weights = {
+            ":skull:": 28,
+            ":cherries:": 30,
+            ":lemon:": 25,
+            ":grapes:": 20,
+            ":watermelon:": 15,
+            ":seven:": 5,
+        }
+        self.last_spin_time = {}  # Store last spin time for each user ID
+        self.spin_cooldown = 5  # Set the cooldown in seconds
+        self.total_profit = -self.bet
 
-    async def start(self):
-        # 直接扣除下注金額
+    async def start(self, ctx: Union[commands.Context, discord.Interaction] = None):
+        if ctx is not None:
+            self.ctx = ctx
+
+        # 扣款與初始牌，顯示下注
         await self.cog.update_balance(self.ctx.author, -self.bet)
         embed = discord.Embed(
             title="拉霸遊戲",
-            description="按下下面按鈕開始拉霸！",
+            description=f"下注金額：{self.bet}\n按下按鈕開始拉霸或結束遊戲！",
             color=discord.Color.gold()
         )
         view = SlotView(self)
@@ -28,7 +61,12 @@ class SlotGame:
             description=result_desc,
             color=discord.Color.gold()
         )
-        await self.message.edit(embed=embed, view=None)
+        if self.message:
+            view = SlotView(self) # Re-create the view with both buttons
+            await self.message.edit(embed=embed, view=view)
+        else:
+            view = SlotView(self)
+            self.message = await self.ctx.send(embed=embed, view=view)
 
 class SlotView(discord.ui.View):
     def __init__(self, game: SlotGame):
@@ -36,7 +74,10 @@ class SlotView(discord.ui.View):
         self.game = game
         self.spin_button = discord.ui.Button(label="Spin", style=discord.ButtonStyle.blurple)
         self.spin_button.callback = self.spin
+        self.end_button = discord.ui.Button(label="結束", style=discord.ButtonStyle.red)
+        self.end_button.callback = self.end_game
         self.add_item(self.spin_button)
+        self.add_item(self.end_button)
         self.message: discord.Message = None
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
@@ -46,30 +87,76 @@ class SlotView(discord.ui.View):
         return True
 
     async def spin(self, interaction: discord.Interaction):
-        # 禁用按鈕防止重複點擊
-        self.spin_button.disabled = True
-        await interaction.response.edit_message(view=self)
+        user_id = interaction.user.id
+        current_time = time.time()
+
+        if user_id in self.game.last_spin_time and current_time - self.game.last_spin_time[user_id] < self.game.spin_cooldown:
+            remaining_time = self.game.spin_cooldown - (current_time - self.game.last_spin_time[user_id])
+            await interaction.response.send_message(f"請稍後再試！冷卻時間還剩 {remaining_time:.1f} 秒。", ephemeral=True)
+            return
+
+        self.game.last_spin_time[user_id] = current_time
+
+        await interaction.response.defer(ephemeral=True)  # 顯示「正在思考」並防止觀眾看到
+        await interaction.message.edit(view=self)  # 更新消息，這是第一次回應
 
         # 隨機選出三個符號
-        result = [random.choice(self.game.EMOJIS) for _ in range(3)]
+        emojis = list(self.game.emoji_weights.keys())
+        weights = list(self.game.emoji_weights.values())
+        result = random.choices(emojis, weights=weights, k=3)
         result_str = " ".join(result)
         winnings = 0
+        result_desc_parts = [f"下注金額：{self.game.bet}", result_str]
 
-        if result.count(result[0]) == 3:
-            result_desc = f"{result_str}\n恭喜中大獎！你獲得 {self.game.bet * 3} 的獎金。"
-            winnings = self.game.bet * 3
-        elif any(result.count(emoji) == 2 for emoji in self.game.EMOJIS):
-            result_desc = f"{result_str}\n部分中獎！退回下注金額 {self.game.bet}。"
-            winnings = self.game.bet
+        # Check for three of the same
+        if result.count(":skull:") >= 2:
+            result_desc_parts.append("出現內務部！你損失了下注金額。")
+            winnings = -self.game.bet
+        elif result.count(result[0]) == 3:
+            emoji = result[0]
+            if emoji in self.game.payouts["three_same"]:
+                multiplier = self.game.payouts["three_same"][emoji]
+                winnings = self.game.bet * (1 + multiplier)
+                result_desc_parts.append(f"恭喜中大獎！你獲得 {winnings} 倍 ({winnings}) 的獎金。")
+            else:
+                result_desc_parts.append("發生錯誤：未知的賠率設定 (三個相同)。")
         else:
-            result_desc = f"{result_str}\n未中獎。"
+            # Check for two of the same
+            for emoji in self.game.EMOJIS:
+                if result.count(emoji) == 2:
+                    if emoji in self.game.payouts["two_same"]:
+                        multiplier = self.game.payouts["two_same"][emoji]
+                        winnings = self.game.bet * (1 + multiplier)
+                        result_desc_parts.append(f"部分中獎！你獲得 {multiplier} 倍 ({winnings}) 的獎金。")
+                        break  # Stop after finding the first pair
+            else:
+                result_desc_parts.append("未中獎。")
+                winnings = -self.game.bet  # No winnings, deduct the bet
 
+        self.game.total_profit += winnings
         await self.game.cog.update_balance(self.game.ctx.author, winnings)
-        await self.game.update_message(result_desc)
+        current_balance = await self.game.cog.get_balance(interaction.user)
+
+        result_desc_parts.append(f"總盈虧：{self.game.total_profit}")
+        result_desc_parts.append(f"總籌碼：{current_balance}")
+
+        await self.game.update_message("\n".join(result_desc_parts))
+        await interaction.message.edit(view=self)
+    
+
+    async def end_game(self, interaction: discord.Interaction):
+        for item in self.children:
+            item.disabled = True
+        await interaction.response.edit_message(view=self)
+        await interaction.followup.send("你已結束拉霸遊戲。")
+        self.cleanup()
         self.stop()
-        await interaction.response.defer()
+
+    def cleanup(self):
+        self.game.cog.end_game(self.game.ctx.author.id)
 
     async def on_timeout(self) -> None:
+        self.cleanup()
         if self.message:
             for item in self.children:
                 item.disabled = True
