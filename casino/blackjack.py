@@ -120,7 +120,7 @@ class BlackjackGame:
                 f"本輪盈虧: {round_delta:+} 狗幣\n"
                 f"總狗幣: {round(total_balance):,}"
             )
-            await self.ctx.send(embed=self.embed("遊戲結算", desc, win))
+            await self.message.edit(embed=self.embed("遊戲結算", desc, win))
             return True
         return False
 
