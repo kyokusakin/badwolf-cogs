@@ -16,13 +16,11 @@ class BlackjackGame:
         ctx: Union[commands.Context, discord.Interaction],
         cog,
         bet: int,
-        double_totals: Optional[List[int]] = None
     ):
         # 初始時必填 ctx（Context 或者 Interaction）
         self.ctx = ctx
         self.cog = cog
         self.bet = bet
-        self.double_totals = double_totals or [11]
         self.player_hand: List[str] = []
         self.dealer_hand: List[str] = []
         self.deck: List[str] = []
@@ -154,7 +152,7 @@ class BlackjackView(discord.ui.View):
         for item in self.children:
             if getattr(item, 'custom_id', None) == 'double':
                 total = self.game.calc_total(self.game.player_hand)
-                item.disabled = not (len(self.game.player_hand) == 2 and total in self.game.double_totals)
+                item.disabled = not (len(self.game.player_hand) == 2)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.game.ctx.author:
