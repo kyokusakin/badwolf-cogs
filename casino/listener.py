@@ -10,6 +10,10 @@ class CasinoMessageListener:
         # 忽略 Bot 自己或非公會訊息
         if message.author.bot or not message.guild:
             return
+        
+        ctx = await self.bot.get_context(message)
+        if ctx.valid:
+            return
 
         # 檢查玩家是否正在進行遊戲
         if self.cog.is_playing(message.author.id):
@@ -21,7 +25,7 @@ class CasinoMessageListener:
 
         content = message.content.strip().split()
         keyword = content[0]
-        if keyword not in ("21點", "猜大小", "拉霸"):
+        if not content:
             return
 
         ctx = await self.bot.get_context(message)
@@ -33,12 +37,28 @@ class CasinoMessageListener:
             try:
                 bet = int(content[1])
             except ValueError:
-                await message.channel.send("請輸入有效的下注金額。")
-                return
+                bet = None  # 僅部分指令需要數字，後面處理
 
-        if keyword == "21點":
+        # 遊戲類指令
+        if keyword in ["21點", "二十一點", "blackjack"]:
             await ctx.invoke(self.cog.blackjack, bet=bet)
-        elif keyword == "猜大小":
+        elif keyword in ["猜大小", "骰寶", "guesssize"]:
             await ctx.invoke(self.cog.guesssize, bet=bet)
-        elif keyword == "拉霸":
+        elif keyword in ["拉霸", "slots"]:
             await ctx.invoke(self.cog.slots, bet=bet)
+
+        # 金融類指令（balance、transfer、work、dogmeat）
+        elif keyword in ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"]:
+            await ctx.invoke(self.cog.commands_cog.balance)
+        elif keyword in ["工作", "打工", "work"]:
+            await ctx.invoke(self.cog.commands_cog.work)
+        elif keyword in ["賣狗肉", "賣狗哥", "dogmeat"]:
+            await ctx.invoke(self.cog.commands_cog.dogmeat)
+        elif keyword in ["V","轉帳","transfer"] and len(content) >= 3:
+            try:
+                member_mention = content[1]
+                amount = int(content[2])
+                member = await commands.MemberConverter().convert(ctx, member_mention)
+                await ctx.invoke(self.cog.commands_cog.transfer, member=member, amount=amount)
+            except Exception as e:
+                await message.channel.send("❌ 格式錯誤，請使用 `轉移 @使用者 金額`。")
