@@ -10,7 +10,7 @@ log = logging.getLogger("red.BadwolfCogs.casino.GuessGame")
 # --- Payout Constants (Adjust values based on your desired rules) ---
 # Standard Bets
 PAYOUT_SMALL_LARGE = 1  # 1:1 payout
-PAYOUT_ODD_EVEN = 1     # 1:1 payout
+PAYOUT_ODD_EVEN = 0.8     # 1:1 payout
 
 # Triples
 PAYOUT_ANY_TRIPLE = 24     # Common payout is 30:1 or 24:1
