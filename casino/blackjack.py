@@ -90,8 +90,6 @@ class BlackjackGame:
         # 如果有自然 Blackjack，就結算並清理
         if await self.check_blackjack():
             await self.message.edit(embed=embed, view=None)
-            self.cleanup()
-            return
 
     async def check_blackjack(self) -> bool:
         p_tot = self.calc_total(self.player_hand)
