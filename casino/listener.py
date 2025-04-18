@@ -27,7 +27,7 @@ class CasinoMessageListener:
             "balance": ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"],
             "work": ["工作", "打工", "work"],
             "dogmeat": ["賣狗肉", "賣狗哥", "dogmeat"],
-            "transfer": ["轉移", "轉帳", "transfer"], # transfer 關鍵字
+            "transfer": ["轉移", "轉帳", "transfer", "V"], # transfer 關鍵字
         }
 
     async def _trigger_command_by_keyword(self, message: discord.Message, command_name: str):
