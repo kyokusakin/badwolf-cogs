@@ -34,7 +34,7 @@ class CasinoCommands():
 
         await self.casino.update_balance(ctx.author, -amount)
         await self.casino.update_balance(member, amount)
-        await ctx.send(f"✅ 已成功轉移 💰 {amount} 狗幣給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
+        await ctx.send(f"✅ 已成功轉移 💰 {amount:,} 狗幣給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
     
     @commands.cooldown(1, 3600, commands.BucketType.user)
     @commands.command(name="work", aliases=["工作", "打工"])
@@ -44,7 +44,7 @@ class CasinoCommands():
         random_income = random.randint(100, 1000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.reply(f"你工作賺取了 💰 {total_income} 狗幣！")
+        await ctx.reply(f"你工作賺取了 💰 {total_income:,} 狗幣！")
 
     @work.error
     async def work_error(self, ctx: commands.Context, error):
@@ -64,7 +64,7 @@ class CasinoCommands():
         random_income = random.randint(500, 10000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.reply(f"賣狗肉賺取了 💰 {total_income} 狗幣！")
+        await ctx.reply(f"賣狗肉賺取了 💰 {total_income:,} 狗幣！")
 
     @dogmeat.error
     async def dogmeat_error(self, ctx: commands.Context, error):

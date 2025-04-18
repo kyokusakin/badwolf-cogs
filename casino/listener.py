@@ -10,60 +10,64 @@ class CasinoMessageListener:
         self.bot = bot
         self.cog = cog
 
+        # 指令關鍵字映射表：指令名稱 → 關鍵字集合
+        self.keyword_command_map = {
+            "blackjack": ["21點", "二十一點", "blackjack"],
+            "guesssize": ["猜大小", "骰寶", "guesssize"],
+            "slots": ["拉霸", "slots"],
+            "balance": ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"],
+            "work": ["工作", "打工", "work"],
+            "dogmeat": ["賣狗肉", "賣狗哥", "dogmeat"],
+        }
+
+    async def _trigger_command_by_keyword(self, message: discord.Message, command_name: str):
+        prefix = (await self.bot.get_prefix(message))[0]
+        message.content = f"{prefix}{command_name}"
+        await self.bot.process_commands(message)
+
     async def handle_message(self, message: discord.Message):
-        # 忽略 Bot 自己或非公會訊息
         if message.author.bot or not message.guild:
             return
-        
+
         ctx = await self.bot.get_context(message)
         if ctx.valid:
             return
 
-        # 檢查玩家是否正在進行遊戲
         if self.cog.is_playing(message.author.id):
             return
 
-        # 限制頻道
         if not await self.cog.is_allowed_channel(message):
             return
 
         content = message.content.strip().split()
-        keyword = content[0]
         if not content:
             return
 
-        ctx = await self.bot.get_context(message)
-        if ctx.valid:
-            return
+        keyword = content[0].lower()
 
-        bet = None
-        if len(content) > 1:
-            try:
-                bet = int(content[1])
-            except ValueError:
-                bet = None  # 僅部分指令需要數字，後面處理
+        # 處理對應指令關鍵字（統一處理）
+        for command_name, keywords in self.keyword_command_map.items():
+            if keyword in keywords:
+                # 有下注類型的遊戲：blackjack、guesssize、slots
+                if command_name in ["blackjack", "guesssize", "slots"]:
+                    bet = None
+                    if len(content) > 1:
+                        try:
+                            bet = int(content[1])
+                        except ValueError:
+                            bet = None
+                    await ctx.invoke(getattr(self.cog, command_name), bet=bet)
+                else:
+                    await self._trigger_command_by_keyword(message, command_name)
+                return  # 成功處理後結束
 
-        # 遊戲類指令
-        if keyword in ["21點", "二十一點", "blackjack"]:
-            await ctx.invoke(self.cog.blackjack, bet=bet)
-        elif keyword in ["猜大小", "骰寶", "guesssize"]:
-            await ctx.invoke(self.cog.guesssize, bet=bet)
-        elif keyword in ["拉霸", "slots"]:
-            await ctx.invoke(self.cog.slots, bet=bet)
-
-        # 金融類指令（balance、transfer、work、dogmeat）
-        elif keyword in ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"]:
-            await ctx.invoke(self.cog.balance)
-#        elif keyword in ["工作", "打工", "work"]:
-#            await ctx.invoke(self.cog.work)
-#        elif keyword in ["賣狗肉", "賣狗哥", "dogmeat"]:
-#            await ctx.invoke(self.cog.dogmeat)
-        elif keyword in ["V","轉帳","transfer"] and len(content) >= 3:
+        # 特殊處理：轉帳
+        if keyword in ["V", "轉帳", "transfer"] and len(content) >= 3:
             try:
                 member_mention = content[1]
                 amount = int(content[2])
                 member = await commands.MemberConverter().convert(ctx, member_mention)
                 await ctx.invoke(self.cog.transfer, member=member, amount=amount)
             except Exception as e:
-                await message.channel.send("❌ 格式錯誤，請使用 `轉移 @使用者 金額`。")
-                log.error(f"轉移指令錯誤：{e}")
+                await message.channel.send("❌ 格式錯誤，請使用 `轉帳 @使用者 金額`。")
+                log.error(f"轉帳指令錯誤：{e}")

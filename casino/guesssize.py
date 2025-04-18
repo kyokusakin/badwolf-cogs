@@ -188,18 +188,21 @@ class GuessGame:
             log.error(f"Failed to get balance on finalize for {self.ctx.author.id}: {e}", exc_info=True)
             total_balance = "錯誤"
 
-
-        dice_faces = {1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6"}
+     
+        dice_faces = {1: "1⚀", 2: "2⚁", 3: "3⚂", 4: "4⚃", 5: "5⚄", 6: "6⚅"}
         dice_result_display = " ".join(dice_faces.get(die, str(die)) for die in self.dice_result) if self.dice_result else "錯誤"
         dice_sum_display = sum(self.dice_result) if self.dice_result else "N/A"
 
         desc = (
-            f"您的總投注：{self.bet} 狗幣\n"
-            f"您的選擇： {self.get_player_bet_display()}\n\n"
-            f"骰子結果： {dice_result_display}\n"
-            f"總點數： {dice_sum_display}\n\n"
-            f"本輪淨輸贏： {net_payout:+} 狗幣\n"
-            f"總狗幣： {total_balance}"
+            "🎰 **拉霸機結果** 🎰\n"
+            "━━━━━━━━━━━━━━━\n"
+            f"🎟 **您的總投注**： {self.bet} 狗幣\n"
+            f"🎯 **您的選擇**： {self.get_player_bet_display()}\n\n"
+            f"🎲 骰子： {dice_result_display}\n"
+            f"🧮 總點數： **{dice_sum_display}**\n\n"
+            f"💰 **本輪淨輸贏**： `{net_payout:+,}`狗幣\n"
+            f"💼 **剩餘狗幣**： `{total_balance:,}`\n\n"
+            "━━━━━━━━━━━━━━━"
         )
 
         color = discord.Color.red() # Default loss

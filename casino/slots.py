@@ -142,7 +142,7 @@ class SlotView(discord.ui.View):
         self.game.total_profit += winnings
         await self.game.cog.update_balance(self.game.ctx.author, winnings)
         new_bal = await self.game.cog.get_balance(self.game.ctx.author)
-        parts.extend([f"總盈虧：{self.game.total_profit}", f"總籌碼：{new_bal}"])
+        parts.extend([f"總盈虧：{self.game.total_profit:,}", f"總籌碼：{new_bal:,}"])
 
         await self.game.update_message("\n".join(parts))
 

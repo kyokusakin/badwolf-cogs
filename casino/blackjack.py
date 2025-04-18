@@ -81,12 +81,17 @@ class BlackjackGame:
         
 
         desc = (
-            f"本輪下注: {self.bet} 狗幣\n\n"
-            f"你的牌:\n `{'  '.join(self.player_hand)}` \n你的點數: {self.calc_total(self.player_hand)}\n\n"
-            f"莊家:\n `{self.dealer_hand[0]}  ??`"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🪙 本輪下注：{self.bet:,} 狗幣\n\n"
+            f"🧑 你的手牌：\n"
+            f"`{'  '.join(self.player_hand)}`\n"
+            f"🧮 玩家點數：**{self.calc_total(self.player_hand)}**\n\n"
+            f"🃏 莊家的手牌：\n"
+            f"`{self.dealer_hand[0]}  ??`\n"
+            "━━━━━━━━━━━━━━━━━━━━"
         )
         view = BlackjackView(self)
-        embed = self.embed("21 點遊戲", desc)
+        embed = self.embed("🎴 **Blackjack 21點** 🎴", desc)
         self.message = await self.ctx.reply(embed=embed, view=self.view, mention_author=False)
 
         blackjack_result = await self.check_blackjack()
@@ -129,14 +134,20 @@ class BlackjackGame:
 
         total_balance = await self.cog.get_balance(self.ctx.author)
         desc = (
-            f"本輪下注: {total_bet} 狗幣\n\n"
-            f"你的牌:\n `{'  '.join(self.player_hand)}` \n你的點數: {self.calc_total(self.player_hand)}\n\n"
-            f"莊家牌:\n `{'  '.join(self.dealer_hand)}` \n莊家的點數: {self.calc_total(self.dealer_hand)}\n\n"
-            f"{result}\n"
-            f"本輪盈虧: {round_delta:+} 狗幣\n"
-            f"總狗幣: {round(total_balance):,}"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            f"🪙 本輪下注: {total_bet} 狗幣\n\n"
+            f"🧑 你的手牌：\n"
+            f"`{'  '.join(self.player_hand)}`\n"
+            f"🧮 玩家點數：**{self.calc_total(self.player_hand)}**\n\n"
+            f"🃏 莊家的手牌：\n"
+            f"`{'  '.join(self.dealer_hand)}`\n"
+            f"🧮 莊家點數：**{self.calc_total(self.dealer_hand)}**\n\n"
+            f"📢 結果：{result}\n"
+            f"💰 本輪盈虧：{round_delta:+,} 狗幣\n"
+            f"💼 目前總餘額：{round(total_balance):,} 狗幣\n"
+            "━━━━━━━━━━━━━━━━━━━━"
         )
-        embed = self.embed("遊戲結束", desc, win)
+        embed = self.embed("🏁 **遊戲結束** 🏁", desc, win)
         if self.message:
             await self.message.edit(embed=embed, view=None)
         else:
@@ -180,9 +191,14 @@ class BlackjackView(discord.ui.View):
             self.stop()
         else:
             desc = (
-                f"本輪下注: {self.game.bet} 狗幣\n\n"
-                f"你的牌:\n `{'  '.join(self.game.player_hand)}` \n你的點數: {self.game.calc_total(self.game.player_hand)}\n\n"
-                f"莊家:\n `{self.game.dealer_hand[0]}  ??`"
+                "━━━━━━━━━━━━━━━━━━━━\n"
+                f"🪙 本輪下注：{self.game.bet:,} 狗幣\n\n"
+                f"🧑 你的手牌：\n"
+                f"`{'  '.join(self.game.player_hand)}`\n"
+                f"🧮 玩家點數：**{self.game.calc_total(self.game.player_hand)}**\n\n"
+                f"🃏 莊家的手牌：\n"
+                f"`{self.game.dealer_hand[0]}  ??`\n"
+                "━━━━━━━━━━━━━━━━━━━━"
             )
             await interaction.response.edit_message(embed=self.game.embed("21 點遊戲", desc), view=self)
 
