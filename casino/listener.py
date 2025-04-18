@@ -46,6 +46,16 @@ class CasinoMessageListener:
         keyword = content[0].lower()
 
         # 處理對應指令關鍵字（統一處理）
+        if keyword in ["V", "轉帳", "transfer"] and len(content) >= 3:
+            try:
+                member_mention = content[1]
+                amount = int(content[2])
+                member = await commands.MemberConverter().convert(ctx, member_mention)
+                await ctx.invoke(self.cog.transfer, member=member, amount=amount)
+            except Exception as e:
+                await message.channel.send("❌ 格式錯誤，請使用 `轉帳 @使用者 金額`。")
+                log.error(f"轉帳指令錯誤：{e}")
+        
         for command_name, keywords in self.keyword_command_map.items():
             if keyword in keywords:
                 # 有下注類型的遊戲：blackjack、guesssize、slots
@@ -59,15 +69,4 @@ class CasinoMessageListener:
                     await ctx.invoke(getattr(self.cog, command_name), bet=bet)
                 else:
                     await self._trigger_command_by_keyword(message, command_name)
-                return  # 成功處理後結束
-
-        # 特殊處理：轉帳
-        if keyword in ["V", "轉帳", "transfer"] and len(content) >= 3:
-            try:
-                member_mention = content[1]
-                amount = int(content[2])
-                member = await commands.MemberConverter().convert(ctx, member_mention)
-                await ctx.invoke(self.cog.transfer, member=member, amount=amount)
-            except Exception as e:
-                await message.channel.send("❌ 格式錯誤，請使用 `轉帳 @使用者 金額`。")
-                log.error(f"轉帳指令錯誤：{e}")
+                return
