@@ -1,5 +1,7 @@
 import discord
 import random
+import time
+import aiosqlite
 from redbot.core import commands, Config
 from redbot.core.bot import Red
 
@@ -9,6 +11,56 @@ class CasinoCommands():
     def __init__(self, bot: Red, casino_cog):
         self.bot = bot
         self.casino = casino_cog
+        self.db_path = "casino.db"
+        self.connection = None
+        bot.loop.create_task(self.initialize_db())
+
+    async def initialize_db(self):
+        """初始化資料庫連接"""
+        self.connection = await aiosqlite.connect(self.db_path)
+        await self.connection.execute('''
+            CREATE TABLE IF NOT EXISTS cooldowns (
+                user_id INTEGER,
+                command_name TEXT,
+                expires_at REAL,
+                bucket_type TEXT,
+                PRIMARY KEY (user_id, command_name)
+            )
+        ''')
+        await self.connection.commit()
+
+    async def cog_unload(self):
+        """Cog卸載時關閉資料庫連接"""
+        await self.connection.close()
+
+    async def get_cooldown(self, user_id: int, command_name: str) -> float:
+        """從資料庫獲取冷卻時間"""
+        async with self.connection.execute(
+            "SELECT expires_at FROM cooldowns WHERE user_id = ? AND command_name = ?",
+            (user_id, command_name)
+        ) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                expires_at = row[0]
+                current_time = time.time()
+                if expires_at > current_time:
+                    return expires_at
+                else:
+                    await self.connection.execute(
+                        "DELETE FROM cooldowns WHERE user_id = ? AND command_name = ?",
+                        (user_id, command_name)
+                    )
+                    await self.connection.commit()
+        return None
+
+    async def set_cooldown(self, user_id: int, command_name: str, duration: float, bucket_type: commands.BucketType):
+        """設置冷卻時間到資料庫"""
+        expires_at = time.time() + duration
+        await self.connection.execute(
+            "REPLACE INTO cooldowns (user_id, command_name, expires_at, bucket_type) VALUES (?, ?, ?, ?)",
+            (user_id, command_name, expires_at, bucket_type.name.lower())
+        )
+        await self.connection.commit()
 
     @commands.command(name="balance", aliases=["餘額", "查詢餘額", "狗幣", "籌碼"])
     async def balance(self, ctx: commands.Context, user: discord.Member = None):
@@ -36,42 +88,56 @@ class CasinoCommands():
         await self.casino.update_balance(member, amount)
         await ctx.send(f"✅ 已成功轉移 💰 {amount:,} 狗幣給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
     
-    @commands.cooldown(1, 3600, commands.BucketType.user)
     @commands.command(name="work", aliases=["工作", "打工"])
     async def work(self, ctx: commands.Context):
         """工作賺取籌碼，每小時可執行一次。"""
+        user_id = ctx.author.id
+        command_name = "work"
+
+        # 檢查冷卻
+        expires_at = await self.get_cooldown(user_id, command_name)
+        if expires_at:
+            remaining = expires_at - time.time()
+            if remaining > 0:
+                seconds = int(remaining)
+                minutes = seconds // 60
+                remaining_str = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
+                await ctx.reply(f"你已經工作過了，請在 {remaining_str} 後再試。")
+                return
+
+        # 執行工作邏輯
         base_income = 1000
         random_income = random.randint(100, 1000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
         await ctx.reply(f"你工作賺取了 💰 {total_income:,} 狗幣！")
 
-    @work.error
-    async def work_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            seconds = int(error.retry_after)
-            minutes = seconds // 60
-            remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-            await ctx.reply(f"你已經工作過了，請在 {remaining} 後再試。")
-        else:
-            raise error
+        # 設置冷卻
+        await self.set_cooldown(user_id, command_name, 3600, commands.BucketType.user)
 
-    @commands.cooldown(1, 86400, commands.BucketType.user)
     @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
     async def dogmeat(self, ctx: commands.Context):
         """賣狗肉賺取籌碼，每天可執行一次。"""
-        base_income = 10000
+        user_id = ctx.author.id
+        command_name = "dogmeat"
+        
+        # 檢查冷卻
+        expires_at = await self.get_cooldown(user_id, command_name)
+        if expires_at:
+            remaining = expires_at - time.time()
+            if remaining > 0:
+                seconds = int(remaining)
+                minutes = seconds // 60
+                remaining_str = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
+                await ctx.reply(f"你已經工作過了，請在 {remaining_str} 後再試。")
+                return
+
+        # 執行賣狗肉邏輯
+        base_income = 8000
         random_income = random.randint(500, 10000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.reply(f"賣狗肉賺取了 💰 {total_income:,} 狗幣！")
+        await ctx.reply(f"賣狗哥賺取了 💰 {total_income:,} 狗幣！")
 
-    @dogmeat.error
-    async def dogmeat_error(self, ctx: commands.Context, error):
-        if isinstance(error, commands.CommandOnCooldown):
-            seconds = int(error.retry_after)
-            minutes = seconds // 60
-            remaining = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-            await ctx.reply(f"你已經賣過狗肉了，請在 {remaining} 後再試。")
-        else:
-            raise error
+        # 設置冷卻
+        await self.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
