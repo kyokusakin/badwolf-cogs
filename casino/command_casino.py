@@ -2,7 +2,7 @@ import discord
 import random
 import time
 import aiosqlite
-from redbot.core import commands, Config
+from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
 
 class CasinoCommands():
@@ -11,7 +11,7 @@ class CasinoCommands():
     def __init__(self, bot: Red, casino_cog):
         self.bot = bot
         self.casino = casino_cog
-        self.db_path = "casino.db"
+        self.db_path = data_manager.cog_data_path(type(casino_cog)) / "casino.db"
         self.connection = None
         bot.loop.create_task(self.initialize_db())
 
