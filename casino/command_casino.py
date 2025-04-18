@@ -15,7 +15,7 @@ class CasinoCommands():
         """查看你的或他人的籌碼數量。"""
         user = user or ctx.author
         balance = await self.casino.get_balance(user)
-        await ctx.send(f"{user.display_name} 擁有 💰 {balance} 籌碼。\n-# 感謝您使用狗窩中央銀行服務")
+        await ctx.send(f"{user.display_name} 擁有 💰 {balance:,} 籌碼。\n-# 感謝您使用狗窩中央銀行服務")
 
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
