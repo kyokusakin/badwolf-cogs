@@ -23,8 +23,7 @@ class StatsDatabase:
     async def initialize_db(self):
         """初始化統計數據庫表結構"""
         self.connection = await aiosqlite.connect(self.db_path)
-        
-        # 創建總體統計表
+
         await self.connection.execute('''
             CREATE TABLE IF NOT EXISTS user_stats (
                 user_id INTEGER PRIMARY KEY,
@@ -36,7 +35,6 @@ class StatsDatabase:
             )
         ''')
         
-        # 創建遊戲分類統計表
         await self.connection.execute('''
             CREATE TABLE IF NOT EXISTS game_stats (
                 user_id INTEGER,
@@ -57,7 +55,6 @@ class StatsDatabase:
     async def update_stats(self, user_id: int, game_type: str, bet: int, profit: int):
         """原子化更新統計數據"""
         async with self.connection.cursor() as cursor:
-            # 更新總體統計
             await cursor.execute('''
                 INSERT INTO user_stats (user_id, total_bet, total_wins, total_losses, total_profit, total_games)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -75,8 +72,7 @@ class StatsDatabase:
                 profit,
                 1
             ))
-            
-            # 更新遊戲分類統計
+
             await cursor.execute('''
                 INSERT INTO game_stats (user_id, game_type, bet, wins, losses, profit, games)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -103,7 +99,6 @@ class StatsDatabase:
         stats = {"total": {}, "games": {}}
         
         async with self.connection.cursor() as cursor:
-            # 獲取總體統計
             await cursor.execute(
                 "SELECT * FROM user_stats WHERE user_id = ?",
                 (user_id,)
@@ -118,7 +113,6 @@ class StatsDatabase:
                     "games": total_data[5]
                 }
             
-            # 獲取各遊戲統計
             await cursor.execute(
                 "SELECT * FROM game_stats WHERE user_id = ?",
                 (user_id,)

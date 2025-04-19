@@ -148,7 +148,7 @@ class GuessGame:
 
     async def finalize(self, result_desc: str, net_payout: int):
         """
-        Finalizes the game: updates balance, edits message, cleans up.
+        Finalizes the game: updates balance, edits message, cleans up, and updates stats.
         net_payout: The net amount won (positive) or lost (negative).
         """
         if self._finalized:
@@ -169,25 +169,39 @@ class GuessGame:
                 result_desc += "\n**(餘額更新失敗)**"
 
         try:
-            total_balance = await self.cog.get_balance(self.ctx.author)
+            # 確保顯示的餘額是整數
+            total_balance = int(await self.cog.get_balance(self.ctx.author))
         except Exception as e:
             log.error(f"Failed to get balance on finalize for {self.ctx.author.id}: {e}", exc_info=True)
             total_balance = "錯誤"
 
-     
+        # --- 新增的統計數據更新部分 ---
+        try:
+            await self.cog.stats_db.update_stats(
+                self.ctx.author.id,
+                'guesssize',  # 遊戲類型
+                self.bet,      # 下注金額
+                net_payout    # 淨盈虧
+            )
+            log.debug(f"Stats updated for user {self.ctx.author.id}, game 'guesssize', bet {self.bet}, profit {net_payout}")
+        except Exception as e:
+            log.error(f"Failed to update stats for user {self.ctx.author.id}: {e}", exc_info=True)
+            result_desc += "\n**(統計更新失敗)**" # 可以選擇是否顯示給使用者
+        # --- 新增部分結束 ---
+
         dice_faces = {1: "1⚀", 2: "2⚁", 3: "3⚂", 4: "4⚃", 5: "5⚄", 6: "6⚅"}
         dice_result_display = " ".join(dice_faces.get(die, str(die)) for die in self.dice_result) if self.dice_result else "錯誤"
         dice_sum_display = sum(self.dice_result) if self.dice_result else "N/A"
 
         desc = (
-            "🎰 **拉霸機結果** 🎰\n"
+            "🎰 **猜大小遊戲結果 (骰寶)** 🎰\n" # 標題稍微修改以符合遊戲
             "━━━━━━━━━━━━━━━\n"
-            f"🎟 **您的總投注**： {self.bet} 狗幣\n"
+            f"🎟 **您的總投注**： {self.bet:,} 狗幣\n" # 增加千位分隔符
             f"🎯 **您的選擇**： {self.get_player_bet_display()}\n\n"
             f"🎲 骰子： {dice_result_display}\n"
             f"🧮 總點數： **{dice_sum_display}**\n\n"
             f"💰 **本輪淨輸贏**： `{net_payout:+,}`狗幣\n"
-            f"💼 **剩餘狗幣**： `{total_balance:,}`\n\n"
+            f"💼 **剩餘狗幣**： `{total_balance:,}`\n\n" # 確保這裡也使用整數顯示
             "━━━━━━━━━━━━━━━"
         )
 
@@ -197,7 +211,8 @@ class GuessGame:
         elif net_payout == 0 :
              color = discord.Color.grey()
 
-        embed = self.embed("猜大小遊戲結果 (骰寶)", desc, color)
+        # Embed 標題使用參數傳入的 result_desc，但描述使用我們自己構建的 desc
+        embed = self.embed(f"🎲 {result_desc}", desc, color)
 
         if self.message:
             try:
@@ -504,6 +519,6 @@ class DiceBetModal(discord.ui.Modal):
         await self.game.cog.update_balance(self.game.ctx.author, refund)
         await self.game.ctx.send(
             f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
-            f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
+            f"目前總狗幣: {int(await self.game.cog.get_balance(self.game.ctx.author)):,}"
         )
         self.game.cog.end_game(self.game.ctx.author.id)

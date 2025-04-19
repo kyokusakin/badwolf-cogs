@@ -3,6 +3,9 @@ from redbot.core import commands
 import random
 from typing import Union
 import time
+import logging
+
+log = logging.getLogger("red.BadwolfCogs.casino.slots")
 
 class SlotGame:
     EMOJIS = [":skull:", ":cherries:", ":lemon:",":strawberry:" ,":tangerine:" , ":grapes:", ":watermelon:", ":seven:"]
@@ -160,18 +163,29 @@ class SlotView(discord.ui.View):
             else:
                 result_text.append("😢 未中獎")
 
-        # 扣款與返還處理
+        actual_profit_loss = 0
         if winnings > 0:
-            # 返還本注並發放獎金
             payout = self.game.bet + winnings
             await self.game.cog.update_balance(self.game.ctx.author, payout)
-            self.game.total_profit += winnings
+            actual_profit_loss = winnings
         else:
-            # 未中獎或沒收本注
             await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
-            self.game.total_profit -= self.game.bet
+            actual_profit_loss = -self.game.bet
 
-        new_bal = await self.game.cog.get_balance(self.game.ctx.author)
+        self.game.total_profit += actual_profit_loss
+
+        try:
+            await self.game.cog.stats_db.update_stats(
+                user_id,
+                'slots',
+                self.game.bet,
+                actual_profit_loss
+            )
+            log.debug(f"Stats updated for user {user_id}, game 'slots', bet {self.game.bet}, profit {actual_profit_loss}")
+        except Exception as e:
+            log.error(f"Failed to update stats for user {user_id}: {e}", exc_info=True)
+
+        new_bal = int(await self.game.cog.get_balance(interaction.user))
 
         # 構建嵌入訊息
         embed = discord.Embed(
@@ -187,7 +201,7 @@ class SlotView(discord.ui.View):
         result_info = [
             f"• 本次下注: {self.game.bet:,} 籌碼",
             f"• 獲得獎金: {winnings:,} 籌碼",
-            f"• 累計盈虧: {self.game.total_profit:,} 籌碼",
+            f"• 累計盈虧: {self.game.total_profit:,} 籌碼", # 這裡顯示的是當前遊戲會話的累計盈虧
             *result_text
         ]
         embed.add_field(

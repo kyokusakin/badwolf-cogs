@@ -84,10 +84,10 @@ class BlackjackGame:
             "━━━━━━━━━━━━━━━━━━━━\n"
             f"🪙 本輪下注：{self.bet:,} 狗幣\n\n"
             f"🧑 你的手牌：\n"
-            f"`{'  '.join(self.player_hand)}`\n"
+            f"{'  '.join(self.player_hand)}\n"
             f"🧮 玩家點數：**{self.calc_total(self.player_hand)}**\n\n"
             f"🃏 莊家的手牌：\n"
-            f"`{self.dealer_hand[0]}  ??`\n"
+            f"{self.dealer_hand[0]}  ??\n"
             "━━━━━━━━━━━━━━━━━━━━"
         )
         view = BlackjackView(self)
@@ -131,20 +131,27 @@ class BlackjackGame:
             round_delta = 0
         else:
             round_delta = -total_bet
+            
+        await self.cog.stats_db.update_stats(
+            self.ctx.author.id,
+            game_type="blackjack",
+            bet=total_bet,
+            profit=round_delta
+        )
 
         total_balance = await self.cog.get_balance(self.ctx.author)
         desc = (
             "━━━━━━━━━━━━━━━━━━━━\n"
             f"🪙 本輪下注: {total_bet} 狗幣\n\n"
             f"🧑 你的手牌：\n"
-            f"`{'  '.join(self.player_hand)}`\n"
+            f"{'  '.join(self.player_hand)}\n"
             f"🧮 玩家點數：**{self.calc_total(self.player_hand)}**\n\n"
             f"🃏 莊家的手牌：\n"
-            f"`{'  '.join(self.dealer_hand)}`\n"
+            f"{'  '.join(self.dealer_hand)}\n"
             f"🧮 莊家點數：**{self.calc_total(self.dealer_hand)}**\n\n"
             f"📢 結果：{result}\n"
             f"💰 本輪盈虧：{round_delta:+,} 狗幣\n"
-            f"💼 目前總餘額：{round(total_balance):,} 狗幣\n"
+            f"💼 目前總餘額：{int(total_balance):,} 狗幣\n"
             "━━━━━━━━━━━━━━━━━━━━"
         )
         embed = self.embed("🏁 **遊戲結束** 🏁", desc, win)
@@ -194,10 +201,10 @@ class BlackjackView(discord.ui.View):
                 "━━━━━━━━━━━━━━━━━━━━\n"
                 f"🪙 本輪下注：{self.game.bet:,} 狗幣\n\n"
                 f"🧑 你的手牌：\n"
-                f"`{'  '.join(self.game.player_hand)}`\n"
+                f"{'  '.join(self.game.player_hand)}\n"
                 f"🧮 玩家點數：**{self.game.calc_total(self.game.player_hand)}**\n\n"
                 f"🃏 莊家的手牌：\n"
-                f"`{self.game.dealer_hand[0]}  ??`\n"
+                f"{self.game.dealer_hand[0]}  ??\n"
                 "━━━━━━━━━━━━━━━━━━━━"
             )
             await interaction.response.edit_message(embed=self.game.embed("21 點遊戲", desc), view=self)
@@ -261,6 +268,6 @@ class BlackjackView(discord.ui.View):
         await self.game.cog.update_balance(self.game.ctx.author, refund)
         await self.game.ctx.send(
             f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
-            f"目前總狗幣: {round(await self.game.cog.get_balance(self.game.ctx.author)):,}"
+            f"目前總狗幣: {int(await self.game.cog.get_balance(self.game.ctx.author)):,}"
         )
         self.game.cleanup()
