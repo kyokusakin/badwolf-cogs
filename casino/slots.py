@@ -5,7 +5,7 @@ from typing import Union
 import time
 
 class SlotGame:
-    EMOJIS = [":skull:", ":cherries:", ":lemon:", ":grapes:", ":watermelon:", ":seven:"]
+    EMOJIS = [":skull:", ":cherries:", ":lemon:",":strawberry:" ,":tangerine:" , ":grapes:", ":watermelon:", ":seven:"]
     COLORS = {
         "base": discord.Color.gold(),
         "win": discord.Color.green(),
@@ -22,7 +22,9 @@ class SlotGame:
         self.payouts = {
             "three_same": {
                 ":cherries:": 2,
-                ":lemon:": 5,
+                ":lemon:": 4,
+                ":strawberry:": 5,
+                ":tangerine:": 5,
                 ":grapes:": 10,
                 ":watermelon:": 30,
                 ":seven:": 100,
@@ -30,6 +32,8 @@ class SlotGame:
             "two_same": {
                 ":cherries:": 1,
                 ":lemon:": 2,
+                ":strawberry:": 2,
+                ":tangerine:": 2,
                 ":grapes:": 4,
                 ":watermelon:": 8,
                 ":seven:": 20,
@@ -39,6 +43,8 @@ class SlotGame:
             ":skull:": 18,
             ":cherries:": 35,
             ":lemon:": 25,
+            ":strawberry:": 25,
+            ":tangerine:": 25,
             ":grapes:": 20,
             ":watermelon:": 10,
             ":seven:": 8,
