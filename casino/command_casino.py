@@ -355,7 +355,7 @@ class StatsMenuView(discord.ui.View):
         await interaction.followup.send(embed=embed, ephemeral=True) # 發送臨時訊息
 
     # 將排行榜按鈕放在第二行 (row=1)
-    @discord.ui.button(label="總排行榜", style=discord.ButtonStyle.gold, custom_id="leaderboard", row=1)
+    @discord.ui.button(label="總排行榜", style=discord.ButtonStyle.blurple, custom_id="leaderboard", row=1)
     async def leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """按鈕：顯示總盈虧排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True) # 延遲回應
