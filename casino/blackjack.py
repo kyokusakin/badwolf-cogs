@@ -28,8 +28,8 @@ class BlackjackGame:
         self.doubled = False
         #賠率
         self.blackjack_payout_multiplier = 1.5
-        self.double_win_multiplier = 2.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
-        self.five_card_charlie_payout_multiplier = 2.0 # 原始為 2.0，修改成 1 + 倍率後，淨贏是 1 倍
+        self.double_win_multiplier = 2.0
+        self.five_card_charlie_payout_multiplier = 2.0
 
     def build_deck(self) -> None:
         self.deck = [f"{s}{r}" for s in SUITS for r in RANKS]
@@ -216,6 +216,11 @@ class BlackjackView(discord.ui.View):
         if bal < self.game.bet:
             await interaction.response.send_message("餘額不足，無法雙倍下注！", ephemeral=True)
             return
+        
+        if len(self.game.player_hand) != 2:
+            await interaction.response.send_message("只能在開局時雙倍下注！", ephemeral=True)
+            return
+        
         self.game.doubled = True
         await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
         self.game.player_hand.append(self.game.draw())

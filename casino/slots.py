@@ -6,95 +6,112 @@ import time
 
 class SlotGame:
     EMOJIS = [":skull:", ":cherries:", ":lemon:", ":grapes:", ":watermelon:", ":seven:"]
+    COLORS = {
+        "base": discord.Color.gold(),
+        "win": discord.Color.green(),
+        "lose": discord.Color.red(),
+        "jackpot": discord.Color.blurple()
+    }
 
     def __init__(self, ctx: commands.Context, cog, bet: int):
         self.ctx = ctx
-        self.cog = cog  # 主模組，提供更新餘額等方法
+        self.cog = cog
         self.bet = bet
         self.message: discord.Message = None
-        self.view = SlotView(self)  # 單一 View 實例，避免多次建立造成重複超時
+        self.view = SlotView(self)
         self.payouts = {
             "three_same": {
-                ":cherries:": 0.5,
-                ":lemon:": 1,
-                ":grapes:": 5,
-                ":watermelon:": 10,
-                ":seven:": 30,
+                ":cherries:": 2,
+                ":lemon:": 5,
+                ":grapes:": 10,
+                ":watermelon:": 30,
+                ":seven:": 100,
             },
             "two_same": {
-                ":cherries:": 0.2,
-                ":lemon:": 0.5,
-                ":grapes:": 1,
-                ":watermelon:": 2,
-                ":seven:": 5,
+                ":cherries:": 1,
+                ":lemon:": 2,
+                ":grapes:": 4,
+                ":watermelon:": 8,
+                ":seven:": 20,
             },
         }
         self.emoji_weights = {
-            ":skull:": 28,
-            ":cherries:": 30,
+            ":skull:": 18,
+            ":cherries:": 35,
             ":lemon:": 25,
             ":grapes:": 20,
-            ":watermelon:": 15,
-            ":seven:": 5,
+            ":watermelon:": 10,
+            ":seven:": 8,
         }
         self.last_spin_time: dict[int, float] = {}
-        self.spin_cooldown = 5  # 冷卻秒數
-        self.total_profit = -self.bet
-        self.ended = False  # 標記遊戲是否已結束
+        self.spin_cooldown = 3
+        self.total_profit = 0
+        self.ended = False
 
     async def start(self, ctx: Union[commands.Context, discord.Interaction] = None):
         if ctx:
             self.ctx = ctx
-
-        # 扣款並顯示初始訊息
-        await self.cog.update_balance(self.ctx.author, -self.bet)
+        
         embed = discord.Embed(
-            title="拉霸遊戲",
-            description=f"下注金額：{self.bet}\n按下按鈕開始拉霸或結束遊戲！",
-            color=discord.Color.gold()
+            title="🎰 拉 霸 遊 戲 🎰",
+            color=self.COLORS["base"]
         )
-        self.message = await self.ctx.send(embed=embed, view=self.view)
-
-    async def update_message(self, result_desc: str):
-        embed = discord.Embed(
-            title="拉霸遊戲",
-            description=result_desc,
-            color=discord.Color.gold()
+        embed.add_field(
+            name="🕹️ 遊戲規則",
+            value=f"• 單次下注金額: **{self.bet}** 籌碼\n"
+                  "• 每次旋轉間隔: 5 秒冷卻\n"
+                  "• 中獎組合判定:\n"
+                  "  ▸ 3個相同圖示: 獲得對應倍率\n"
+                  "  ▸ 2個相同圖示: 獲得次級倍率\n"
+                  "  ▸ 2個骷髏: 沒收本次下注",
+            inline=False
         )
-        if self.message:
-            await self.message.edit(embed=embed)
-        else:
-            self.message = await self.ctx.send(embed=embed, view=self.view)
+        embed.add_field(
+            name="📢 操作提示",
+            value="點擊下方按鈕開始遊戲！",
+            inline=False
+        )
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png?ex=6803307e&is=6801defe&hm=d74cc0849421a00fd3d4981bd42b39582f36ddb53c796a14278417d7870462a9&")
+        embed.set_footer(text="遊戲將在 30 秒無操作後自動結束")
+        
+        self.message = await self.ctx.reply(embed=embed, view=self.view, mention_author=False)
 
 class SlotView(discord.ui.View):
     def __init__(self, game: SlotGame):
         super().__init__(timeout=30)
         self.game = game
-        self.spin_button = discord.ui.Button(label="Spin", style=discord.ButtonStyle.blurple)
+        self.spin_button = discord.ui.Button(
+            label="Spin", 
+            style=discord.ButtonStyle.blurple,
+            emoji="🎰"
+        )
         self.spin_button.callback = self.spin
-        self.end_button = discord.ui.Button(label="結束", style=discord.ButtonStyle.red)
+        self.end_button = discord.ui.Button(
+            label="結束遊戲", 
+            style=discord.ButtonStyle.red,
+            emoji="⏹️"
+        )
         self.end_button.callback = self.end_game
         self.add_item(self.spin_button)
         self.add_item(self.end_button)
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         if interaction.user != self.game.ctx.author:
-            await interaction.response.send_message("這不是你的遊戲！", ephemeral=True)
+            await interaction.response.send_message("❌ 這不是你的遊戲！", ephemeral=True)
             return False
         return True
 
     async def spin(self, interaction: discord.Interaction):
         if self.game.ended:
-            await interaction.response.send_message("遊戲已結束，無法再拉霸。", ephemeral=True)
+            await interaction.response.send_message("⚠️ 遊戲已結束，無法再拉霸。", ephemeral=True)
             return
 
         user_id = interaction.user.id
         now = time.time()
-        # 冷卻檢查
         last = self.game.last_spin_time.get(user_id, 0)
         if now - last < self.game.spin_cooldown:
             await interaction.response.send_message(
-                f"請稍後再試！冷卻時間剩 {self.game.spin_cooldown - (now - last):.1f} 秒。",
+                f"⏳ 請稍後再試！冷卻時間剩 {self.game.spin_cooldown - (now - last):.1f} 秒。",
                 ephemeral=True
             )
             return
@@ -102,70 +119,156 @@ class SlotView(discord.ui.View):
         balance = await self.game.cog.get_balance(interaction.user)
         if balance < self.game.bet:
             await interaction.response.send_message(
-                f"籌碼不足！本次需 {self.game.bet}，但你只有 {balance}。",
+                f"💸 籌碼不足！本次需 {self.game.bet}，但你只有 {balance}。",
                 ephemeral=True
             )
             return
 
-        # 扣款並記錄時間
+        # 扣款流程
+        await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
+        self.game.total_profit -= self.game.bet
         self.game.last_spin_time[user_id] = now
-        await interaction.response.defer(ephemeral=True)
 
-        # 隨機轉盤結果
+        # 生成結果
         emojis = list(self.game.emoji_weights.keys())
         weights = list(self.game.emoji_weights.values())
         result = random.choices(emojis, weights=weights, k=3)
         rstr = " ".join(result)
         winnings = 0
-        parts = [f"下注金額：{self.game.bet}", rstr]
 
-        # 處理結果
+        # 判斷中獎
+        result_text = []
         if result.count(":skull:") >= 2:
-            parts.append("出現內務部！損失下注。")
-            winnings = -self.game.bet
+            result_text.append("💀 **內務部查收！本次下注沒收**")
+            color = self.game.COLORS["lose"]
         elif result.count(result[0]) == 3:
             mul = self.game.payouts["three_same"].get(result[0], 0)
-            winnings = int(self.game.bet * (1 + mul))
-            parts.append(f"恭喜中大獎：獲得 {winnings}。")
+            winnings = int(self.game.bet * mul)
+            result_text.append(f"🎉 恭喜中大獎！獲得 {winnings} 籌碼")
+            color = self.game.COLORS["jackpot"]
         else:
             for e in SlotGame.EMOJIS:
                 if result.count(e) == 2:
                     mul2 = self.game.payouts["two_same"].get(e, 0)
-                    winnings = int(self.game.bet * (1 + mul2))
-                    parts.append(f"部分中獎：獲得 {winnings}。")
+                    winnings = int(self.game.bet * mul2)
+                    result_text.append(f"🎊 部分中獎！獲得 {winnings} 籌碼")
+                    color = self.game.COLORS["win"]
                     break
             else:
-                parts.append("未中獎。")
-                winnings = -self.game.bet
+                result_text.append("😢 未中獎")
+                color = self.game.COLORS["lose"]
 
-        # 更新盈虧與餘額
+        # 更新餘額
+        if winnings > 0:
+            await self.game.cog.update_balance(self.game.ctx.author, winnings)
         self.game.total_profit += winnings
-        await self.game.cog.update_balance(self.game.ctx.author, winnings)
         new_bal = await self.game.cog.get_balance(self.game.ctx.author)
-        parts.extend([f"總盈虧：{self.game.total_profit:,}", f"總籌碼：{new_bal:,}"])
 
-        await self.game.update_message("\n".join(parts))
+        # 構建嵌入訊息
+        embed = discord.Embed(
+            title=f"🎰 拉霸機",
+            color=color
+        )
+        
+        # 轉輪視覺效果
+        slot_display = f"**║**  {rstr.replace(' ', '  **║**  ')}  **║**"
+        embed.add_field(
+            name="轉輪結果",
+            value=f"\n{slot_display}\n",
+            inline=False
+        )
+
+        # 結算報告
+        result_info = [
+            f"• 本次下注: {self.game.bet} 籌碼",
+            f"• 獲得獎金: {winnings} 籌碼",
+            f"• 累計盈虧: {self.game.total_profit} 籌碼",
+            *result_text
+        ]
+        embed.add_field(
+            name="📊 結算",
+            value="\n".join(result_info),
+            inline=False
+        )
+
+        # 統計數據
+        stats = [
+            f"• 當前餘額: {new_bal} 籌碼"
+        ]
+        embed.add_field(
+            name="📈 遊戲統計",
+            value="\n".join(stats),
+            inline=False
+        )
+
+        # 互動元素
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png?ex=6803307e&is=6801defe&hm=d74cc0849421a00fd3d4981bd42b39582f36ddb53c796a14278417d7870462a9&")
+        embed.set_footer(
+            text=f"玩家 {interaction.user.display_name}",
+            icon_url=interaction.user.avatar.url
+        )
+
+        await interaction.response.edit_message(embed=embed, view=self)
+        self.refresh_timeout()
+
+    def refresh_timeout(self):
+        self._timeout_expiry = time.time() + self.timeout
 
     async def end_game(self, interaction: discord.Interaction):
+        if self.game.ended:
+            return
         self.game.ended = True
+        
+        # 禁用按鈕
         for item in self.children:
             item.disabled = True
-        await interaction.response.edit_message(view=None)
-        await interaction.followup.send("你已結束遊戲。", ephemeral=True)
+        
+        try:
+            await interaction.response.edit_message(view=None)
+        except discord.NotFound:
+            pass
+        
+        # 發送結算訊息
+        final_embed = discord.Embed(
+            title="🛑 遊戲結束",
+            description=f"累計盈虧: **{self.game.total_profit}** 籌碼",
+            color=self.game.COLORS["base"]
+        )
+        
+        try:
+            await interaction.followup.send(embed=final_embed, ephemeral=True)
+        except discord.HTTPException:
+            pass
+        
         self.game.cog.end_game(self.game.ctx.author.id)
         self.stop()
 
     async def on_timeout(self):
         if self.game.ended:
             return
+        self.game.ended = True
+        
+        # 禁用按鈕
         for item in self.children:
             item.disabled = True
-        if self.game.message:
+        
+        try:
             await self.game.message.edit(view=None)
-        refund = self.game.bet
-        await self.game.cog.update_balance(self.game.ctx.author, refund)
-        bal = await self.game.cog.get_balance(self.game.ctx.author)
-        await self.game.ctx.send(
-            f"{self.game.ctx.author.mention} 遊戲超時，退回 {refund}。\n目前籌碼: {bal}"
+        except discord.NotFound:
+            pass
+        
+        # 發送超時訊息
+        timeout_embed = discord.Embed(
+            title="⏰ 遊戲超時",
+            description=f"最終盈虧: **{self.game.total_profit}** 籌碼",
+            color=self.game.COLORS["lose"]
         )
+        timeout_embed.set_footer(text="由於長時間無操作，遊戲已自動結束")
+        
+        try:
+            await self.game.ctx.reply(embed=timeout_embed)
+        except discord.HTTPException:
+            pass
+        
         self.game.cog.end_game(self.game.ctx.author.id)
+        self.stop()

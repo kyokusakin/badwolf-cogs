@@ -226,34 +226,41 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Error saving chat history: {e}")
 
     async def build_guild_history(self, history: List[Dict], current_time: float, short_term_seconds: int, max_records: int, bot_name: str) -> str:
-        """
-        Dynamically trim chat history based on short-term and long-term memory, return string for context.
-        Short-term memory: Records within short_term_seconds
-        Long-term memory: Remaining records sorted by importance, taking highest importance records
-        up to max_records total
-        """
-        short_term = [
-            record for record in history 
-            if current_time - record.get("timestamp", 0) <= short_term_seconds
-        ]
+        """优化后的记忆筛选逻辑，确保严格的数量控制和更合理的记忆排序"""
+        # 分离短期记忆（按时间倒序）
+        short_term = sorted(
+            [r for r in history if current_time - r.get("timestamp", 0) <= short_term_seconds],
+            key=lambda x: x["timestamp"],
+            reverse=True
+        )[:max_records]  # 直接限制最大数量
+
+        # 剩余可补充的长期记忆数量
+        remaining_slots = max(0, max_records - len(short_term))
+
+        # 长期记忆处理（按重要性和时间综合排序）
         long_term = [
-            record for record in history 
-            if current_time - record.get("timestamp", 0) > short_term_seconds
+            r for r in history 
+            if current_time - r.get("timestamp", 0) > short_term_seconds
+            and r not in short_term
         ]
 
-        long_term.sort(key=lambda x: (x.get("importance", 1), x.get("timestamp", 0)), reverse=True)
-        remaining_slots = max_records - len(short_term)
-        selected_long_term = long_term[:remaining_slots] if remaining_slots > 0 else []
-        combined = short_term + selected_long_term
-        combined.sort(key=lambda x: x.get("timestamp", 0))
+        # 优先保留高重要性且较新的记忆
+        long_term.sort(
+            key=lambda x: (-x.get("importance", 1), -x.get("timestamp", 0))
+        )
 
-        history_str = ""
-        for entry in combined:
-            history_str += (
-                f"\n{entry['user_name']} (ID: {entry['user_id']}): {entry['user_message']}"
-                f"\n{bot_name}: {entry['bot_response']}"
-            )
-        return history_str
+        # 合并最终记录（保留原始时间顺序）
+        combined = (short_term + long_term[:remaining_slots])[:max_records]
+        combined.sort(key=lambda x: x["timestamp"])  # 按时间正序排列
+
+        # 格式化历史字符串
+        return "\n".join(
+            f"[{time.strftime('%Y-%m-%d %H:%M', time.localtime(entry['timestamp']))}] "
+            f"{entry['user_name']}: {entry['user_message']}\n"
+            f"{bot_name}: {entry['bot_response']}"
+            for entry in combined
+        )
+
 
     async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
         """
@@ -276,47 +283,65 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
 
     def _blocking_evaluate_memory(self, api_key: str, api_url_base: str, model: str, user_message: str, bot_response: str) -> int:
-        """
-        Synchronous OpenAI API call to evaluate memory importance,
-        Request format requires only a number (0-5) response
-        """
+        """强化版记忆评分提示词"""
+        import re
+        
         try:
-            # Create client and call evaluation API with improved prompt
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
                 model=model,
-                messages = [
-                    {"role": "system", "content": """
-                    You are a memory evaluation assistant. Your task is to evaluate conversations and assign them an importance score from 0 to 5.
-                    IMPORTANCE SCALE:
-                    0 = Not important at all (e.g., everyday greetings, casual small talk)
-                    1 = Slightly important (e.g., basic information, simple questions)
-                    2 = Moderately important (e.g., specific details that may be referenced later)
-                    3 = Important (e.g., personal preferences, significant details)
-                    4 = Very important (e.g., critical information, complex emotional topics)
-                    5 = Extremely important (e.g., essential information that must be remembered for future interactions)
+                messages=[{
+                    "role": "system",
+                    "content": """# 记忆价值评估专家
     
-                    Examples:
-                    - "Hi, how are you?" → Rating: 0
-                    - "What's your favorite color?" → Rating: 1
-                    - "I like pizza, and I’m allergic to nuts." → Rating: 3
-                    - "I'm going through a tough time and need someone to talk to." → Rating: 4
+    ## 任务说明
+    用[[数字]]格式(0-5)评估以下对话的记忆存储价值
     
-                    Please evaluate the following conversation carefully. Most casual conversations will rate between 0-2, while more significant interactions should be rated 3-5.
-                    """},
-                    {"role": "user", "content": f"Rate the importance of this conversation (0-5):\n\nUser: {user_message}\nBot: {bot_response}"}
-                ],
-                temperature=0.3
+    ## 评分标准
+    0️⃣ 无价值：日常寒暄/重复内容  
+      例："早安"、"哈哈真好笑"
+    
+    1️⃣ 低价值：简单事实询问  
+      例："今天星期几？"、"天气如何？"
+    
+    2️⃣ 基础价值：一次性实用信息  
+      例："推荐附近的餐厅"、"翻译这句话"
+    
+    3️⃣ 中等价值：个人偏好/常规需求  
+      例："我喜歡藍色"、"常用Python编程"
+    
+    4️⃣ 高价值：情感交流/重要习惯  
+      例："我失戀了很難過"、"每天晨跑是我的習慣"
+    
+    5️⃣ 关键价值：安全相关/长期承诺  
+      例："我对花生过敏"、"下个月要结婚"
+    
+    ## 特殊情形
+    ⚠️ 包含这些内容自动+2分：
+    - 过敏/疾病信息
+    - 长期习惯
+    - 重要日程
+    - 情感状态变化
+    
+    ## 输出格式
+    严格按此格式：「[[数字]]」
+    示例：「[[3]]」""",
+                }, {
+                    "role": "user",
+                    "content": f"[对话内容]\n用户：{user_message}\nAI：{bot_response}"
+                }],
+                temperature=0.1,
+                max_tokens=10
             )
-            result = response.choices[0].message.content.strip()
             
-            for char in result:
-                if char.isdigit() and int(char) >= 0 and int(char) <= 5:
-                    return int(char)
-            return 1
-            
+            # 强化格式匹配
+            match = re.search(r'「\[\[(\d)]]」', response.choices[0].message.content)
+            if match:
+                score = int(match.group(1))
+                return min(max(score, 0), 5)  # 双重保险
+            return 1  # 格式错误默认值
         except Exception as e:
-            log.error(f"Memory evaluation error: {e}")
+            log.error(f"记忆评分故障: {str(e)[:150]}")
             return 1
 
     async def cog_unload(self):

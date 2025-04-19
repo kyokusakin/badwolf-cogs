@@ -67,7 +67,18 @@ class CasinoCommands():
         """查看你的或他人的籌碼數量。"""
         user = user or ctx.author
         balance = await self.casino.get_balance(user)
-        await ctx.send(f"{user.display_name} 擁有 💰 {balance:,} 籌碼。\n-# 感謝您使用狗窩中央銀行服務")
+
+        interface = (
+            f"> 🏦 **狗窩中央銀行**\n"
+            "> ──────────────────\n"
+            f"> **👤 玩家**：`{user.display_name}`\n"
+            f"> **💰 餘額**：**{balance:,}** 狗幣\n"
+            "> ──────────────────\n"
+            "> **🔁 轉帳**：`>transfer @用戶 <數量>`\n"
+            "> ──────────────────\n"
+            "> 如需查看更多指令，輸入 `>help Casino`"
+        )
+        await ctx.reply(interface)
 
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
@@ -84,9 +95,24 @@ class CasinoCommands():
             await ctx.send("你的狗幣不足。")
             return
 
+        # 執行轉帳
         await self.casino.update_balance(ctx.author, -amount)
         await self.casino.update_balance(member, amount)
-        await ctx.send(f"✅ 已成功轉移 💰 {amount:,} 狗幣給 {member.display_name}。 \n-# 感謝您使用狗窩中央銀行服務")
+
+        new_balance = await self.casino.get_balance(ctx.author)
+        interface = (
+            f"> 🏦 **狗窩中央銀行**\n"
+            "> ──────────────────\n"
+            f"> ✅ 成功轉移 💰 **{amount:,}** 給 {member.display_name}\n"
+            "> ──────────────────\n"
+            f"> **👤 玩家**：`{ctx.author.display_name}`\n"
+            f"> **💰 餘額**：**{new_balance:,}** 狗幣\n"
+            "> ──────────────────\n"
+            "> **🔁 轉帳**：`>transfer @用戶 <數量>`\n"
+            "> ──────────────────\n"
+            "> 如需查看更多指令，輸入 `>help Casino`"
+        )
+        await ctx.reply(interface)
     
     @commands.command(name="work", aliases=["工作", "打工"])
     async def work(self, ctx: commands.Context):
