@@ -160,7 +160,6 @@ class SlotView(discord.ui.View):
             payout = self.game.bet + winnings
             await self.game.cog.update_balance(self.game.ctx.author, payout)
             self.game.total_profit += winnings
-            result_text.insert(0, f"• 返還本注: {self.game.bet} 籌碼")
         else:
             # 未中獎或沒收本注
             await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
