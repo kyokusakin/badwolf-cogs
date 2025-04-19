@@ -270,7 +270,7 @@ class StatsDatabase:
 
         return stats
 
-    async def get_top_users_by_profit(self, limit: int = 20) -> list[tuple[int, int]]:
+    async def get_top_users_by_profit(self, limit: int) -> list[tuple[int, int]]:
         """獲取總盈虧排行榜前 N 名用戶"""
         if self.connection is None:
             log.warning("Database connection not initialized when trying to get top users.")

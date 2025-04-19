@@ -290,6 +290,25 @@ class CasinoCommands():
         view = StatsMenuView(self.casino, ctx.author)
         await ctx.reply(embed=embed, view=view, mention_author=False)
 
+    @commands.is_owner()
+    @commands.command(name="setbalance", aliases=["設定餘額"])
+    async def set_balance(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """設定使用者的餘額。"""
+        if amount < 0:
+            await ctx.send("餘額不能為負數。")
+            return
+
+        # 更新使用者的餘額
+        await self.casino.update_balance(user, amount)
+
+        # 獲取更新後的餘額
+        new_balance = await self.casino.get_balance(user)
+
+        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
+
+######################################################
+# 賭場統計選單
+######################################################
 
 class StatsMenuView(discord.ui.View):
     def __init__(self, casino_cog, author: discord.User):
@@ -310,7 +329,7 @@ class StatsMenuView(discord.ui.View):
             item.disabled = True
         try:
             if hasattr(self, 'message') and self.message:
-                 await self.message.edit(view=None)
+                await self.message.edit(view=None)
         except discord.HTTPException:
             pass
 
@@ -320,31 +339,18 @@ class StatsMenuView(discord.ui.View):
         """按鈕：顯示總資產 (餘額) 排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
 
-        all_users_config_data = await self.casino.config.all_users()
-
-        user_balances = []
-        for user_id, user_data in all_users_config_data.items():
-            try:
-                 user_id_int = int(user_id)
-            except ValueError:
-                 continue
-
-            balance = user_data.get("balance", 0)
-            if balance > 0:
-                 user_balances.append((user_id_int, balance))
-
-        sorted_users = sorted(user_balances, key=lambda item: item[1], reverse=True)[:20]
+        all_users_data = await self.casino.stats_db.get_top_users_by_profit(limit=20)
 
         embed = discord.Embed(
             title="💰 賭場總資產排行榜 (前20名)",
             color=discord.Color.green()
         )
 
-        if not sorted_users:
+        if not all_users_data:
             embed.description = "目前沒有總資產排行榜數據。"
         else:
             leaderboard_entries = []
-            for i, (user_id, balance) in enumerate(sorted_users):
+            for i, (user_id, balance) in enumerate(all_users_data):
                 try:
                     user = await self.casino.bot.fetch_user(user_id)
                     display_name = user.display_name
@@ -416,13 +422,11 @@ class StatsMenuView(discord.ui.View):
 
                 embed.add_field(
                     name=f"🎲 {game_type.capitalize()}",
-                    value=(
-                        f"• 下注: {bet:,}\n"
-                        f"• 遊戲數: {games_played:,}\n"
-                        f"• 勝利: {wins:,}\n"
-                        f"• 失敗: {losses:,}\n"
-                        f"• 盈虧: {profit:,}"
-                    ),
+                    value=(f"• 下注: {bet:,}\n"
+                           f"• 遊戲數: {games_played:,}\n"
+                           f"• 勝利: {wins:,}\n"
+                           f"• 失敗: {losses:,}\n"
+                           f"• 盈虧: {profit:,}"),
                     inline=True
                 )
 
