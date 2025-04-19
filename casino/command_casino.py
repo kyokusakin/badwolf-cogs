@@ -8,6 +8,10 @@ from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
 import logging
 
+from .blackjack import BlackjackGame
+from .guesssize import GuessGame
+from .slots import SlotGame
+
 log = logging.getLogger("red.BadwolfCogs.casino.commands")
 
 class CasinoCommands():
