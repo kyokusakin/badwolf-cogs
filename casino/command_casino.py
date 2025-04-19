@@ -299,7 +299,7 @@ class CasinoCommands():
             return
 
         # 更新使用者的餘額
-        await self.casino.update_balance(user, amount)
+        await self.casino.set_balance(user, amount)
 
         # 獲取更新後的餘額
         new_balance = await self.casino.get_balance(user)
