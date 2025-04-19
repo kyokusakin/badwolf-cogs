@@ -1,9 +1,6 @@
 import discord
 import random
 import time
-import aiosqlite
-import os
-import pathlib
 from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
 import logging
@@ -20,62 +17,6 @@ class CasinoCommands():
     def __init__(self, bot: Red, casino_cog):
         self.bot = bot
         self.casino = casino_cog
-        self.db_path = self._get_db_path()
-        self.connection = None
-        bot.loop.create_task(self.initialize_db())
-
-    def _get_db_path(self) -> pathlib.Path:
-        """建立資料夾並回傳資料庫檔案路徑"""
-        base_path = data_manager.cog_data_path(raw_name="Casino")
-        os.makedirs(base_path, exist_ok=True)
-        return base_path / "casino.db"
-
-    async def initialize_db(self):
-        """初始化資料庫連接"""
-        self.connection = await aiosqlite.connect(self.db_path)
-        await self.connection.execute('''
-            CREATE TABLE IF NOT EXISTS cooldowns (
-                user_id INTEGER,
-                command_name TEXT,
-                expires_at REAL,
-                bucket_type TEXT,
-                PRIMARY KEY (user_id, command_name)
-            )
-        ''')
-        await self.connection.commit()
-        
-    async def cog_unload(self):
-        """Cog卸載時關閉資料庫連接"""
-        await self.connection.close()
-
-    async def get_cooldown(self, user_id: int, command_name: str) -> float:
-        """從資料庫獲取冷卻時間"""
-        async with self.connection.execute(
-            "SELECT expires_at FROM cooldowns WHERE user_id = ? AND command_name = ?",
-            (user_id, command_name)
-        ) as cursor:
-            row = await cursor.fetchone()
-            if row:
-                expires_at = row[0]
-                current_time = time.time()
-                if expires_at > current_time:
-                    return expires_at
-                else:
-                    await self.connection.execute(
-                        "DELETE FROM cooldowns WHERE user_id = ? AND command_name = ?",
-                        (user_id, command_name)
-                    )
-                    await self.connection.commit()
-        return None
-
-    async def set_cooldown(self, user_id: int, command_name: str, duration: float, bucket_type: commands.BucketType):
-        """設置冷卻時間到資料庫"""
-        expires_at = time.time() + duration
-        await self.connection.execute(
-            "REPLACE INTO cooldowns (user_id, command_name, expires_at, bucket_type) VALUES (?, ?, ?, ?)",
-            (user_id, command_name, expires_at, bucket_type.name.lower())
-        )
-        await self.connection.commit()
 
     @commands.command(name="balance", aliases=["餘額", "查詢餘額", "狗幣", "籌碼"])
     async def balance(self, ctx: commands.Context, user: discord.Member = None):
@@ -154,7 +95,7 @@ class CasinoCommands():
         await ctx.reply(f"你工作賺取了 💰 {total_income:,} 狗幣！")
 
         # 設置冷卻
-        await self.set_cooldown(user_id, command_name, 3600, commands.BucketType.user)
+        await self.casino.stats_db.set_cooldown(user_id, command_name, 3600, commands.BucketType.user)
 
     @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
     async def dogmeat(self, ctx: commands.Context):
@@ -163,7 +104,7 @@ class CasinoCommands():
         command_name = "dogmeat"
         
         # 檢查冷卻
-        expires_at = await self.get_cooldown(user_id, command_name)
+        expires_at = await self.casino.stats_db.get_cooldown(user_id, command_name)
         if expires_at:
             remaining = expires_at - time.time()
             if remaining > 0:
@@ -181,7 +122,7 @@ class CasinoCommands():
         await ctx.reply(f"賣狗哥賺取了 💰 {total_income:,} 狗幣！")
 
         # 設置冷卻
-        await self.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
+        await self.casino.stats_db.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
 
 
     @commands.guild_only()
@@ -379,23 +320,19 @@ class StatsMenuView(discord.ui.View):
         """按鈕：顯示總資產 (餘額) 排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
 
-        # 從 config 中獲取所有用戶數據
-        # 注意：大量用戶時這可能會很慢，考慮更有效率的數據儲存或查詢方式
         all_users_config_data = await self.casino.config.all_users()
 
         user_balances = []
         for user_id, user_data in all_users_config_data.items():
-            # 將 user_id 轉為 int，因為 config 通常存為字串 key
             try:
                  user_id_int = int(user_id)
             except ValueError:
-                 continue # 如果 user_id 不是有效的數字，跳過
+                 continue
 
             balance = user_data.get("balance", 0)
             if balance > 0:
                  user_balances.append((user_id_int, balance))
 
-        # 按餘額排序，取前 20 名
         sorted_users = sorted(user_balances, key=lambda item: item[1], reverse=True)[:20]
 
         embed = discord.Embed(
@@ -409,7 +346,6 @@ class StatsMenuView(discord.ui.View):
             leaderboard_entries = []
             for i, (user_id, balance) in enumerate(sorted_users):
                 try:
-                    # 異步獲取 User 對象
                     user = await self.casino.bot.fetch_user(user_id)
                     display_name = user.display_name
                 except discord.NotFound:
@@ -417,7 +353,6 @@ class StatsMenuView(discord.ui.View):
                 except discord.HTTPException:
                     display_name = f"用戶ID: {user_id}"
 
-                # 格式化餘額，加入逗號分隔符
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{int(balance):,}** 狗幣")
 
             embed.description = "\n".join(leaderboard_entries)
@@ -430,7 +365,6 @@ class StatsMenuView(discord.ui.View):
         """按鈕：顯示總盈虧排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
 
-        # 假設 stats_db 有一個方法可以獲取總盈虧前 N 名用戶
         top_users_data = await self.casino.stats_db.get_top_users_by_profit(limit=20)
 
         embed = discord.Embed(
@@ -451,7 +385,6 @@ class StatsMenuView(discord.ui.View):
                 except discord.HTTPException:
                     display_name = f"用戶ID: {user_id}"
 
-                # 格式化盈虧，加入正負號和逗號分隔符
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{total_profit:+,}** 狗幣")
 
             embed.description = "\n".join(leaderboard_entries)
@@ -463,12 +396,11 @@ class StatsMenuView(discord.ui.View):
     async def game_stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """按鈕：顯示使用者的各遊戲統計。"""
         await interaction.response.defer(ephemeral=True)
-        # 從 stats_db 獲取特定用戶的統計數據
         stats = await self.casino.stats_db.get_stats(self.author.id)
 
         embed = discord.Embed(
             title=f"🎮 {self.author.display_name} 的各遊戲統計",
-            color=0x00ff00 # 使用十六進位顏色碼
+            color=0x00ff00
         )
 
         # 檢查 stats 是否包含 games 鍵且不為空
@@ -476,7 +408,6 @@ class StatsMenuView(discord.ui.View):
              embed.description = "目前沒有遊戲統計數據。"
         else:
             for game_type, game_stats in stats["games"].items():
-                # 檢查 game_stats 中是否存在預期的鍵
                 bet = game_stats.get("bet", 0)
                 games_played = game_stats.get("games", 0)
                 wins = game_stats.get("wins", 0)
@@ -486,11 +417,11 @@ class StatsMenuView(discord.ui.View):
                 embed.add_field(
                     name=f"🎲 {game_type.capitalize()}",
                     value=(
-                        f"• 下注: {bet:,}\n" # 格式化數字
+                        f"• 下注: {bet:,}\n"
                         f"• 遊戲數: {games_played:,}\n"
                         f"• 勝利: {wins:,}\n"
                         f"• 失敗: {losses:,}\n"
-                        f"• 盈虧: {profit:,}" # 格式化盈虧
+                        f"• 盈虧: {profit:,}"
                     ),
                     inline=True
                 )

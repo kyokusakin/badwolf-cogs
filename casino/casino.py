@@ -3,7 +3,6 @@ from redbot.core import commands, Config
 from redbot.core.bot import Red
 import logging
 
-# 匯入其他子模組
 from .blackjack import BlackjackGame
 from .guesssize import GuessGame
 from .slots import SlotGame
@@ -17,17 +16,14 @@ class Casino(commands.Cog, CasinoCommands):
     """綜合賭場插件"""
 
     def __init__(self, bot: Red):
-        super().__init__(bot, self)
+        super().__init__(bot)
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
         self.active_blackjack_games: dict[int, BlackjackGame] = {}
         self.active_guesssize_games: dict[int, GuessGame] = {}
         self.active_slots_games: dict[int, SlotGame] = {}
-        self.listener = CasinoMessageListener(bot, self)
         self.stats_db = StatsDatabase(bot, self)
-
-        default_user = {"balance": 1000}
-        self.config.register_user(**default_user)
+        self.listener = CasinoMessageListener(bot, self)
         self.config.register_guild(allowed_channels=[])
 
         self.default_blackjack_bet = 100
@@ -51,25 +47,33 @@ class Casino(commands.Cog, CasinoCommands):
         elif user_id in self.active_slots_games:
             del self.active_slots_games[user_id]
 
+    # ——— 餘額操作 (使用 StatsDatabase) ———————————————————————
+
     async def get_balance(self, user: discord.Member) -> int:
-        return await self.config.user(user).balance()
+        """從資料庫獲取用戶餘額"""
+        return await self.stats_db.get_balance(user.id)
 
-    async def update_balance(self, user: discord.Member, amount: int):
-        bal = await self.get_balance(user)
-        newbal = bal + amount
-        await self.config.user(user).balance.set(newbal)
-        return newbal
+    async def update_balance(self, user: discord.Member, amount: int) -> int:
+        """更新用戶餘額並寫入資料庫"""
+        new_balance = await self.stats_db.update_balance(user.id, amount)
+        return new_balance
 
-    # ——— 頻道白名單檢查 ———————————————————————
+    # ——— 頻道白名單檢查 (保留使用 Config) ———————————————————————
 
     async def is_allowed_channel(self, message: discord.Message) -> bool:
         allowed_channels = await self.config.guild(message.guild).allowed_channels()
-        return message.channel.id in allowed_channels
+        return message.guild is not None and message.channel.id in allowed_channels
 
     # ——— on_message ———————————————————————
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
+        if message.author.bot:
+            return
+        
+        if message.guild and not await self.is_allowed_channel(message):
+            return
+
         await self.listener.handle_message(message)
 
     # ——— 卸載清理 ————————————————————————
