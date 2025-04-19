@@ -10,10 +10,10 @@ log = logging.getLogger("red.BadwolfCogs.casino.GuessGame")
 # --- Payout Constants (Adjust values based on your desired rules) ---
 # Standard Bets
 PAYOUT_SMALL_LARGE = 1  # 1:1 payout
-PAYOUT_ODD_EVEN = 0.8     # 1:1 payout
+PAYOUT_ODD_EVEN = 1     # 1:1 payout
 
 # Triples
-PAYOUT_ANY_TRIPLE = 30     # Common payout is 30:1 or 24:1
+PAYOUT_ANY_TRIPLE = 24     # Common payout is 30:1 or 24:1
 PAYOUT_SPECIFIC_TRIPLE = 150 # Common payout is 180:1 or 150:1
 
 # Doubles
@@ -21,8 +21,8 @@ PAYOUT_SPECIFIC_DOUBLE = 10 # Common payout is 10:1 or 11:1
 
 # Combinations / Sums / Specific Dice (Examples, adjust rules/payouts)
 PAYOUT_TWO_DICE_COMBO = 6 # Common payout is 6:1 or 5:1
-PAYOUT_THREE_DICE_SPECIFIC = 30 # Payout for specific non-triple combo (e.g., 1,2,3) - Needs rule confirmation
-PAYOUT_STRAIGHT = 30      # Example payout for a straight (123, 234, etc.) - Needs rule confirmation
+PAYOUT_THREE_DICE_SPECIFIC = 300 # Payout for specific non-triple combo (e.g., 1,2,3) - Needs rule confirmation
+PAYOUT_STRAIGHT = 7      # Example payout for a straight (123, 234, etc.) - Needs rule confirmation
 
 # Sum Payouts (Example structure if you add sum bets)
 # PAYOUTS_SUM = { 4: 60, 5: 30, 6: 18, 7: 12, 8: 8, 9: 7, 10: 6,
