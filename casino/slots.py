@@ -71,7 +71,7 @@ class SlotGame:
             value="點擊下方按鈕開始遊戲！",
             inline=False
         )
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png?ex=6803307e&is=6801defe&hm=d74cc0849421a00fd3d4981bd42b39582f36ddb53c796a14278417d7870462a9&")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png")
         embed.set_footer(text="遊戲將在 30 秒無操作後自動結束")
         
         self.message = await self.ctx.reply(embed=embed, view=self.view, mention_author=False)
@@ -124,44 +124,48 @@ class SlotView(discord.ui.View):
             )
             return
 
-        # 扣款流程
-        await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
-        self.game.total_profit -= self.game.bet
-        self.game.last_spin_time[user_id] = now
-
         # 生成結果
+        self.game.last_spin_time[user_id] = now
         emojis = list(self.game.emoji_weights.keys())
         weights = list(self.game.emoji_weights.values())
         result = random.choices(emojis, weights=weights, k=3)
         rstr = " ".join(result)
         winnings = 0
+        color = self.game.COLORS["lose"]
+        result_text = []
 
         # 判斷中獎
-        result_text = []
         if result.count(":skull:") >= 2:
+            # 兩骷髏或以上，沒收本注
             result_text.append("💀 **內務部查收！本次下注沒收**")
-            color = self.game.COLORS["lose"]
         elif result.count(result[0]) == 3:
             mul = self.game.payouts["three_same"].get(result[0], 0)
             winnings = int(self.game.bet * mul)
-            result_text.append(f"🎉 恭喜中大獎！獲得 {winnings} 籌碼")
             color = self.game.COLORS["jackpot"]
+            result_text.append(f"🎉 恭喜中大獎！獲得 {winnings} 籌碼")
         else:
             for e in SlotGame.EMOJIS:
                 if result.count(e) == 2:
                     mul2 = self.game.payouts["two_same"].get(e, 0)
                     winnings = int(self.game.bet * mul2)
-                    result_text.append(f"🎊 部分中獎！獲得 {winnings} 籌碼")
                     color = self.game.COLORS["win"]
+                    result_text.append(f"🎊 部分中獎！獲得 {winnings} 籌碼")
                     break
             else:
                 result_text.append("😢 未中獎")
-                color = self.game.COLORS["lose"]
 
-        # 更新餘額
+        # 扣款與返還處理
         if winnings > 0:
-            await self.game.cog.update_balance(self.game.ctx.author, winnings)
-        self.game.total_profit += winnings
+            # 返還本注並發放獎金
+            payout = self.game.bet + winnings
+            await self.game.cog.update_balance(self.game.ctx.author, payout)
+            self.game.total_profit += winnings
+            result_text.insert(0, f"• 返還本注: {self.game.bet} 籌碼")
+        else:
+            # 未中獎或沒收本注
+            await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
+            self.game.total_profit -= self.game.bet
+
         new_bal = await self.game.cog.get_balance(self.game.ctx.author)
 
         # 構建嵌入訊息
@@ -169,16 +173,12 @@ class SlotView(discord.ui.View):
             title=f"🎰 拉霸機",
             color=color
         )
-        
-        # 轉輪視覺效果
         slot_display = f"**║**  {rstr.replace(' ', '  **║**  ')}  **║**"
         embed.add_field(
             name="轉輪結果",
             value=f"\n{slot_display}\n",
             inline=False
         )
-
-        # 結算報告
         result_info = [
             f"• 本次下注: {self.game.bet} 籌碼",
             f"• 獲得獎金: {winnings} 籌碼",
@@ -190,24 +190,16 @@ class SlotView(discord.ui.View):
             value="\n".join(result_info),
             inline=False
         )
-
-        # 統計數據
-        stats = [
-            f"• 當前餘額: {new_bal} 籌碼"
-        ]
         embed.add_field(
             name="📈 遊戲統計",
-            value="\n".join(stats),
+            value=f"• 當前餘額: {new_bal} 籌碼",
             inline=False
         )
-
-        # 互動元素
-        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png?ex=6803307e&is=6801defe&hm=d74cc0849421a00fd3d4981bd42b39582f36ddb53c796a14278417d7870462a9&")
+        embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png")
         embed.set_footer(
             text=f"玩家 {interaction.user.display_name}",
             icon_url=interaction.user.avatar.url
         )
-
         await interaction.response.edit_message(embed=embed, view=self)
         self.refresh_timeout()
 
@@ -218,28 +210,21 @@ class SlotView(discord.ui.View):
         if self.game.ended:
             return
         self.game.ended = True
-        
-        # 禁用按鈕
         for item in self.children:
             item.disabled = True
-        
         try:
             await interaction.response.edit_message(view=None)
         except discord.NotFound:
             pass
-        
-        # 發送結算訊息
         final_embed = discord.Embed(
             title="🛑 遊戲結束",
             description=f"累計盈虧: **{self.game.total_profit}** 籌碼",
             color=self.game.COLORS["base"]
         )
-        
         try:
             await interaction.followup.send(embed=final_embed, ephemeral=True)
         except discord.HTTPException:
             pass
-        
         self.game.cog.end_game(self.game.ctx.author.id)
         self.stop()
 
@@ -247,28 +232,21 @@ class SlotView(discord.ui.View):
         if self.game.ended:
             return
         self.game.ended = True
-        
-        # 禁用按鈕
         for item in self.children:
             item.disabled = True
-        
         try:
             await self.game.message.edit(view=None)
         except discord.NotFound:
             pass
-        
-        # 發送超時訊息
         timeout_embed = discord.Embed(
             title="⏰ 遊戲超時",
             description=f"最終盈虧: **{self.game.total_profit}** 籌碼",
             color=self.game.COLORS["lose"]
         )
         timeout_embed.set_footer(text="由於長時間無操作，遊戲已自動結束")
-        
         try:
             await self.game.ctx.reply(embed=timeout_embed)
         except discord.HTTPException:
             pass
-        
         self.game.cog.end_game(self.game.ctx.author.id)
         self.stop()
