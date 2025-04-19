@@ -2,6 +2,7 @@ import pathlib
 import os
 import aiosqlite
 from redbot.core import data_manager
+from redbot.core.bot import Red
 
 class StatsDatabase:
     """統計數據庫管理器，採用與CasinoCommands相同的設計模式"""
