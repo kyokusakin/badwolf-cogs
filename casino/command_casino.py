@@ -77,7 +77,7 @@ class CasinoCommands():
         command_name = "work"
 
         # 檢查冷卻
-        expires_at = await self.get_cooldown(user_id, command_name)
+        expires_at = await self.stats_db.get_cooldown(user_id, command_name)
         if expires_at:
             remaining = expires_at - time.time()
             if remaining > 0:
