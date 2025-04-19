@@ -337,6 +337,7 @@ class CasinoCommands():
         await ctx.reply(embed=embed, mention_author=False)
 
     @commands.command(name="stats", aliases=["統計"])
+    @commands.cooldown(1, 30, commands.BucketType.user)
     async def show_stats_menu(self, ctx: commands.Context):
         """顯示賭場統計與排行榜選單。"""
         embed = discord.Embed(
@@ -378,14 +379,23 @@ class StatsMenuView(discord.ui.View):
         """按鈕：顯示總資產 (餘額) 排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
 
+        # 從 config 中獲取所有用戶數據
+        # 注意：大量用戶時這可能會很慢，考慮更有效率的數據儲存或查詢方式
         all_users_config_data = await self.casino.config.all_users()
 
         user_balances = []
         for user_id, user_data in all_users_config_data.items():
+            # 將 user_id 轉為 int，因為 config 通常存為字串 key
+            try:
+                 user_id_int = int(user_id)
+            except ValueError:
+                 continue # 如果 user_id 不是有效的數字，跳過
+
             balance = user_data.get("balance", 0)
             if balance > 0:
-                 user_balances.append((user_id, balance))
+                 user_balances.append((user_id_int, balance))
 
+        # 按餘額排序，取前 20 名
         sorted_users = sorted(user_balances, key=lambda item: item[1], reverse=True)[:20]
 
         embed = discord.Embed(
@@ -399,6 +409,7 @@ class StatsMenuView(discord.ui.View):
             leaderboard_entries = []
             for i, (user_id, balance) in enumerate(sorted_users):
                 try:
+                    # 異步獲取 User 對象
                     user = await self.casino.bot.fetch_user(user_id)
                     display_name = user.display_name
                 except discord.NotFound:
@@ -406,6 +417,7 @@ class StatsMenuView(discord.ui.View):
                 except discord.HTTPException:
                     display_name = f"用戶ID: {user_id}"
 
+                # 格式化餘額，加入逗號分隔符
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{int(balance):,}** 狗幣")
 
             embed.description = "\n".join(leaderboard_entries)
@@ -418,6 +430,7 @@ class StatsMenuView(discord.ui.View):
         """按鈕：顯示總盈虧排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
 
+        # 假設 stats_db 有一個方法可以獲取總盈虧前 N 名用戶
         top_users_data = await self.casino.stats_db.get_top_users_by_profit(limit=20)
 
         embed = discord.Embed(
@@ -438,6 +451,7 @@ class StatsMenuView(discord.ui.View):
                 except discord.HTTPException:
                     display_name = f"用戶ID: {user_id}"
 
+                # 格式化盈虧，加入正負號和逗號分隔符
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{total_profit:+,}** 狗幣")
 
             embed.description = "\n".join(leaderboard_entries)
@@ -449,25 +463,34 @@ class StatsMenuView(discord.ui.View):
     async def game_stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """按鈕：顯示使用者的各遊戲統計。"""
         await interaction.response.defer(ephemeral=True)
+        # 從 stats_db 獲取特定用戶的統計數據
         stats = await self.casino.stats_db.get_stats(self.author.id)
 
         embed = discord.Embed(
             title=f"🎮 {self.author.display_name} 的各遊戲統計",
-            color=0x00ff00
+            color=0x00ff00 # 使用十六進位顏色碼
         )
 
-        if not stats.get("games"):
+        # 檢查 stats 是否包含 games 鍵且不為空
+        if not stats or not stats.get("games"):
              embed.description = "目前沒有遊戲統計數據。"
         else:
             for game_type, game_stats in stats["games"].items():
+                # 檢查 game_stats 中是否存在預期的鍵
+                bet = game_stats.get("bet", 0)
+                games_played = game_stats.get("games", 0)
+                wins = game_stats.get("wins", 0)
+                losses = game_stats.get("losses", 0)
+                profit = game_stats.get("profit", 0)
+
                 embed.add_field(
                     name=f"🎲 {game_type.capitalize()}",
                     value=(
-                        f"• 下注: {game_stats['bet']:,}\n"
-                        f"• 遊戲數: {game_stats['games']:,}\n"
-                        f"• 勝利: {game_stats['wins']:,}\n"
-                        f"• 失敗: {game_stats['losses']:,}\n"
-                        f"• 盈虧: {game_stats['profit']:+,}"
+                        f"• 下注: {bet:,}\n" # 格式化數字
+                        f"• 遊戲數: {games_played:,}\n"
+                        f"• 勝利: {wins:,}\n"
+                        f"• 失敗: {losses:,}\n"
+                        f"• 盈虧: {profit:,}" # 格式化盈虧
                     ),
                     inline=True
                 )
