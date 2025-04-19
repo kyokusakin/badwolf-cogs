@@ -21,33 +21,33 @@ class SlotGame:
         self.view = SlotView(self)
         self.payouts = {
             "three_same": {
-                ":cherries:": 0.62,
-                ":lemon:": 1.23,
-                ":strawberry:": 1.54,
-                ":tangerine:": 1.54,
-                ":grapes:": 3.08,
-                ":watermelon:": 9.24,
-                ":seven:": 30.81,
+                ":cherries:": 2,         # 櫻桃
+                ":lemon:": 3,            # 檸檬
+                ":strawberry:": 4,       # 草莓
+                ":tangerine:": 4,        # 橘子
+                ":grapes:": 6,           # 葡萄
+                ":watermelon:": 10,      # 西瓜
+                ":seven:": 40,           # 七
             },
             "two_same": {
-                ":cherries:": 0.31,
-                ":lemon:": 0.62,
-                ":strawberry:": 0.62,
-                ":tangerine:": 0.62,
-                ":grapes:": 1.23,
-                ":watermelon:": 2.46,
-                ":seven:": 6.16,
+                ":cherries:": 1,         # 櫻桃
+                ":lemon:": 2,            # 檸檬
+                ":strawberry:": 2,       # 草莓
+                ":tangerine:": 2,        # 橘子
+                ":grapes:": 3,           # 葡萄
+                ":watermelon:": 5,       # 西瓜
+                ":seven:": 10,           # 七
             },
         }
         self.emoji_weights = {
-            ":skull:": 19.1,
-            ":cherries:": 14.8,
-            ":lemon:": 10.6,
-            ":strawberry:": 10.6,
-            ":tangerine:": 10.6,
-            ":grapes:": 8.5,
-            ":watermelon:": 4.2,
-            ":seven:": 21.5,
+            ":skull:": 20,         # 骷髏，機率較高
+            ":cherries:": 15,      # 櫻桃，機率較高
+            ":lemon:": 12,         # 檸檬
+            ":strawberry:": 12,    # 草莓
+            ":tangerine:": 12,     # 橘子
+            ":grapes:": 10,        # 葡萄
+            ":watermelon:": 8,     # 西瓜
+            ":seven:": 6,          # 七，機率較低，獎金較高
         }
         self.last_spin_time: dict[int, float] = {}
         self.spin_cooldown = 3
