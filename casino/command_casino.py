@@ -175,3 +175,214 @@ class CasinoCommands():
 
         # 設置冷卻
         await self.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
+
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_guild=True)
+    @commands.group(name="casinochan")
+    async def casinochan(self, ctx: commands.Context):
+        """設定允許使用 on_message 賭場的頻道。"""
+        pass
+
+    @casinochan.command(name="add")
+    async def casinochan_add(self, ctx: commands.Context, channel: discord.TextChannel):
+        cfg = self.config.guild(ctx.guild)
+        allowed = await cfg.allowed_channels()
+        if channel.id in allowed:
+            await ctx.send(f"{channel.mention} 已經是允許頻道。")
+        else:
+            allowed.append(channel.id)
+            await cfg.allowed_channels.set(allowed)
+            await ctx.send(f"✅ 已新增 {channel.mention} 為賭場頻道。")
+
+    @casinochan.command(name="remove")
+    async def casinochan_remove(self, ctx: commands.Context, channel: discord.TextChannel):
+        cfg = self.config.guild(ctx.guild)
+        allowed = await cfg.allowed_channels()
+        if channel.id not in allowed:
+            await ctx.send(f"{channel.mention} 並不在允許清單中。")
+        else:
+            allowed.remove(channel.id)
+            await cfg.allowed_channels.set(allowed)
+            await ctx.send(f"✅ 已移除 {channel.mention}。")
+
+    @casinochan.command(name="list")
+    async def casinochan_list(self, ctx: commands.Context):
+        allowed = await self.config.guild(ctx.guild).allowed_channels()
+        if not allowed:
+            await ctx.send("目前尚未設定任何允許的頻道。")
+            return
+        mentions = [f"<#{cid}>" for cid in allowed]
+        await ctx.send("🎰 允許的賭場頻道如下：\n" + "\n".join(mentions))
+
+    @commands.command(name="mystats")
+    async def mystats(self, ctx):
+        """查詢你的賭場統計數據"""
+        data = await self.stats_db.get_stats(ctx.author.id)
+        
+        embed = discord.Embed(
+            title=f"📊 {ctx.author.display_name} 的賭場統計",
+            color=0x00ff00
+        )
+        
+        # 總體統計
+        if data["total"]:
+            embed.add_field(
+                name="🎰 總體統計",
+                value=(
+                    f"• 總下注: {data['total']['bet']} 💵\n"
+                    f"• 總遊戲: {data['total']['games']} 🎲\n"
+                    f"• 勝利次數: {data['total']['wins']} ✅\n"
+                    f"• 失敗次數: {data['total']['losses']} ❌\n"
+                    f"• 總盈虧: {data['total']['profit']} 💰"
+                ),
+                inline=False
+            )
+        
+        # 各遊戲統計
+        for game_type, stats in data["games"].items():
+            embed.add_field(
+                name=f"🎮 {game_type.capitalize()}",
+                value=(
+                    f"下注: {stats['bet']}\n"
+                    f"遊戲數: {stats['games']}\n"
+                    f"勝利: {stats['wins']}\n"
+                    f"失敗: {stats['losses']}\n"
+                    f"盈虧: {stats['profit']}"
+                )
+            )
+        
+        await ctx.reply(embed=embed, mention_author=False)
+
+    @commands.command(name="stats", aliases=["統計"])
+    async def show_stats_menu(self, ctx: commands.Context):
+        """顯示賭場統計與排行榜選單。"""
+        embed = discord.Embed(
+            title="📊 賭場統計與排行榜",
+            description="請選擇您想查看的統計資訊：",
+            color=discord.Color.blue()
+        )
+        # 傳入主 Cog 的實例和使用者，以便 View 可以存取統計數據和餘額
+        view = StatsMenuView(self.casino, ctx.author)
+        await ctx.reply(embed=embed, view=view, mention_author=False)
+
+
+class StatsMenuView(discord.ui.View):
+    def __init__(self, casino_cog, author: discord.User):
+        super().__init__(timeout=180) # 設定選單超時時間為 180 秒 (3 分鐘)
+        self.casino = casino_cog # 儲存主 Cog 實例，用於存取 get_balance 和 stats_db
+        self.author = author # 儲存使用者物件，用於檢查互動者
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        """檢查是否為指令發布者在互動。"""
+        if interaction.user != self.author:
+            await interaction.response.send_message("這不是你的選單！", ephemeral=True)
+            return False
+        return True
+
+    async def on_timeout(self) -> None:
+        """選單超時時停用按鈕。"""
+        for item in self.children:
+            item.disabled = True
+        # 嘗試編輯訊息以停用按鈕
+        try:
+            # 需要確保訊息物件存在，如果交互失敗可能為 None
+            if hasattr(self, 'message') and self.message:
+                 await self.message.edit(view=self)
+        except discord.HTTPException:
+            pass # 忽略編輯失敗的錯誤
+
+
+    @discord.ui.button(label="總資產", style=discord.ButtonStyle.green, custom_id="total_assets")
+    async def total_assets_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """按鈕：顯示使用者總資產 (餘額)。"""
+        await interaction.response.defer(ephemeral=True) # 延遲回應，避免「應用程式沒有回應」
+        balance = await self.casino.get_balance(self.author) # 透過主 Cog 存取 get_balance
+        embed = discord.Embed(
+            title=f"💰 {self.author.display_name} 的總資產",
+            description=f"您的目前總餘額為: **{balance:,}** 狗幣",
+            color=discord.Color.gold()
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True) # 發送臨時訊息，只有互動者可見
+
+    @discord.ui.button(label="總盈虧", style=discord.ButtonStyle.blurple, custom_id="total_profit_loss")
+    async def total_profit_loss_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """按鈕：顯示使用者總盈虧。"""
+        await interaction.response.defer(ephemeral=True) # 延遲回應
+        stats = await self.casino.stats_db.get_stats(self.author.id) # 透過主 Cog 存取 stats_db
+        profit = stats.get("total", {}).get("profit", 0) # 獲取總盈虧，若無資料則為 0
+        color = discord.Color.grey()
+        if profit > 0:
+            color = discord.Color.green()
+        elif profit < 0:
+            color = discord.Color.red()
+
+        embed = discord.Embed(
+            title=f"📈 {self.author.display_name} 的總盈虧",
+            description=f"您的賭場總盈虧為: **{profit:+,}** 狗幣",
+            color=color
+        )
+        await interaction.followup.send(embed=embed, ephemeral=True) # 發送臨時訊息
+
+
+    @discord.ui.button(label="各遊戲統計", style=discord.ButtonStyle.red, custom_id="game_stats")
+    async def game_stats_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """按鈕：顯示使用者的各遊戲統計。"""
+        await interaction.response.defer(ephemeral=True) # 延遲回應
+        stats = await self.casino.stats_db.get_stats(self.author.id) # 透過主 Cog 存取 stats_db
+
+        embed = discord.Embed(
+            title=f"🎮 {self.author.display_name} 的各遊戲統計",
+            color=0x00ff00
+        )
+
+        if not stats.get("games"): # 如果沒有遊戲統計數據
+             embed.description = "目前沒有遊戲統計數據。"
+        else:
+            # 各遊戲統計 (這部分的邏輯與您的 mystats 指令類似 [cite: 32])
+            for game_type, game_stats in stats["games"].items():
+                embed.add_field(
+                    name=f"🎲 {game_type.capitalize()}",
+                    value=(
+                        f"• 下注: {game_stats['bet']:,}\n"
+                        f"• 遊戲數: {game_stats['games']:,}\n"
+                        f"• 勝利: {game_stats['wins']:,}\n"
+                        f"• 失敗: {game_stats['losses']:,}\n"
+                        f"• 盈虧: {game_stats['profit']:+,}"
+                    ),
+                    inline=True # 設定為 True 可以在空間允許時並排顯示
+                )
+
+        await interaction.followup.send(embed=embed, ephemeral=True) # 發送臨時訊息
+
+    # 將排行榜按鈕放在第二行 (row=1)
+    @discord.ui.button(label="總排行榜", style=discord.ButtonStyle.gold, custom_id="leaderboard", row=1)
+    async def leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        """按鈕：顯示總盈虧排行榜前 20 名。"""
+        await interaction.response.defer(ephemeral=True) # 延遲回應
+        # 呼叫 StatsDatabase 中新增的方法來獲取前 20 名用戶
+        top_users_data = await self.casino.stats_db.get_top_users_by_profit(limit=20)
+
+        embed = discord.Embed(
+            title="🏆 賭場總盈虧排行榜 (前 20名)",
+            color=discord.Color.gold()
+        )
+
+        if not top_users_data: # 如果沒有排行榜數據
+            embed.description = "目前沒有排行榜數據。"
+        else:
+            leaderboard_text = []
+            for i, (user_id, total_profit) in enumerate(top_users_data):
+                # 獲取使用者物件以顯示名稱
+                try:
+                    user = await self.casino.bot.fetch_user(user_id) # 透過主 Cog 存取 bot
+                    display_name = user.display_name
+                except discord.NotFound:
+                    display_name = f"未知用戶 ({user_id})"
+                except discord.HTTPException:
+                    display_name = f"用戶ID: {user_id}"
+
+                leaderboard_text.append(f"**#{i+1}.** {display_name}: **{total_profit:+,}** 狗幣")
+
+            embed.description = "\n".join(leaderboard_text)
+
+        await interaction.followup.send(embed=embed, ephemeral=True) # 發送臨時訊息

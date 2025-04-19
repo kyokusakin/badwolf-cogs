@@ -9,40 +9,35 @@ log = logging.getLogger("red.BadwolfCogs.casino.GuessGame")
 
 # --- Payout Constants (Adjust values based on your desired rules) ---
 # Standard Bets
-PAYOUT_SMALL_LARGE = 1  # 1:1 payout
-PAYOUT_ODD_EVEN = 1     # 1:1 payout
+PAYOUT_SMALL_LARGE = 1
+PAYOUT_ODD_EVEN = 1
 
 # Triples
-PAYOUT_ANY_TRIPLE = 24     # Common payout is 30:1 or 24:1
-PAYOUT_SPECIFIC_TRIPLE = 150 # Common payout is 180:1 or 150:1
+PAYOUT_ANY_TRIPLE = 24
+PAYOUT_SPECIFIC_TRIPLE = 150
 
 # Doubles
-PAYOUT_SPECIFIC_DOUBLE = 10 # Common payout is 10:1 or 11:1
+PAYOUT_SPECIFIC_DOUBLE = 10
 
-# Combinations / Sums / Specific Dice (Examples, adjust rules/payouts)
-PAYOUT_TWO_DICE_COMBO = 6 # Common payout is 6:1 or 5:1
-PAYOUT_THREE_DICE_SPECIFIC = 30 # Payout for specific non-triple combo (e.g., 1,2,3) - Needs rule confirmation
-PAYOUT_STRAIGHT = 7      # Example payout for a straight (123, 234, etc.) - Needs rule confirmation
-
-# Sum Payouts (Example structure if you add sum bets)
-# PAYOUTS_SUM = { 4: 60, 5: 30, 6: 18, 7: 12, 8: 8, 9: 7, 10: 6,
-#                 11: 6, 12: 7, 13: 8, 14: 12, 15: 18, 16: 30, 17: 60 }
+PAYOUT_TWO_DICE_COMBO = 6 
+PAYOUT_THREE_DICE_SPECIFIC = 30
+PAYOUT_STRAIGHT = 7 
 
 class GuessGame:
     def __init__(
         self,
         ctx: Union[commands.Context, discord.Interaction],
-        cog: Any, # Use 'Any' or the specific Cog class type hint
+        cog: Any,
         bet: int,
     ):
         self.ctx = ctx
         self.cog = cog
-        self.bet = bet # Total bet amount for this game instance
-        self.player_bet: Optional[Dict[str, Any]] = None # Stores the single bet type and details
+        self.bet = bet
+        self.player_bet: Optional[Dict[str, Any]] = None
         self.dice_result: Optional[List[int]] = None
         self.message: Optional[discord.Message] = None
-        self.view_instance: Optional[GuessView] = None # Store the view instance
-        self._finalized: bool = False # Flag to prevent double finalization
+        self.view_instance: Optional[GuessView] = None
+        self._finalized: bool = False
 
     def roll_dice(self) -> List[int]:
         """Rolls three dice and returns a sorted list."""
@@ -121,13 +116,11 @@ class GuessGame:
 
     async def start(self):
         """Starts the game: checks balance, deducts bet, sends message/view."""
-        # Check balance first
         balance = await self.cog.get_balance(self.ctx.author)
         if balance < self.bet:
             await self.ctx.send(f"{self.ctx.author.mention}，您的餘額不足 {self.bet}！")
             return
 
-        # Deduct bet
         try:
             await self.cog.update_balance(self.ctx.author, -self.bet)
         except Exception as e:
@@ -135,7 +128,7 @@ class GuessGame:
             await self.ctx.send(f"下注時發生錯誤，請稍後再試。")
             return
 
-        self._finalized = False # Initialize finalized flag
+        self._finalized = False
 
         embed = self.embed(
             "猜大小遊戲 (骰寶)",
@@ -146,12 +139,10 @@ class GuessGame:
         self.view_instance = GuessView(self) # Create and store the view
         try:
             self.message = await self.ctx.reply(embed=embed, view=self.view_instance, mention_author=False)
-            # Add to active games *only* after sending message successfully
             self.cog.active_guesssize_games[self.ctx.author.id] = self
         except (discord.HTTPException, discord.Forbidden) as e:
             log.error(f"Failed to send game message for {self.ctx.author.id}: {e}", exc_info=True)
             await self.ctx.send("無法開始遊戲，可能是權限問題。")
-            # Refund bet if message fails
             await self.cog.update_balance(self.ctx.author, self.bet)
 
 
@@ -165,13 +156,9 @@ class GuessGame:
             return
         self._finalized = True
 
-        # Stop the view's interaction listener
         if self.view_instance:
              self.view_instance.stop()
 
-        # Calculate amount to return to player (original bet + net winnings)
-        # If net_payout is -self.bet (loss), amount_to_return is 0
-        # If net_payout is positive (win), amount_to_return is self.bet + (self.bet * multiplier)
         amount_to_return = self.bet + net_payout
 
         if amount_to_return > 0:
@@ -181,7 +168,6 @@ class GuessGame:
                 log.error(f"Failed to update balance on finalize for {self.ctx.author.id}: {e}", exc_info=True)
                 result_desc += "\n**(餘額更新失敗)**"
 
-        # Get final balance for display
         try:
             total_balance = await self.cog.get_balance(self.ctx.author)
         except Exception as e:
@@ -205,34 +191,27 @@ class GuessGame:
             "━━━━━━━━━━━━━━━"
         )
 
-        color = discord.Color.red() # Default loss
+        color = discord.Color.red()
         if net_payout > 0:
              color = discord.Color.green()
-        elif net_payout == 0 : # Should ideally not happen unless rules allow push/refund
+        elif net_payout == 0 :
              color = discord.Color.grey()
 
         embed = self.embed("猜大小遊戲結果 (骰寶)", desc, color)
 
-        # Edit original message
         if self.message:
             try:
-                await self.message.edit(embed=embed, view=None) # Remove buttons
+                await self.message.edit(embed=embed, view=None)
             except (discord.NotFound, discord.HTTPException) as e:
                 log.warning(f"Failed to edit game message {self.message.id} on finalize: {e}")
-                # Optionally send a new message if editing fails
-                # await self.ctx.send(embed=embed)
         else:
             log.warning(f"Game for {self.ctx.author.id} finalized without a message object.")
-            # Send a new message if the original is missing
-            # await self.ctx.send(embed=embed)
 
 
-        # Safely remove from active games using pop
         active_game = self.cog.active_guesssize_games.pop(self.ctx.author.id, None)
         if not active_game:
              log.warning(f"Game for {self.ctx.author.id} not found in active_guesssize_games during finalize.")
 
-        # Optional: Call cog's cleanup method if it exists
         if hasattr(self.cog, 'end_game') and callable(self.cog.end_game):
             try:
                  self.cog.end_game(self.ctx.author.id)
@@ -260,7 +239,7 @@ class GuessGame:
             "small": "小 (4-10)", "large": "大 (11-17)",
             "odd": "單數", "even": "雙數",
             "any_triple": "任意圍骰 (豹子)",
-            "straight": "順子 (123, 234...)", # Example name
+            "straight": "順子 (123, 234...)",
         }
 
         if bet_type in display_map:
@@ -283,9 +262,8 @@ class GuessGame:
 
 class GuessView(discord.ui.View):
     def __init__(self, game: GuessGame):
-        super().__init__(timeout=120.0) # Increased timeout
+        super().__init__(timeout=120.0)
         self.game = game
-        # No bet_placed flag needed, interaction leads to immediate finalization
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         """Checks if the user is the game owner and if the game is active."""
@@ -311,34 +289,23 @@ class GuessView(discord.ui.View):
 
     async def handle_bet_and_finalize(self, interaction: discord.Interaction, bet_data: Dict[str, Any]):
         """Common handler for recording bet, rolling dice, and finalizing."""
-        # Defer response - show "Thinking..." publicly
-        # Important: Do this BEFORE long operations (dice roll, calculation, balance update)
+
         await interaction.response.defer(thinking=False, ephemeral=False)
 
-        # Record the bet
         self.game.record_bet(bet_data)
 
-        # Disable buttons visually (optional, as finalize removes view anyway)
-        # await self.disable_all_buttons() # Can be commented out if finalize is fast enough
-
-        # Roll dice and calculate result
         self.game.dice_result = self.game.roll_dice()
-        net_payout = self.game.calculate_net_payout() # Returns net win/loss
+        net_payout = self.game.calculate_net_payout()
 
-        # Determine result description
         if net_payout > 0:
             result_desc = f"恭喜！您淨贏得了 {net_payout} 狗幣。"
-        elif net_payout == 0: # Push or unhandled case
-            result_desc = "打和或無效投注，退回本金。" # Adjust if rules differ
-            # Ensure payout reflects refund: net_payout = 0 means bet is returned in finalize
-        else: # Loss
-            result_desc = f"很抱歉，您輸掉了 {abs(net_payout)} 狗幣。" # net_payout is negative
+        elif net_payout == 0:
+            result_desc = "打和或無效投注，退回本金。"
+        else:
+            result_desc = f"很抱歉，您輸掉了 {abs(net_payout)} 狗幣。"
 
-        # Finalize the game (updates balance, edits message, cleans up)
         await self.game.finalize(result_desc, net_payout)
 
-        # No need to call self.stop() here, finalize stops the view.
-        # No need for followup message as finalize edits the main game message.
 
     # --- Button Handlers ---
     # Row 1: Standard Bets
@@ -403,37 +370,29 @@ class GuessView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         """Handles the view timing out."""
-        # Check if the game was already finalized (e.g., user completed bet)
         if self.game._finalized:
-            return # Nothing more to do
+            return
 
         log.info(f"Game view timed out for {self.game.ctx.author.id}. Refunding bet.")
-        self.game._finalized = True # Mark as finalized to prevent race conditions
+        self.game._finalized = True
 
-        # Disable buttons visually
         await self.disable_all_buttons()
 
-        # Edit the message to indicate timeout
         if self.game.message:
             try:
                 await self.game.message.edit(content=f"{self.game.ctx.author.mention} 的猜大小遊戲 (骰寶) 已超時，投注已取消並退款。", embed=None, view=None)
             except (discord.NotFound, discord.HTTPException) as e:
                 log.warning(f"Failed to edit message {self.game.message.id} on timeout: {e}")
 
-        # Safely remove from active games list
         active_game = self.game.cog.active_guesssize_games.pop(self.game.ctx.author.id, None)
 
         if active_game:
-            # Refund the original bet since the game timed out
             try:
                 await self.game.cog.update_balance(self.game.ctx.author, self.game.bet)
                 log.info(f"Refunded {self.game.bet} to {self.game.ctx.author.id} due to timeout.")
             except Exception as e:
                 log.error(f"Failed to refund bet on timeout for {self.game.ctx.author.id}: {e}", exc_info=True)
-                # Consider sending a message to the user about refund failure
-                # await self.game.ctx.send(f"{self.game.ctx.author.mention}, 退款時發生錯誤，請聯繫管理員。")
 
-            # Optional: Call cog's cleanup method
             if hasattr(self.game.cog, 'end_game') and callable(self.game.cog.end_game):
                 try:
                     self.game.cog.end_game(self.game.ctx.author.id)
@@ -447,7 +406,7 @@ class DiceBetModal(discord.ui.Modal):
     def __init__(
         self,
         game: GuessGame,
-        view: GuessView, # Pass the view to interact with it if needed
+        view: GuessView,
         bet_type_base: str,
         title: str, label: str, placeholder: str,
         requires_one_num: bool = False,
@@ -456,8 +415,8 @@ class DiceBetModal(discord.ui.Modal):
     ):
         super().__init__(title=title, timeout=120.0)
         self.game = game
-        self.view = view # Store the parent view
-        self.bet_type_base = bet_type_base # e.g., "specific_double"
+        self.view = view
+        self.bet_type_base = bet_type_base
         self.requires_one_num = requires_one_num
         self.requires_two_nums = requires_two_nums
         self.requires_three_nums = requires_three_nums
@@ -479,14 +438,12 @@ class DiceBetModal(discord.ui.Modal):
         numbers = []
 
         try:
-            # Basic number conversion
             raw_numbers = value.split()
             if not raw_numbers: raise ValueError("請至少輸入一個數字。")
             numbers = [int(n) for n in raw_numbers]
             if not all(1 <= n <= 6 for n in numbers):
                 raise ValueError("骰子點數必須在 1 到 6 之間。")
 
-            # --- Input Validation based on requirements ---
             num_count = len(numbers)
             unique_count = len(set(numbers))
 
@@ -505,7 +462,7 @@ class DiceBetModal(discord.ui.Modal):
                     error_msg = "❌ 請輸入三個不同的 1 到 6 的整數。"
                 else:
                     bet_data["numbers"] = sorted(numbers)
-            else: # Should not happen if modal is configured correctly
+            else:
                 error_msg = "❌ 內部配置錯誤。"
 
 
@@ -518,33 +475,22 @@ class DiceBetModal(discord.ui.Modal):
 
         # --- Handle Validation Result ---
         if error_msg:
-            # Respond ephemerally about the error
             await interaction.response.send_message(error_msg, ephemeral=True)
-            # Do NOT proceed to finalize. Let the view potentially time out.
             return
 
-        # --- Validation Passed ---
-        # Delegate back to the View's handler
-        # This centralizes the dice rolling, calculation, and finalization logic
         await self.view.handle_bet_and_finalize(interaction, bet_data)
 
 
     async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
         log.error(f"Error in DiceBetModal processing: {error}", exc_info=True)
-        # Try to respond ephemerally
         try:
             if not interaction.response.is_done():
                 await interaction.response.send_message("處理您的投注時發生錯誤，請稍後再試。", ephemeral=True)
-            # else: # If response already sent (e.g., defer), followup might not work well here
-            #     await interaction.followup.send("...", ephemeral=True)
         except Exception as e:
             log.error(f"Failed to send error message in Modal.on_error: {e}")
 
-        # Attempt to finalize the game safely with a refund if an unexpected error occurred
-        # This prevents the game from getting stuck
         if not self.game._finalized:
             log.warning("Finalizing game due to modal error.")
-            # Net payout of -self.bet results in 0 return in finalize logic
             await self.game.finalize("因內部錯誤導致遊戲中止，已退款。", -self.game.bet)
 
 
@@ -553,7 +499,7 @@ class DiceBetModal(discord.ui.Modal):
             item.disabled = True
         if self.game.message:
             await self.game.message.edit(view=None)
-        # 退還下注
+
         refund = self.game.bet
         await self.game.cog.update_balance(self.game.ctx.author, refund)
         await self.game.ctx.send(
