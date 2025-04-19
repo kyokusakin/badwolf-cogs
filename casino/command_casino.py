@@ -2,6 +2,8 @@ import discord
 import random
 import time
 import aiosqlite
+import os
+import pathlib
 from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
 
@@ -11,9 +13,15 @@ class CasinoCommands():
     def __init__(self, bot: Red, casino_cog):
         self.bot = bot
         self.casino = casino_cog
-        self.db_path = data_manager.cog_data_path(type(casino_cog)) / "casino.db"
+        self.db_path = self._get_db_path()
         self.connection = None
         bot.loop.create_task(self.initialize_db())
+
+    def _get_db_path(self) -> pathlib.Path:
+        """建立資料夾並回傳資料庫檔案路徑"""
+        base_path = data_manager.cog_data_path(raw_name="Casino")
+        os.makedirs(base_path, exist_ok=True)
+        return base_path / "casino.db"
 
     async def initialize_db(self):
         """初始化資料庫連接"""
@@ -28,7 +36,7 @@ class CasinoCommands():
             )
         ''')
         await self.connection.commit()
-
+        
     async def cog_unload(self):
         """Cog卸載時關閉資料庫連接"""
         await self.connection.close()
