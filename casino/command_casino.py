@@ -288,7 +288,8 @@ class CasinoCommands():
         )
         # 傳入主 Cog 的實例和使用者，以便 View 可以存取統計數據和餘額
         view = StatsMenuView(self.casino, ctx.author)
-        await ctx.reply(embed=embed, view=view, mention_author=False)
+        msg = await ctx.reply(embed=embed, view=view, mention_author=False)
+        view.message = msg 
 
     @commands.is_owner()
     @commands.command(name="setbalance", aliases=["設定餘額"])
@@ -325,14 +326,11 @@ class StatsMenuView(discord.ui.View):
 
     async def on_timeout(self) -> None:
         """選單超時時停用按鈕。"""
-        for item in self.children:
-            item.disabled = True
         try:
             if hasattr(self, 'message') and self.message:
                 await self.message.edit(view=None)
         except discord.HTTPException:
             pass
-
 
     @discord.ui.button(label="總資產排行榜", style=discord.ButtonStyle.green, custom_id="top_assets_leaderboard")
     async def total_assets_leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
