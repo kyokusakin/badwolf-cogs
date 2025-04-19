@@ -176,6 +176,82 @@ class CasinoCommands():
         # 設置冷卻
         await self.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
 
+
+    @commands.guild_only()
+    @commands.command(name="blackjack", aliases=["21點", "二十一點"])
+    async def blackjack(self, ctx: commands.Context, bet: int = None):
+        """21 點。使令[p]blackjack <下注金額>"""
+        if self.is_playing(ctx.author.id):
+            await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
+            return
+        if bet is None:
+            bet = self.default_blackjack_bet
+        if bet <= 0:
+            await ctx.send("下注金額必須大於零。")
+            return
+        balance = await self.get_balance(ctx.author)
+        if bet > balance:
+            await ctx.send("你的餘額不足。")
+            return
+
+        try:
+            game = BlackjackGame(ctx, self, bet)
+            self.active_blackjack_games[ctx.author.id] = game
+            await game.start()
+        except Exception as e:
+            log.error(f"啟動 21 點遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 21 點遊戲時發生錯誤，請稍後再試。")
+
+    @commands.guild_only()
+    @commands.command(name="guesssize", aliases=["猜大小", "骰寶"])
+    async def guesssize(self, ctx: commands.Context, bet: int = None):
+        """猜大小。 使令[p]guesssize <下注金額>"""
+        if self.is_playing(ctx.author.id):
+            await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
+            return
+        if bet is None:
+            bet = self.default_guesssize_bet
+        if bet <= 0:
+            await ctx.send("下注金額必須大於零。")
+            return
+        balance = await self.get_balance(ctx.author)
+        if bet > balance:
+            await ctx.send("你的餘額不足。")
+            return
+
+        try:
+            game = GuessGame(ctx, self, bet)
+            self.active_guesssize_games[ctx.author.id] = game
+            await game.start()
+        except Exception as e:
+            log.error(f"啟動 猜大小 遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 猜大小 遊戲時發生錯誤，請稍後再試。")
+
+    @commands.guild_only()
+    @commands.command(name="slots")
+    async def slots(self, ctx: commands.Context, bet: int = None):
+        """拉霸 未完工"""
+        if self.is_playing(ctx.author.id):
+            await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
+            return
+        if bet is None:
+            bet = self.default_slots_bet
+        if bet <= 0:
+            await ctx.send("下注金額必須大於零。")
+            return
+        balance = await self.get_balance(ctx.author)
+        if bet > balance:
+            await ctx.send("你的餘額不足。")
+            return
+
+        try:
+            game = SlotGame(ctx, self, bet)
+            self.active_slots_games[ctx.author.id] = game
+            await game.start()
+        except Exception as e:
+            log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
+            await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
+            
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     @commands.group(name="casinochan")
