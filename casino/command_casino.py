@@ -368,7 +368,7 @@ class StatsMenuView(discord.ui.View):
     
             embed.description = "\n".join(leaderboard_entries)
     
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.message.edit(embed=embed, view=self)
 
 
 
@@ -401,7 +401,7 @@ class StatsMenuView(discord.ui.View):
 
             embed.description = "\n".join(leaderboard_entries)
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.message.edit(embed=embed, view=self)
 
 
     @discord.ui.button(label="各遊戲統計", style=discord.ButtonStyle.red, custom_id="game_stats")
@@ -436,4 +436,4 @@ class StatsMenuView(discord.ui.View):
                     inline=True
                 )
 
-        await interaction.followup.send(embed=embed, ephemeral=True)
+        await interaction.message.edit(embed=embed, view=self)
