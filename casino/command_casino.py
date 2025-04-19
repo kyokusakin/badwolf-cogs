@@ -338,19 +338,26 @@ class StatsMenuView(discord.ui.View):
     async def total_assets_leaderboard_button(self, interaction: discord.Interaction, button: discord.ui.Button):
         """按鈕：顯示總資產 (餘額) 排行榜前 20 名。"""
         await interaction.response.defer(ephemeral=True)
-
-        all_users_data = await self.casino.stats_db.get_top_users_by_profit(limit=20)
-
+    
+        # 從資料庫獲取總資產排行榜，這裡使用了直接查詢的方式
+        async with self.casino.stats_db.connection.cursor() as cursor:
+            await cursor.execute('''
+                SELECT user_id, balance FROM balances
+                ORDER BY balance DESC
+                LIMIT 20
+            ''')
+            top_users_data = await cursor.fetchall()
+    
         embed = discord.Embed(
             title="💰 賭場總資產排行榜 (前20名)",
             color=discord.Color.green()
         )
-
-        if not all_users_data:
+    
+        if not top_users_data:
             embed.description = "目前沒有總資產排行榜數據。"
         else:
             leaderboard_entries = []
-            for i, (user_id, balance) in enumerate(all_users_data):
+            for i, (user_id, balance) in enumerate(top_users_data):
                 try:
                     user = await self.casino.bot.fetch_user(user_id)
                     display_name = user.display_name
@@ -358,12 +365,13 @@ class StatsMenuView(discord.ui.View):
                     display_name = f"未知用戶 ({user_id})"
                 except discord.HTTPException:
                     display_name = f"用戶ID: {user_id}"
-
+    
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{int(balance):,}** 狗幣")
-
+    
             embed.description = "\n".join(leaderboard_entries)
-
+    
         await interaction.followup.send(embed=embed, ephemeral=True)
+
 
 
     @discord.ui.button(label="總盈虧排行榜", style=discord.ButtonStyle.blurple, custom_id="top_profit_leaderboard")
