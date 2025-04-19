@@ -58,6 +58,11 @@ class Casino(commands.Cog, CasinoCommands):
         new_balance = await self.stats_db.update_balance(user.id, amount)
         return new_balance
 
+    async def set_balance(self, user: discord.Member, amount: int) -> int:
+        """設置用戶餘額並寫入資料庫"""
+        new_balance = await self.stats_db.set_balance(user.id, amount)
+        return new_balance
+
     # ——— 頻道白名單檢查 (保留使用 Config) ———————————————————————
 
     async def is_allowed_channel(self, message: discord.Message) -> bool:

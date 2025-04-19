@@ -123,16 +123,16 @@ class StatsDatabase:
             log.warning("Database connection not initialized when trying to update balance.")
             await self.initialize_db()
             if self.connection is None:
-                 log.error(f"Database connection failed for user {user_id} balance update.")
-                 return await self.get_balance(user_id)
+                log.error(f"Database connection failed for user {user_id} balance update.")
+                return await self.get_balance(user_id)
 
         # 確保用戶存在，如果不存在則初始化
         async with self.connection.cursor() as cursor:
-             await cursor.execute(
-                "INSERT INTO balances (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING",
-                (user_id, 1000)
-             )
-             await self.connection.commit()
+            await cursor.execute(
+               "INSERT INTO balances (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING",
+               (user_id, 1000)
+            )
+            await self.connection.commit()
 
         # 現在執行更新操作
         new_balance = 0
@@ -168,6 +168,27 @@ class StatsDatabase:
             log.error(f"Failed to update balance for user {user_id} with amount {amount}: {e}")
             await self.connection.rollback()
             return await self.get_balance(user_id)
+        
+    async def set_balance(self, user_id: int, amount: int) -> int:
+        if self.connection is None:
+            log.warning("Database connection not initialized when trying to set balance.")
+            await self.initialize_db()
+            if self.connection is None:
+                log.error(f"Database connection failed for user {user_id} balance set.")
+                return 0
+
+        try:
+            async with self.connection.cursor() as cursor:
+                await cursor.execute(
+                    "INSERT INTO balances (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET balance = ?",
+                    (user_id, amount, amount)
+                )
+                await self.connection.commit()
+                return amount
+        except Exception as e:
+             log.error(f"Failed to set balance for user {user_id}: {e}")
+             await self.connection.rollback()
+             return 0
 
 
     # === 統計操作 ===
