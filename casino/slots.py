@@ -50,7 +50,7 @@ class SlotGame:
             ":tangerine:": 12,     # 橘子
             ":grapes:": 10,        # 葡萄
             ":watermelon:": 8,     # 西瓜
-            ":seven:": 6,          # 七，機率較低，獎金較高
+            ":seven:": 6,          # 七
         }
         self.last_spin_time: dict[int, float] = {}
         self.spin_cooldown = 3
@@ -133,7 +133,6 @@ class SlotView(discord.ui.View):
             )
             return
 
-        # 生成結果
         self.game.last_spin_time[user_id] = now
         emojis = list(self.game.emoji_weights.keys())
         weights = list(self.game.emoji_weights.values())
@@ -143,9 +142,7 @@ class SlotView(discord.ui.View):
         color = self.game.COLORS["lose"]
         result_text = []
 
-        # 判斷中獎
         if result.count(":skull:") >= 2:
-            # 兩骷髏或以上，沒收本注
             result_text.append("💀 **內務部查收！本次下注沒收**")
         elif result.count(result[0]) == 3:
             mul = self.game.payouts["three_same"].get(result[0], 0)
@@ -201,7 +198,7 @@ class SlotView(discord.ui.View):
         result_info = [
             f"• 本次下注: {self.game.bet:,} 籌碼",
             f"• 獲得獎金: {winnings:,} 籌碼",
-            f"• 累計盈虧: {self.game.total_profit:,} 籌碼", # 這裡顯示的是當前遊戲會話的累計盈虧
+            f"• 累計盈虧: {self.game.total_profit:,} 籌碼",
             *result_text
         ]
         embed.add_field(
