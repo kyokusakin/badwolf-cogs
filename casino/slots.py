@@ -40,7 +40,7 @@ class SlotGame:
             },
         }
         self.emoji_weights = {
-            ":skull:": 18,
+            ":skull:": 45,
             ":cherries:": 35,
             ":lemon:": 25,
             ":strawberry:": 25,
