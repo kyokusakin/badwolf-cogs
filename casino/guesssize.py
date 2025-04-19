@@ -21,7 +21,7 @@ PAYOUT_SPECIFIC_DOUBLE = 10 # Common payout is 10:1 or 11:1
 
 # Combinations / Sums / Specific Dice (Examples, adjust rules/payouts)
 PAYOUT_TWO_DICE_COMBO = 6 # Common payout is 6:1 or 5:1
-PAYOUT_THREE_DICE_SPECIFIC = 300 # Payout for specific non-triple combo (e.g., 1,2,3) - Needs rule confirmation
+PAYOUT_THREE_DICE_SPECIFIC = 30 # Payout for specific non-triple combo (e.g., 1,2,3) - Needs rule confirmation
 PAYOUT_STRAIGHT = 7      # Example payout for a straight (123, 234, etc.) - Needs rule confirmation
 
 # Sum Payouts (Example structure if you add sum bets)
