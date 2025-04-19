@@ -6,6 +6,9 @@ import os
 import pathlib
 from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
+import logging
+
+log = logging.getLogger("red.BadwolfCogs.casino.commands")
 
 class CasinoCommands():
     """賭場輔助指令：查詢籌碼與轉移籌碼"""
@@ -251,7 +254,7 @@ class CasinoCommands():
         except Exception as e:
             log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
             await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
-            
+
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     @commands.group(name="casinochan")
