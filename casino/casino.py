@@ -16,7 +16,7 @@ class Casino(commands.Cog, CasinoCommands):
     """綜合賭場插件"""
 
     def __init__(self, bot: Red):
-        super().__init__(bot)
+        super().__init__(bot, self)
         self.bot = bot
         self.config = Config.get_conf(self, identifier=1234567890)
         self.active_blackjack_games: dict[int, BlackjackGame] = {}
