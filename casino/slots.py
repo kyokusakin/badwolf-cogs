@@ -58,7 +58,7 @@ class SlotGame:
         )
         embed.add_field(
             name="🕹️ 遊戲規則",
-            value=f"• 單次下注金額: **{self.bet}** 籌碼\n"
+            value=f"• 單次下注金額: **{self.bet:,}** 籌碼\n"
                   "• 每次旋轉間隔: 5 秒冷卻\n"
                   "• 中獎組合判定:\n"
                   "  ▸ 3個相同圖示: 獲得對應倍率\n"
@@ -119,7 +119,7 @@ class SlotView(discord.ui.View):
         balance = await self.game.cog.get_balance(interaction.user)
         if balance < self.game.bet:
             await interaction.response.send_message(
-                f"💸 籌碼不足！本次需 {self.game.bet}，但你只有 {balance}。",
+                f"💸 籌碼不足！本次需 {self.game.bet:,}，但你只有 {balance:,}。",
                 ephemeral=True
             )
             return
@@ -142,14 +142,14 @@ class SlotView(discord.ui.View):
             mul = self.game.payouts["three_same"].get(result[0], 0)
             winnings = int(self.game.bet * mul)
             color = self.game.COLORS["jackpot"]
-            result_text.append(f"🎉 恭喜中大獎！獲得 {winnings} 籌碼")
+            result_text.append(f"🎉 恭喜中大獎！獲得 {winnings:,} 籌碼")
         else:
             for e in SlotGame.EMOJIS:
                 if result.count(e) == 2:
                     mul2 = self.game.payouts["two_same"].get(e, 0)
                     winnings = int(self.game.bet * mul2)
                     color = self.game.COLORS["win"]
-                    result_text.append(f"🎊 部分中獎！獲得 {winnings} 籌碼")
+                    result_text.append(f"🎊 部分中獎！獲得 {winnings:,} 籌碼")
                     break
             else:
                 result_text.append("😢 未中獎")
@@ -179,9 +179,9 @@ class SlotView(discord.ui.View):
             inline=False
         )
         result_info = [
-            f"• 本次下注: {self.game.bet} 籌碼",
-            f"• 獲得獎金: {winnings} 籌碼",
-            f"• 累計盈虧: {self.game.total_profit} 籌碼",
+            f"• 本次下注: {self.game.bet:,} 籌碼",
+            f"• 獲得獎金: {winnings:,} 籌碼",
+            f"• 累計盈虧: {self.game.total_profit:,} 籌碼",
             *result_text
         ]
         embed.add_field(
@@ -191,7 +191,7 @@ class SlotView(discord.ui.View):
         )
         embed.add_field(
             name="📈 遊戲統計",
-            value=f"• 當前餘額: {new_bal} 籌碼",
+            value=f"• 當前餘額: {new_bal:,} 籌碼",
             inline=False
         )
         embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png")
@@ -217,7 +217,7 @@ class SlotView(discord.ui.View):
             pass
         final_embed = discord.Embed(
             title="🛑 遊戲結束",
-            description=f"累計盈虧: **{self.game.total_profit}** 籌碼",
+            description=f"累計盈虧: **{self.game.total_profit:,}** 籌碼",
             color=self.game.COLORS["base"]
         )
         try:
@@ -239,7 +239,7 @@ class SlotView(discord.ui.View):
             pass
         timeout_embed = discord.Embed(
             title="⏰ 遊戲超時",
-            description=f"最終盈虧: **{self.game.total_profit}** 籌碼",
+            description=f"最終盈虧: **{self.game.total_profit:,}** 籌碼",
             color=self.game.COLORS["lose"]
         )
         timeout_embed.set_footer(text="由於長時間無操作，遊戲已自動結束")
