@@ -203,7 +203,7 @@ class CasinoCommands():
     @commands.is_owner()
     @commands.guild_only()
     @commands.command(name="setbalance", aliases=["設定餘額"])
-    async def set_balance(self, ctx: commands.Context, user: discord.Member, amount: int):
+    async def setbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
         """設定使用者的餘額。"""
         if amount < 0:
             await ctx.send("餘額不能為負數。")
