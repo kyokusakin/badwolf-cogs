@@ -370,14 +370,6 @@ class GuessView(discord.ui.View):
         )
         await interaction.response.send_modal(modal)
 
-    @discord.ui.button(label="指定三骰(非圍)", style=discord.ButtonStyle.grey, custom_id="three_dice_modal", row=2)
-    async def three_dice_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
-        modal = DiceBetModal(
-            game=self.game, view=self, bet_type_base="three_dice_specific",
-            title="指定三骰 (非圍骰)", label="輸入三個不同骰子點數", placeholder="例如：1 2 4", requires_three_nums=True
-        )
-        await interaction.response.send_modal(modal)
-
     # Example "Straight" button
     @discord.ui.button(label="順子", style=discord.ButtonStyle.blurple, custom_id="straight", row=2)
     async def straight(self, interaction: discord.Interaction, button: discord.ui.Button):

@@ -151,7 +151,7 @@ class CasinoCommands():
             await ctx.send("啟動 21 點遊戲時發生錯誤，請稍後再試。")
 
     @commands.guild_only()
-    @commands.command(name="guesssize", aliases=["猜大小", "骰寶"])
+    @commands.command(name="guesssize", aliases=["猜大小", "骰寶", "dice", "sicbo"])
     async def guesssize(self, ctx: commands.Context, bet: int = None):
         """猜大小。 使令[p]guesssize <下注金額>"""
         if self.is_playing(ctx.author.id):
