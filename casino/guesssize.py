@@ -194,14 +194,14 @@ class GuessGame:
         dice_sum_display = sum(self.dice_result) if self.dice_result else "N/A"
 
         desc = (
-            "🎰 **猜大小遊戲結果 (骰寶)** 🎰\n" # 標題稍微修改以符合遊戲
+            "🎰 **猜大小遊戲結果 (骰寶)** 🎰\n"
             "━━━━━━━━━━━━━━━\n"
-            f"🎟 **您的總投注**： {self.bet:,} 狗幣\n" # 增加千位分隔符
+            f"🎟 **您的總投注**： {self.bet:,} 狗幣\n"
             f"🎯 **您的選擇**： {self.get_player_bet_display()}\n\n"
             f"🎲 骰子： {dice_result_display}\n"
             f"🧮 總點數： **{dice_sum_display}**\n\n"
-            f"💰 **本輪淨輸贏**： `{net_payout:+,}`狗幣\n"
-            f"💼 **剩餘狗幣**： `{total_balance:,}`\n\n" # 確保這裡也使用整數顯示
+            f"💰 **本輪淨輸贏**： {net_payout:+,}狗幣\n"
+            f"💼 **剩餘狗幣**： {total_balance:,}\n\n"
             "━━━━━━━━━━━━━━━"
         )
 
