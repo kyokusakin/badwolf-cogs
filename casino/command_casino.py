@@ -200,6 +200,24 @@ class CasinoCommands():
             log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
             await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
 
+    @commands.is_owner()
+    @commands.guild_only()
+    @commands.command(name="setbalance", aliases=["設定餘額"])
+    async def set_balance(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """設定使用者的餘額。"""
+        if amount < 0:
+            await ctx.send("餘額不能為負數。")
+            return
+
+        # 更新使用者的餘額
+        await self.casino.set_balance(user, amount)
+
+        # 獲取更新後的餘額
+        new_balance = await self.casino.get_balance(user)
+
+        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
+
+
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
     @commands.group(name="casinochan")
@@ -290,22 +308,6 @@ class CasinoCommands():
         view = StatsMenuView(self.casino, ctx.author)
         msg = await ctx.reply(embed=embed, view=view, mention_author=False)
         view.message = msg 
-
-    @commands.is_owner()
-    @commands.command(name="setbalance", aliases=["設定餘額"])
-    async def set_balance(self, ctx: commands.Context, user: discord.Member, amount: int):
-        """設定使用者的餘額。"""
-        if amount < 0:
-            await ctx.send("餘額不能為負數。")
-            return
-
-        # 更新使用者的餘額
-        await self.casino.set_balance(user, amount)
-
-        # 獲取更新後的餘額
-        new_balance = await self.casino.get_balance(user)
-
-        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
 
 ######################################################
 # 賭場統計選單
