@@ -357,14 +357,10 @@ class StatsMenuView(discord.ui.View):
             embed.description = "目前沒有總資產排行榜數據。"
         else:
             leaderboard_entries = []
+            
             for i, (user_id, balance) in enumerate(top_users_data):
-                try:
-                    user = await self.casino.bot.fetch_user(user_id)
-                    display_name = user.display_name
-                except discord.NotFound:
-                    display_name = f"未知用戶 ({user_id})"
-                except discord.HTTPException:
-                    display_name = f"用戶ID: {user_id}"
+                user = self.casino.bot.get_user(user_id)
+                display_name = user.display_name if user else f"用戶ID: {user_id}"
     
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{int(balance):,}** 狗幣")
     
@@ -390,14 +386,11 @@ class StatsMenuView(discord.ui.View):
             embed.description = "目前沒有總盈虧排行榜數據。"
         else:
             leaderboard_entries = []
+
             for i, (user_id, total_profit) in enumerate(top_users_data):
-                try:
-                    user = await self.casino.bot.fetch_user(user_id)
-                    display_name = user.display_name
-                except discord.NotFound:
-                    display_name = f"未知用戶 ({user_id})"
-                except discord.HTTPException:
-                    display_name = f"用戶ID: {user_id}"
+                user = self.casino.bot.get_user(user_id)
+                display_name = user.display_name if user else f"用戶ID: {user_id}"
+
 
                 leaderboard_entries.append(f"**#{i+1}.** {display_name}: **{total_profit:+,}** 狗幣")
 
