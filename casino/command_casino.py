@@ -18,6 +18,7 @@ class CasinoCommands():
         self.bot = bot
         self.casino = casino_cog
 
+    @commands.guild_only()
     @commands.command(name="balance", aliases=["餘額", "查詢餘額", "狗幣", "籌碼"])
     async def balance(self, ctx: commands.Context, user: discord.Member = None):
         """查看你的或他人的籌碼數量。"""
@@ -36,6 +37,41 @@ class CasinoCommands():
         )
         await ctx.reply(interface)
 
+    @commands.is_owner()
+    @commands.guild_only()
+    @commands.command(name="setbalance", aliases=["設定餘額"])
+    async def setbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """設定使用者的餘額。"""
+        if amount < 0:
+            await ctx.send("餘額不能為負數。")
+            return
+
+        # 更新使用者的餘額
+        await self.casino.set_balance(user, amount)
+
+        # 獲取更新後的餘額
+        new_balance = await self.casino.get_balance(user)
+
+        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
+
+    @commands.is_owner()
+    @commands.guild_only()
+    @commands.command(name="addbalance", aliases=["增加餘額"])
+    async def addbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """增加使用者的餘額。"""
+        if amount <= 0:
+            await ctx.send("增加的金額必須大於零。")
+            return
+
+        # 更新使用者的餘額
+        await self.casino.update_balance(user, amount)
+
+        # 獲取更新後的餘額
+        new_balance = await self.casino.get_balance(user)
+
+        await ctx.send(f"已將 {user.display_name} 的餘額增加 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
+
+    @commands.guild_only()
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
         """轉移籌碼給其他使用者。"""
@@ -70,6 +106,7 @@ class CasinoCommands():
         )
         await ctx.reply(interface)
     
+    @commands.guild_only()
     @commands.command(name="work", aliases=["工作", "打工"])
     async def work(self, ctx: commands.Context):
         """工作賺取籌碼，每小時可執行一次。"""
@@ -97,6 +134,7 @@ class CasinoCommands():
         # 設置冷卻
         await self.casino.stats_db.set_cooldown(user_id, command_name, 3600, commands.BucketType.user)
 
+    @commands.guild_only()
     @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
     async def dogmeat(self, ctx: commands.Context):
         """賣狗肉賺取籌碼，每天可執行一次。"""
@@ -123,8 +161,9 @@ class CasinoCommands():
 
         # 設置冷卻
         await self.casino.stats_db.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
-
-
+##########################################################
+# 遊戲指令
+##########################################################
     @commands.guild_only()
     @commands.command(name="blackjack", aliases=["21點", "二十一點"])
     async def blackjack(self, ctx: commands.Context, bet: int = None):
@@ -178,7 +217,7 @@ class CasinoCommands():
     @commands.guild_only()
     @commands.command(name="slots")
     async def slots(self, ctx: commands.Context, bet: int = None):
-        """拉霸 未完工"""
+        """拉霸。 使令[p]slots <下注金額>"""
         if self.is_playing(ctx.author.id):
             await ctx.send("你已經正在進行一個遊戲，請先完成該遊戲。")
             return
@@ -200,23 +239,9 @@ class CasinoCommands():
             log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
             await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
 
-    @commands.is_owner()
-    @commands.guild_only()
-    @commands.command(name="setbalance", aliases=["設定餘額"])
-    async def setbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
-        """設定使用者的餘額。"""
-        if amount < 0:
-            await ctx.send("餘額不能為負數。")
-            return
-
-        # 更新使用者的餘額
-        await self.casino.set_balance(user, amount)
-
-        # 獲取更新後的餘額
-        new_balance = await self.casino.get_balance(user)
-
-        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
-
+########################################################
+# 賭場頻道設定
+########################################################
 
     @commands.guild_only()
     @commands.admin_or_permissions(manage_guild=True)
@@ -294,7 +319,12 @@ class CasinoCommands():
             )
         
         await ctx.reply(embed=embed, mention_author=False)
+    
+######################################################
+# 賭場統計選單
+######################################################
 
+    @commands.guild_only()
     @commands.command(name="stats", aliases=["統計"])
     @commands.cooldown(1, 30, commands.BucketType.user)
     async def show_stats_menu(self, ctx: commands.Context):
@@ -309,10 +339,9 @@ class CasinoCommands():
         msg = await ctx.reply(embed=embed, view=view, mention_author=False)
         view.message = msg 
 
-######################################################
+#########################################################
 # 賭場統計選單
-######################################################
-
+#########################################################
 class StatsMenuView(discord.ui.View):
     def __init__(self, casino_cog, author: discord.User):
         super().__init__(timeout=60)
