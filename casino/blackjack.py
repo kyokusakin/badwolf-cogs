@@ -262,12 +262,7 @@ class BlackjackView(discord.ui.View):
             item.disabled = True
         if self.game.message:
             await self.game.message.edit(view=None)
-        # 退還下注
-        refund_multiplier = 2 if self.game.doubled else 1
-        refund = self.game.bet * refund_multiplier
-        await self.game.cog.update_balance(self.game.ctx.author, refund)
-        await self.game.ctx.send(
-            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
-            f"目前總狗幣: {int(await self.game.cog.get_balance(self.game.ctx.author)):,}"
-        )
+        # 超時停牌
+        await self.game.finalize("時間到，你已停牌。", win=None)
+
         self.game.cleanup()
