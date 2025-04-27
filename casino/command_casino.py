@@ -71,6 +71,23 @@ class CasinoCommands():
 
         await ctx.send(f"已將 {user.display_name} 的餘額增加 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
 
+    @commands.is_owner()
+    @commands.guild_only()
+    @commands.command(name="removebalance", aliases=["減少餘額"])
+    async def removebalance(self, ctx: commands.Context, user: discord.Member, amount: int):
+        """減少使用者的餘額。"""
+        if amount <= 0:
+            await ctx.send("減少的金額必須大於零。")
+            return
+
+        # 更新使用者的餘額
+        await self.casino.update_balance(user, -amount)
+
+        # 獲取更新後的餘額
+        new_balance = await self.casino.get_balance(user)
+
+        await ctx.send(f"已將 {user.display_name} 的餘額減少 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
+
     @commands.guild_only()
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
     async def transfer(self, ctx: commands.Context, member: discord.Member, amount: int):
