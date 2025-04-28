@@ -262,7 +262,7 @@ class BlackjackView(discord.ui.View):
             item.disabled = True
         if self.game.message:
             await self.game.message.edit(view=None)
-        # 超時停牌
-        await self.game.finalize("時間到，強制停牌。", win=None)
-
+        # 超時停牌並判斷是否勝利
+        await self.dealer_play(interaction=None, extra="(超時停牌)")
+        
         self.game.cleanup()
