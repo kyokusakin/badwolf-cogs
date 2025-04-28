@@ -262,7 +262,18 @@ class BlackjackView(discord.ui.View):
             item.disabled = True
         if self.game.message:
             await self.game.message.edit(view=None)
-        # 超時停牌並判斷是否勝利
-            await self.dealer_play(interaction=None, extra="(超時停牌)")
-        
+        while self.game.calc_total(self.game.dealer_hand) < 17:
+            self.game.dealer_hand.append(self.game.draw())
+
+        p_tot = self.game.calc_total(self.game.player_hand)
+        d_tot = self.game.calc_total(self.game.dealer_hand)
+
+        if d_tot > 21 or p_tot > d_tot:
+            payout = self.game.bet * (2 if self.game.doubled else 1)
+            await self.game.finalize(f"你贏了！(超時停牌)", win=True, payout=payout)
+        elif p_tot == d_tot:
+            await self.game.finalize("平手，退回下注。", win=None)
+        else:
+            await self.game.finalize("你輸了。", win=False)
+
         self.game.cleanup()
