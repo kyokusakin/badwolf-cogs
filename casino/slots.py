@@ -133,7 +133,10 @@ class SlotView(discord.ui.View):
             )
             return
 
+        # 先扣除下注金額
+        await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
         self.game.last_spin_time[user_id] = now
+
         emojis = list(self.game.emoji_weights.keys())
         weights = list(self.game.emoji_weights.values())
         result = random.choices(emojis, weights=weights, k=3)
@@ -160,14 +163,12 @@ class SlotView(discord.ui.View):
             else:
                 result_text.append("😢 未中獎")
 
-        actual_profit_loss = 0
-        if winnings > 0:
-            payout = winnings
-            await self.game.cog.update_balance(self.game.ctx.author, payout)
-            actual_profit_loss = winnings
-        else:
-            await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
-            actual_profit_loss = -self.game.bet
+        # 計算淨利並一次性更新
+        net = winnings - self.game.bet
+        if net > 0:
+            # 發放淨利（賭注已扣）
+            await self.game.cog.update_balance(self.game.ctx.author, net)
+        actual_profit_loss = net
 
         self.game.total_profit += actual_profit_loss
 
@@ -184,7 +185,6 @@ class SlotView(discord.ui.View):
 
         new_bal = int(await self.game.cog.get_balance(interaction.user))
 
-        # 構建嵌入訊息
         embed = discord.Embed(
             title=f"🎰 拉霸機",
             color=color
