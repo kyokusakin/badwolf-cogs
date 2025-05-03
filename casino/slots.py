@@ -162,7 +162,7 @@ class SlotView(discord.ui.View):
 
         actual_profit_loss = 0
         if winnings > 0:
-            payout = self.game.bet + winnings
+            payout = winnings
             await self.game.cog.update_balance(self.game.ctx.author, payout)
             actual_profit_loss = winnings
         else:
