@@ -114,29 +114,20 @@ class SlotView(discord.ui.View):
         if self.game.ended:
             await interaction.response.send_message("⚠️ 遊戲已結束，無法再拉霸。", ephemeral=True)
             return
-
         user_id = interaction.user.id
         now = time.time()
-        last = self.game.last_spin_time.get(user_id, 0)
-        if now - last < self.game.spin_cooldown:
+        if now - self.game.last_spin_time.get(user_id, 0) < self.game.spin_cooldown:
             await interaction.response.send_message(
-                f"⏳ 請稍後再試！冷卻時間剩 {self.game.spin_cooldown - (now - last):.1f} 秒。",
-                ephemeral=True
-            )
+                f"⏳ 請稍後再試！冷卻時間剩 {self.game.spin_cooldown - (now - self.game.last_spin_time.get(user_id)):.1f} 秒。", ephemeral=True)
             return
-
         balance = await self.game.cog.get_balance(interaction.user)
         if balance < self.game.bet:
             await interaction.response.send_message(
-                f"💸 籌碼不足！本次需 {self.game.bet:,}，但你只有 {balance:,}。",
-                ephemeral=True
-            )
+                f"💸 籌碼不足！本次需 {self.game.bet:,}，但你只有 {balance:,}。", ephemeral=True)
             return
-
-        # 先扣除下注金額
-        await self.game.cog.update_balance(self.game.ctx.author, -self.game.bet)
         self.game.last_spin_time[user_id] = now
 
+        # 抽取結果
         emojis = list(self.game.emoji_weights.keys())
         weights = list(self.game.emoji_weights.values())
         result = random.choices(emojis, weights=weights, k=3)
@@ -148,74 +139,42 @@ class SlotView(discord.ui.View):
         if result.count(":skull:") >= 2:
             result_text.append("💀 **內務部查收！本次下注沒收**")
         elif result.count(result[0]) == 3:
-            mul = self.game.payouts["three_same"].get(result[0], 0)
-            winnings = int(self.game.bet * mul)
+            winnings = int(self.game.bet * self.game.payouts["three_same"].get(result[0], 0))
             color = self.game.COLORS["jackpot"]
             result_text.append(f"🎉 恭喜中大獎！獲得 {winnings:,} 籌碼")
         else:
-            for e in SlotGame.EMOJIS:
+            for e in self.game.EMOJIS:
                 if result.count(e) == 2:
-                    mul2 = self.game.payouts["two_same"].get(e, 0)
-                    winnings = int(self.game.bet * mul2)
+                    winnings = int(self.game.bet * self.game.payouts["two_same"].get(e, 0))
                     color = self.game.COLORS["win"]
                     result_text.append(f"🎊 部分中獎！獲得 {winnings:,} 籌碼")
                     break
             else:
                 result_text.append("😢 未中獎")
 
-        # 計算淨利並一次性更新
+        # 計算淨利並一次性更新 (winnings - bet)
         net = winnings - self.game.bet
-        if net > 0:
-            # 發放淨利（賭注已扣）
-            await self.game.cog.update_balance(self.game.ctx.author, net)
-        actual_profit_loss = net
-
-        self.game.total_profit += actual_profit_loss
+        await self.game.cog.update_balance(self.game.ctx.author, net)
+        self.game.total_profit += net
 
         try:
-            await self.game.cog.stats_db.update_stats(
-                user_id,
-                'slots',
-                self.game.bet,
-                actual_profit_loss
-            )
-            log.debug(f"Stats updated for user {user_id}, game 'slots', bet {self.game.bet}, profit {actual_profit_loss}")
+            await self.game.cog.stats_db.update_stats(user_id, 'slots', self.game.bet, net)
         except Exception as e:
             log.error(f"Failed to update stats for user {user_id}: {e}", exc_info=True)
 
         new_bal = int(await self.game.cog.get_balance(interaction.user))
-
-        embed = discord.Embed(
-            title=f"🎰 拉霸機",
-            color=color
-        )
-        slot_display = f"**║**  {rstr.replace(' ', '  **║**  ')}  **║**"
-        embed.add_field(
-            name="轉輪結果",
-            value=f"\n{slot_display}\n",
-            inline=False
-        )
-        result_info = [
-            f"• 本次下注: {self.game.bet:,} 籌碼",
-            f"• 獲得獎金: {winnings:,} 籌碼",
-            f"• 累計盈虧: {self.game.total_profit:,} 籌碼",
-            *result_text
-        ]
-        embed.add_field(
-            name="📊 結算",
-            value="\n".join(result_info),
-            inline=False
-        )
-        embed.add_field(
-            name="📈 遊戲統計",
-            value=f"• 當前餘額: {new_bal:,} 籌碼",
-            inline=False
-        )
+        # 回傳嵌入
+        embed = discord.Embed(title="🎰 拉霸機", color=color)
+        embed.add_field(name="轉輪結果", value=f"\n**║**  {rstr.replace(' ', '  **║**  ')}  **║**\n", inline=False)
+        embed.add_field(name="📊 結算", value=(
+            f"• 本次下注: {self.game.bet:,} 籌碼\n"
+            f"• 淨利: {net:,} 籌碼\n"
+            f"• 累計盈虧: {self.game.total_profit:,} 籌碼\n"
+            + "\n".join(result_text)
+        ), inline=False)
+        embed.add_field(name="📈 遊戲統計", value=f"• 當前餘額: {new_bal:,} 籌碼", inline=False)
         embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png")
-        embed.set_footer(
-            text=f"玩家 {interaction.user.display_name}",
-            icon_url=interaction.user.avatar.url
-        )
+        embed.set_footer(text=f"玩家 {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
         await interaction.response.edit_message(embed=embed, view=self)
         self.refresh_timeout()
 
