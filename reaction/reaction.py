@@ -28,7 +28,7 @@ class Reaction(commands.Cog):
                 data = await resp.json()
                 image_url = data.get("link")
 
-        title = f"{interaction.user.mention} {action} {member.mention}"
+        title = f"{interaction.user.display_name} {action} {member.display_name}"
         embed = discord.Embed(title=title, color=discord.Color.blue()).set_image(url=image_url)
         await interaction.followup.send(embed=embed)
 
