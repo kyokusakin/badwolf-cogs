@@ -38,10 +38,9 @@ class Reaction(commands.Cog):
         # 決定顯示文字與過去式
         past_text = f"{action_key}ped" if not display_text else f"{display_text}了"
 
-        title = f"{interaction.user.display_name} {past_text} {member.display_name}"
-        embed = discord.Embed(title=title, color=discord.Color.blue()).set_image(url=image_url)
         content = f"{interaction.user.mention} {past_text} {member.mention}!"
-        await interaction.followup.send(content=content, embed=embed)
+        embed = discord.Embed(description=content, color=discord.Color.blue()).set_image(url=image_url)
+        await interaction.followup.send(embed=embed)
 
     @app_commands.command(name="slap", description="打巴掌！")
     @app_commands.describe(member="要被打的成員")
