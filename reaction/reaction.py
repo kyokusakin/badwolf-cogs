@@ -7,20 +7,17 @@ ACTIONS = {
     "slap": "https://api.purrbot.site/v2/img/sfw/slap/gif",
     "hug": "https://api.purrbot.site/v2/img/sfw/hug/gif",
     "kiss": "https://api.purrbot.site/v2/img/sfw/kiss/gif",
-    "lick": "https://api.purrbot.site/v2/img/sfw/lick/gif",
 }
 
-class Reaction(commands.Cog):
+class ReactionCog(commands.Cog):
+    """提供多種動作指令，如 /slap、/hug、/kiss，使用統一處理流程。"""
     def __init__(self, bot):
         self.bot = bot
 
     async def _do_action(self, interaction: discord.Interaction, member: discord.Member, action: str):
-        """
-        共用動作處理：
-        1. 從 ACTIONS 取得 v2 API URL
-        2. 非同步呼叫取得 GIF
-        3. 建立並回傳 Embed
-        """
+        if member == interaction.user:
+            await interaction.response.send_message("你不能對自己使用這個指令！", ephemeral=True)
+            return
         await interaction.response.defer()
         api_url = ACTIONS[action]
         async with aiohttp.ClientSession() as session:
@@ -28,28 +25,25 @@ class Reaction(commands.Cog):
                 data = await resp.json()
                 image_url = data.get("link")
 
-        title = f"{interaction.user.display_name} {action} {member.display_name}"
+        title = f"{interaction.user.display_name} {action}了 {member.display_name}"
         embed = discord.Embed(title=title, color=discord.Color.blue()).set_image(url=image_url)
-        await interaction.followup.send(embed=embed)
+
+        content = f"{interaction.user.mention} {action}了 {member.mention}!"
+        await interaction.followup.send(content=content, embed=embed)
 
 ###############################################################################
 
     @app_commands.command(name="slap", description="打巴掌！")
     @app_commands.describe(member="要被打的成員")
     async def slap(self, interaction: discord.Interaction, member: discord.Member):
-        await self._do_action(interaction, member, "slap")
+        await self._do_action(interaction, member, "掌嘴")
 
     @app_commands.command(name="hug", description="給一個擁抱！")
     @app_commands.describe(member="要被擁抱的成員")
     async def hug(self, interaction: discord.Interaction, member: discord.Member):
-        await self._do_action(interaction, member, "hug")
+        await self._do_action(interaction, member, "抱")
 
     @app_commands.command(name="kiss", description="飛個吻！")
     @app_commands.describe(member="要被親的成員")
     async def kiss(self, interaction: discord.Interaction, member: discord.Member):
-        await self._do_action(interaction, member, "kiss")
-    
-    @app_commands.command(name="lick", description="舔！")
-    @app_commands.describe(member="要被舔的成員")
-    async def lick(self, interaction: discord.Interaction, member: discord.Member):
-        await self._do_action(interaction, member, "lick")
+        await self._do_action(interaction, member, "親吻")
