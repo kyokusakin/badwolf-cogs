@@ -8,6 +8,7 @@ ACTIONS = {
     "slap": "https://api.purrbot.site/v2/img/sfw/slap/gif",
     "hug": "https://api.purrbot.site/v2/img/sfw/hug/gif",
     "kiss": "https://api.purrbot.site/v2/img/sfw/kiss/gif",
+    "lick": "https://api.purrbot.site/v2/img/sfw/lick/gif",
 }
 
 class Reaction(commands.Cog):
