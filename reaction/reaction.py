@@ -10,7 +10,7 @@ ACTIONS = {
     "lick": "https://api.purrbot.site/v2/img/sfw/lick/gif",
 }
 
-class ReactionCog(commands.Cog):
+class Reaction(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
