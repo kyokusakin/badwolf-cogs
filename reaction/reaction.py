@@ -56,3 +56,8 @@ class Reaction(commands.Cog):
     @app_commands.describe(member="要被親的成員")
     async def kiss(self, interaction: discord.Interaction, member: discord.Member):
         await self._do_action(interaction, member, "kiss", "親吻")
+   
+    @app_commands.command(name="lick", description="舔")
+    @app_commands.describe(member="要被舔的成員")
+    async def lick(self, interaction: discord.Interaction, member: discord.Member):
+        await self._do_action(interaction, member, "lick", "舔")
