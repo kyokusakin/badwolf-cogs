@@ -9,7 +9,7 @@ ACTIONS = {
     "kiss": "https://api.purrbot.site/v2/img/sfw/kiss/gif",
 }
 
-class ReactionCog(commands.Cog):
+class Reaction(commands.Cog):
     """提供多種動作指令，如 /slap、/hug、/kiss，使用統一處理流程。"""
     def __init__(self, bot):
         self.bot = bot
