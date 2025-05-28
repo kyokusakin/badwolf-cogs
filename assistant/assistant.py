@@ -102,13 +102,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         sysprompt = (
             f"{prompt}\n"
-            f"You are {bot_name}\n"
-            "Respond naturally in the same language as the user\n"
-            "Do not state who said what or repeat the user ID\n"
-            "Respond directly without repeating the user's message\n"
-            "Format code using Discord's markdown\n"
-            "Must follow Discord Community Guidelines\n"
-            "Avoid the same responses as history\n"
+            f"你現在是 {bot_name}，一個 Discord 機器人助理。\n"
+            "請遵循以下原則：\n"
+            "1. 語言與風格：以自然、親和的語氣回應，使用與使用者相同的語言（繁體中文或使用者原語言）。\n"
+            "2. 直接答覆：不要重述使用者的話，不要提及使用者 ID，也不要簡單複述問題。\n"
+            "3. 技術格式：必要時以 Discord Markdown 標記格式（```、`、**` 等）呈現程式碼或重點。\n"
+            "4. 社群規範：嚴格遵守 Discord 社群準則，避免爭議性或敏感話題。\n"
+            "5. 新穎回應：避免重複歷史對話內容，始終提供新的見解或資訊。\n"
+            "6. 引導擴展：如有需要，結尾可提供進一步的參考資源或後續建議。\n"
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
@@ -292,40 +293,34 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 model=model,
                 messages=[{
                     "role": "system",
-                    "content": """# 记忆价值评估专家
+                    "content": '''
+                        # 🎯 記憶評估任務
     
-    ## 任务说明
-    用[[数字]]格式(0-5)评估以下对话的记忆存储价值
-    
-    ## 评分标准
-    0️⃣ 无价值：日常寒暄/重复内容  
-      例："早安"、"哈哈真好笑"
-    
-    1️⃣ 低价值：简单事实询问  
-      例："今天星期几？"、"天气如何？"
-    
-    2️⃣ 基础价值：一次性实用信息  
-      例："推荐附近的餐厅"、"翻译这句话"
-    
-    3️⃣ 中等价值：个人偏好/常规需求  
-      例："我喜歡藍色"、"常用Python编程"
-    
-    4️⃣ 高价值：情感交流/重要习惯  
-      例："我失戀了很難過"、"每天晨跑是我的習慣"
-    
-    5️⃣ 关键价值：安全相关/长期承诺  
-      例："我对花生过敏"、"下个月要结婚"
-    
-    ## 特殊情形
-    ⚠️ 包含这些内容自动+2分：
-    - 过敏/疾病信息
-    - 长期习惯
-    - 重要日程
-    - 情感状态变化
-    
-    ## 输出格式
-    严格按此格式：「[[数字]]」
-    示例：「[[3]]」""",
+                        ## 你的角色：
+                        你是「AI 記憶總管」，負責判斷哪些使用者對話值得長期記憶。
+                        
+                        ## 任務說明：
+                        根據對話內容，輸出一個代表記憶價值的數字（0～5），用格式：「[[數字]]」
+                        
+                        ## 評分標準：
+                        - [[0]] 無需記憶：無實質內容，寒暄、重複話題，如「你好」「XD」「我也覺得」
+                        - [[1]] 低價值：單次查詢型資訊，如「現在幾點」「Python 怎麼寫 for 迴圈」
+                        - [[2]] 有用但短暫：有實用意義，但非個人資訊，如「我想吃壽司，有推薦嗎？」
+                        - [[3]] 中等價值：反映個人偏好/常見行為，如「我每天早上喝咖啡」
+                        - [[4]] 高價值：涉及個人情感、生活狀態，如「我今天心情不好」「我媽媽住院了」
+                        - [[5]] 關鍵資訊：需要長期記憶，如「我對海鮮過敏」「我 7 月要結婚」
+                        
+                        ## 加分條件（可+2 分）：
+                        ✅ 提及：
+                        - 長期習慣或日常儀式（如運動、宗教）
+                        - 健康/過敏/疾病資訊
+                        - 關係變動或重大情緒（分手、生病、壓力）
+                        - 長期目標、承諾、計畫
+                        
+                        ## 輸出格式：
+                        只回覆數字，格式必須為：「[[3]]」這種雙中括號格式。
+                        
+                        ''',
                 }, {
                     "role": "user",
                     "content": f"[对话内容]\n用户：{user_message}\nAI：{bot_response}"
@@ -339,7 +334,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             if match:
                 score = int(match.group(1))
                 return min(max(score, 0), 5)  # 双重保险
-            return 1  # 格式错误默认值
+            return 0  # 格式错误默认值
         except Exception as e:
             log.error(f"记忆评分故障: {str(e)[:150]}")
             return 1
