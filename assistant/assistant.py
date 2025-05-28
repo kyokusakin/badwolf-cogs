@@ -159,21 +159,22 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 log.error(f"Error processing queue: {e}")
 
     async def process_response(self, message: discord.Message, response: str):
-        """Process response and decide whether to store memory based on AI evaluation"""
+        """Process response and decide whether to store memory based on AI evaluation with JSON output"""
         if response:
             await self.send_response(message, response)
-            # Let AI evaluate the importance of this conversation
-            importance = await self.evaluate_memory(message.content, response)
-            if importance > 0:
+            # Let AI evaluate the importance of this conversation with JSON response
+            memory_eval = await self.evaluate_memory_json(message.content, response)
+            
+            if memory_eval["score"] >= 0:
                 await self.save_chat_history(
                     guild_id=message.guild.id,
                     user_id=message.author.id,
                     user_name=message.author.display_name,
                     user_message=message.content,
                     bot_response=response,
-                    importance=importance
+                    importance=memory_eval["score"],
                 )
-            #log.info(f"\nGuild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message: {message.content}\nBot response: {response}\nImportance: {importance}")
+            #log.info(f"\nGuild ID:{message.guild.id}\nUser: {message.author.display_name}({message.author.id})\nUser Message: {message.content}\nBot response: {response}\nMemory Evaluation: {memory_eval}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -207,26 +208,30 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 return []
         return []
 
-    async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, user_message: str, bot_response: str, importance: int = 1):
-        """Asynchronously save chat history with timestamp and importance rating"""
+    async def save_chat_history(self, guild_id: int, user_id: int, user_name: str, 
+                              user_message: str, bot_response: str, importance: int = 1):
+        """Asynchronously save chat history with enhanced memory evaluation data"""
         file_path = os.path.join(str(self.chat_histories_path()), f"{guild_id}.json")
         history = await self.load_chat_history(guild_id)
+            
         record = {
             "user_id": user_id,
             "user_name": user_name,
             "user_message": user_message,
             "bot_response": bot_response,
             "timestamp": time.time(),
-            "importance": importance
+            "importance": importance,
         }
         history.append(record)
+        
         try:
             async with aiofiles.open(file_path, 'w', encoding='utf-8') as file:
                 await file.write(json.dumps(history, indent=4, ensure_ascii=False))
         except Exception as e:
             log.error(f"Error saving chat history: {e}")
 
-    async def build_guild_history(self, history: List[Dict], current_time: float, short_term_seconds: int, max_records: int, bot_name: str) -> str:
+    async def build_guild_history(self, history: List[Dict], current_time: float, 
+                                short_term_seconds: int, max_records: int, bot_name: str) -> str:
         """优化后的记忆筛选逻辑，确保严格的数量控制和更合理的记忆排序"""
         # 分离短期记忆（按时间倒序）
         short_term = sorted(
@@ -262,15 +267,14 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             for entry in combined
         )
 
-
-    async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
+    async def evaluate_memory_json(self, user_message: str, bot_response: str) -> Dict:
         """
-        Let AI evaluate the memory importance of this conversation, return value 0-5
-        0 means not important, don't store; higher number means more important
+        Let AI evaluate the memory importance of this conversation with JSON output
+        Returns a dictionary with score (0-5), reason
         """
         api_key = await self.config.api_key()
         if not api_key:
-            return 1  # Default importance if API key not set
+            return {"score": 1}
         
         api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
@@ -279,14 +283,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(
             self.executor,
-            self._blocking_evaluate_memory,
+            self._blocking_evaluate_memory_json,
             api_key, api_url_base, model, user_message, bot_response
         )
 
-    def _blocking_evaluate_memory(self, api_key: str, api_url_base: str, model: str, user_message: str, bot_response: str) -> int:
-        """强化版记忆评分提示词"""
-        import re
-        
+    def _blocking_evaluate_memory_json(self, api_key: str, api_url_base: str, model: str, 
+                                     user_message: str, bot_response: str) -> Dict:
+        """AI記憶評估 - JSON 格式輸出版本"""
         try:
             client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
             response = client.chat.completions.create(
@@ -294,50 +297,69 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 messages=[{
                     "role": "system",
                     "content": '''
-                        # 🎯 記憶評估任務
-    
-                        ## 你的角色：
-                        你是「AI 記憶總管」，負責判斷哪些使用者對話值得長期記憶。
-                        
-                        ## 任務說明：
-                        根據對話內容，輸出一個代表記憶價值的數字（0～5），用格式：「[[數字]]」
-                        
-                        ## 評分標準：
-                        - [[0]] 無需記憶：無實質內容，寒暄、重複話題，如「你好」「XD」「我也覺得」
-                        - [[1]] 低價值：單次查詢型資訊，如「現在幾點」「Python 怎麼寫 for 迴圈」
-                        - [[2]] 有用但短暫：有實用意義，但非個人資訊，如「我想吃壽司，有推薦嗎？」
-                        - [[3]] 中等價值：反映個人偏好/常見行為，如「我每天早上喝咖啡」
-                        - [[4]] 高價值：涉及個人情感、生活狀態，如「我今天心情不好」「我媽媽住院了」
-                        - [[5]] 關鍵資訊：需要長期記憶，如「我對海鮮過敏」「我 7 月要結婚」
-                        
-                        ## 加分條件（可+2 分）：
-                        ✅ 提及：
-                        - 長期習慣或日常儀式（如運動、宗教）
-                        - 健康/過敏/疾病資訊
-                        - 關係變動或重大情緒（分手、生病、壓力）
-                        - 長期目標、承諾、計畫
-                        
-                        ## 輸出格式：
-                        只回覆數字，格式必須為：「[[3]]」這種雙中括號格式。
-                        
-                        ''',
+## 角色定位
+你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並輸出結構化的 JSON 資料。
+
+## 輸出格式
+請嚴格按照以下 JSON 格式輸出，不要包含任何其他文字：
+
+```json
+{
+  "score": 數字 (0-5),
+}
+```
+
+## 評分標準 (0-5)
+- **0分**: 無需記憶 - 寒暄、無意義內容（如「你好」「XD」「我也覺得」）
+- **1分**: 低價值 - 單次查詢型資訊（如「現在幾點」「Python 語法」）
+- **2分**: 有用但短暫 - 實用但非個人資訊（如「推薦餐廳」「天氣查詢」）
+- **3分**: 中等價值 - 個人偏好或習慣（如「我喜歡咖啡」「我常熬夜」）
+- **4分**: 高價值 - 情感狀態或生活變化（如「我心情不好」「我換工作了」）
+- **5分**: 關鍵資訊 - 重要個人資料（如「我對花生過敏」「我下月結婚」）
+
+記住：只輸出 JSON 格式，不要包含任何解釋或額外文字。
+                    ''',
                 }, {
                     "role": "user",
-                    "content": f"[对话内容]\n用户：{user_message}\nAI：{bot_response}"
+                    "content": f"請評估以下對話的記憶價值：\n\n用戶：{user_message}\nAI：{bot_response}"
                 }],
-                temperature=0.1,
-                max_tokens=10
+                temperature=0.2,
+                max_tokens=200
             )
             
-            # 强化格式匹配
-            match = re.search(r'「\[\[(\d)]]」', response.choices[0].message.content)
-            if match:
-                score = int(match.group(1))
-                return min(max(score, 0), 5)  # 双重保险
-            return 0  # 格式错误默认值
+            # 解析 JSON 回應
+            content = response.choices[0].message.content.strip()
+            
+            # 提取 JSON 部分（去除可能的 markdown 標記）
+            if "```json" in content:
+                json_start = content.find("```json") + 7
+                json_end = content.find("```", json_start)
+                content = content[json_start:json_end].strip()
+            elif content.startswith("```") and content.endswith("```"):
+                content = content[3:-3].strip()
+            
+            # 解析 JSON
+            result = json.loads(content)
+            
+            # 驗證必要欄位並設定預設值
+            score = max(0, min(int(result.get("score", 1)), 5))
+            
+            return {
+                "score": score,
+            }
+            
+        except json.JSONDecodeError as e:
+            log.error(f"JSON 解析錯誤: {e}, 原始回應: {content}")
+            return {"score": 0}
         except Exception as e:
-            log.error(f"记忆评分故障: {str(e)[:150]}")
-            return 1
+            log.error(f"記憶評估錯誤: {str(e)[:150]}")
+            return {"score": 0}
+
+    # 保留舊版本方法以支援向後相容性
+    async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
+        """Legacy method - returns only the score for backward compatibility"""
+        result = await self.evaluate_memory_json(user_message, bot_response)
+        return result["score"]
 
     async def cog_unload(self):
         """Stop background tasks when Cog is unloaded"""
