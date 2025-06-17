@@ -38,7 +38,7 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
-    '''WarnSystem Cog with vote and forbidden roles, real-time vote display'''
+    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, fixed reaction user iteration'''
     default_global = {
         'data_version': '0.0'
     }
@@ -98,7 +98,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        # handle vote update
         msg_id = payload.message_id
         if msg_id in self.active_votes:
             await self._update_vote_embed(payload.guild_id, payload.channel_id, msg_id)
@@ -123,13 +122,12 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             vote_msg = await channel.fetch_message(msg_id)
         except Exception:
             return
-        # rebuild approve/reject lists
         approve_users: List[str] = []
         reject_users: List[str] = []
         for react in vote_msg.reactions:
             if str(react.emoji) in ['✅', '❌']:
-                users = await react.users().flatten()
-                for u in users:
+                # iterate users asynchronously
+                async for u in react.users():
                     if u.bot:
                         continue
                     if str(react.emoji) == '✅':
@@ -138,14 +136,12 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     else:
                         if u.display_name not in reject_users:
                             reject_users.append(u.display_name)
-        # format record text
         lines: List[str] = []
         for name in approve_users:
             lines.append(f'{name} 同意')
         for name in reject_users:
             lines.append(f'{name} 反對')
         record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
-        # rebuild embed
         initiator = info['initiator']
         target = info['target']
         level = info['level']
@@ -168,8 +164,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         channel = info['channel']
         member = info['member']
         level = info['level']
-        vote_msg = info['message']
-        # fetch final counts
         try:
             final_msg = await channel.fetch_message(msg_id)
         except Exception:
@@ -184,7 +178,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         net_votes = approve_count - reject_count
         if net_votes >= 3:
             await channel.send(f'{member.mention} 的 {level} 級警告投票已通過，將執行警告。')
-            # execute warning
             try:
                 fail = await self.api.warn(
                     guild=channel.guild,
@@ -285,7 +278,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             if not vote_channel:
                 await ctx.send('設定的投票頻道不存在或機器人無法存取，請確認設定。')
                 return
-            # 初始化embed
             embed = discord.Embed(title='警告投票', description=f'{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票', color=discord.Color.orange())
             if reason:
                 embed.add_field(name='原因', value=reason, inline=False)
@@ -294,7 +286,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             vote_msg = await vote_channel.send(embed=embed)
             await vote_msg.add_reaction('✅')
             await vote_msg.add_reaction('❌')
-            # 註冊 active vote
             info = {
                 'initiator': ctx.author,
                 'target': member,
@@ -308,13 +299,11 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 'end_time': datetime.utcnow() + timedelta(hours=24)
             }
             self.active_votes[vote_msg.id] = info
-            # schedule end vote
             async def vote_timer():
                 await asyncio.sleep((info['end_time'] - datetime.utcnow()).total_seconds())
                 await self._end_vote(vote_msg.id)
             asyncio.create_task(vote_timer())
-            return  # warning executed in end vote
-        # level <3, 直接警告
+            return
         try:
             fail = await self.api.warn(
                 guild=ctx.guild,
@@ -362,6 +351,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 pass
         else:
             await ctx.send(_('Done.'))
+
 
 
 
