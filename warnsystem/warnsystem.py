@@ -183,14 +183,14 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
         # edit embed to show ended
         if vote_msg:
-            desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票 (已結束)"
+            desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票"
             embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
             if reason:
                 embed.add_field(name='原因', value=reason, inline=False)
             embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
             net_votes = len(approve_users) - len(reject_users)
             result_text = '通過' if net_votes >= 3 else '未通過'
-            embed.add_field(name='結果', value=f'{result_text} (淨贊成票: {net_votes})', inline=False)
+            embed.add_field(name='結果', value=f'{result_text}', inline=False)
             embed.set_footer(text='投票已結束')
             try:
                 await vote_msg.edit(embed=embed)
