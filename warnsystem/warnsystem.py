@@ -6,7 +6,7 @@ from io import BytesIO
 from typing import Optional, TYPE_CHECKING, List, Dict
 from asyncio import TimeoutError as AsyncTimeoutError
 from abc import ABC
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 from redbot.core import commands, Config, checks
 from redbot.core.commands.converter import TimedeltaConverter
@@ -38,10 +38,8 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
-    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, stop updates when ended'''
-    default_global = {
-        'data_version': '0.0'
-    }
+    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, stop updates when ended or threshold reached'''
+    default_global = {'data_version': '0.0'}
     default_guild = {
         'delete_message': False,
         'show_mod': False,
@@ -89,9 +87,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         self.data.register_custom('MODLOGS', **self.default_custom_member)
         self.cache = MemoryCache(self.bot, self.data)
         self.api = API(self.bot, self.data, self.cache)
-        # active votes mapping: message_id -> vote info
         self.active_votes: Dict[int, Dict] = {}
-        self.task: asyncio.Task
 
     __version__ = '1.5.6'
     __author__ = ['retke (El Laggron)']
@@ -112,17 +108,13 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         info = self.active_votes.get(msg_id)
         if not info:
             return
-        # 如果已過結束時間，不再更新
-        if datetime.utcnow() >= info.get('end_time', datetime.utcnow()):
-            return
+        # stop if ended
+        now = datetime.utcnow()
+        end_time = info.get('end_time', now)
         guild = self.bot.get_guild(guild_id)
-        if not guild:
-            return
-        channel = guild.get_channel(channel_id)
-        if not channel:
-            return
+        channel = guild.get_channel(channel_id) if guild else None
         try:
-            vote_msg = await channel.fetch_message(msg_id)
+            vote_msg = await channel.fetch_message(msg_id) if channel else None
         except Exception:
             return
         approve_users: List[str] = []
@@ -132,22 +124,25 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 async for u in react.users():
                     if u.bot:
                         continue
-                    if str(react.emoji) == '✅':
-                        if u.display_name not in approve_users:
-                            approve_users.append(u.display_name)
-                    else:
-                        if u.display_name not in reject_users:
-                            reject_users.append(u.display_name)
-        lines: List[str] = []
-        for name in approve_users:
-            lines.append(f'{name} 同意')
-        for name in reject_users:
-            lines.append(f'{name} 反對')
-        record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
+                    if str(react.emoji) == '✅' and u.display_name not in approve_users:
+                        approve_users.append(u.display_name)
+                    elif str(react.emoji) == '❌' and u.display_name not in reject_users:
+                        reject_users.append(u.display_name)
+        net_votes = len(approve_users) - len(reject_users)
+        # if reached threshold, end vote immediately
+        if net_votes >= 3:
+            await self._end_vote(msg_id)
+            return
+        # if time passed, skip updating
+        if now >= end_time:
+            return
+        # update embed
         initiator = info['initiator']
         target = info['target']
         level = info['level']
         reason = info.get('reason')
+        lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
+        record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
         desc = f'{initiator.mention} 發起對 {target.mention} 的 {level} 級警告投票'
         embed = discord.Embed(title='警告投票', description=desc, color=discord.Color.orange())
         if reason:
@@ -172,7 +167,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             vote_msg = await channel.fetch_message(msg_id)
         except Exception:
             vote_msg = None
-        # 計算最終投票記錄
         approve_users: List[str] = []
         reject_users: List[str] = []
         if vote_msg:
@@ -181,36 +175,28 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     async for u in react.users():
                         if u.bot:
                             continue
-                        if str(react.emoji) == '✅':
-                            if u.display_name not in approve_users:
-                                approve_users.append(u.display_name)
-                        else:
-                            if u.display_name not in reject_users:
-                                reject_users.append(u.display_name)
-        lines: List[str] = []
-        for name in approve_users:
-            lines.append(f'{name} 同意')
-        for name in reject_users:
-            lines.append(f'{name} 反對')
+                        if str(react.emoji) == '✅' and u.display_name not in approve_users:
+                            approve_users.append(u.display_name)
+                        elif str(react.emoji) == '❌' and u.display_name not in reject_users:
+                            reject_users.append(u.display_name)
+        lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
         record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
-        # 編輯 embed 顯示結束狀態
+        # edit embed to show ended
         if vote_msg:
-            desc = f'{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票 (已結束)'
+            desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票 (已結束)"
             embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
             if reason:
                 embed.add_field(name='原因', value=reason, inline=False)
             embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
-            approve_count = len(approve_users)
-            reject_count = len(reject_users)
-            net_votes = approve_count - reject_count
+            net_votes = len(approve_users) - len(reject_users)
             result_text = '通過' if net_votes >= 3 else '未通過'
-            embed.add_field(name='結果', value=f'{result_text}', inline=False)
+            embed.add_field(name='結果', value=f'{result_text} (淨贊成票: {net_votes})', inline=False)
             embed.set_footer(text='投票已結束')
             try:
                 await vote_msg.edit(embed=embed)
             except Exception:
                 pass
-        # 送出通知
+        # send notification
         if vote_msg:
             if len(approve_users) - len(reject_users) >= 3:
                 await channel.send(f'{member.mention} 的 {level} 級警告投票已通過，將執行警告。')
