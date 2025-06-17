@@ -1,4 +1,3 @@
-# WarnSystem by retke, aka El Laggron
 import discord
 import logging
 import asyncio
@@ -41,7 +40,6 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 
     Credit to https://github.com/Cog-Creators/Red-DiscordBot (mod cog) for all mixin stuff.
     """
-
     pass
 
 
@@ -56,85 +54,44 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
     """
 
     default_global = {
-        "data_version": "0.0"  # will be edited after config update, current version is 1.0
+        "data_version": "0.0"
     }
     default_guild = {
-        "delete_message": False,  # if the [p]warn commands should delete the context message
-        "show_mod": False,  # if the responsible mod should be revealed to the warned user
-        "mute_role": None,  # the role used for mute
-        "update_mute": False,  # if the bot should update perms of each new text channel/category
-        "remove_roles": False,  # if the bot should remove all other roles on mute
-        "respect_hierarchy": False,  # if the bot should check if the mod is allowed by hierarchy
-        # TODO use bot settingfor respect_hierarchy ?
-        "reinvite": True,  # if the bot should try to send an invite to an unbanned/kicked member
-        "log_manual": False,  # if the bot should log manual kicks and bans
-        "channels": {  # modlog channels
-            "main": None,  # default
-            "1": None,
-            "2": None,
-            "3": None,
-            "4": None,
-            "5": None,
-        },
-        "bandays": {  # the number of days of messages to delte in case of a ban/softban
-            "softban": 7,
-            "ban": 0,
-        },
-        "embed_description_modlog": {  # the description of each type of warn in modlog
-            "1": EMBED_MODLOG(1),
-            "2": EMBED_MODLOG(2),
-            "3": EMBED_MODLOG(3),
-            "4": EMBED_MODLOG(4),
-            "5": EMBED_MODLOG(5),
-        },
-        "embed_description_user": {  # the description of each type of warn for the user
-            "1": EMBED_USER(1),
-            "2": EMBED_USER(2),
-            "3": EMBED_USER(3),
-            "4": EMBED_USER(4),
-            "5": EMBED_USER(5),
-        },
+        "delete_message": False,
+        "show_mod": False,
+        "mute_role": None,
+        "update_mute": False,
+        "remove_roles": False,
+        "respect_hierarchy": False,
+        "reinvite": True,
+        "log_manual": False,
+        "channels": {"main": None, "1": None, "2": None, "3": None, "4": None, "5": None},
+        "bandays": {"softban": 7, "ban": 0},
+        "embed_description_modlog": {str(i): EMBED_MODLOG(i) for i in range(1, 6)},
+        "embed_description_user": {str(i): EMBED_USER(i) for i in range(1, 6)},
         "substitutions": {},
-        "thumbnails": {  # image at the top right corner of an embed
-            "1": "https://i.imgur.com/Bl62rGd.png",
-            "2": "https://i.imgur.com/cVtzp1M.png",
-            "3": "https://i.imgur.com/uhrYzyt.png",
-            "4": "https://i.imgur.com/uhrYzyt.png",
-            "5": "https://i.imgur.com/DfBvmic.png",
-        },
-        "colors": {  # color bar of an embed
-            "1": 0xF4AA42,
-            "2": 0xD1ED35,
-            "3": 0xED9735,
-            "4": 0xED6F35,
-            "5": 0xFF4C4C,
-        },
-        "url": None,  # URL set for the title of all embeds
-        "temporary_warns": {},  # list of temporary warns (need to unmute/unban after some time)
-        "automod": {  # everything related to auto moderation
-            "enabled": False,
-            "antispam": {
-                "enabled": False,
-                "max_messages": 5,  # maximum number of messages allowed within the delay
-                "delay": 2,  # in seconds
-                "delay_before_action": 60,  # if triggered twice within this delay, take action
-                "warn": {  # data of the warn
-                    "level": 1,
-                    "reason": "Sending messages too fast!",
-                    "time": None,
-                },
-                "whitelist": [],
-            },
-            "regex_edited_messages": False,  # if the bot should check message edits
-            "regex": {},  # all regex expressions
-            "warnings": [],  # all automatic warns
-        },
+        "thumbnails": {str(i): url for i, url in zip(range(1, 6), [
+            "https://i.imgur.com/Bl62rGd.png", "https://i.imgur.com/cVtzp1M.png", "https://i.imgur.com/uhrYzyt.png",
+            "https://i.imgur.com/uhrYzyt.png", "https://i.imgur.com/DfBvmic.png"
+        ])},
+        "colors": {str(i): color for i, color in zip(range(1, 6), [
+            0xF4AA42, 0xD1ED35, 0xED9735, 0xED6F35, 0xFF4C4C
+        ])},
+        "url": None,
+        "temporary_warns": {},
+        "automod": {"enabled": False, "antispam": {"enabled": False, "max_messages": 5, "delay": 2,
+                        "delay_before_action": 60, "warn": {"level": 1, "reason": "Sending messages too fast!", "time": None},
+                        "whitelist": []},
+                     "regex_edited_messages": False,
+                     "regex": {},
+                     "warnings": [],
+                     },
+        "vote_channel": None,
     }
-    default_custom_member = {"x": []}  # cannot set a list as base group
+    default_custom_member = {"x": []}
 
     def __init__(self, bot: "Red"):
         self.bot = bot
-
         self.data = Config.get_conf(self, 260, force_registration=True)
         self.data.register_global(**self.default_global)
         self.data.register_guild(**self.default_guild)
@@ -143,16 +100,26 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         except AttributeError:
             pass
         self.data.register_custom("MODLOGS", **self.default_custom_member)
-
         self.cache = MemoryCache(self.bot, self.data)
         self.api = API(self.bot, self.data, self.cache)
-
         self.task: asyncio.Task
 
     __version__ = "1.5.6"
     __author__ = ["retke (El Laggron)"]
 
-    # helpers
+    @commands.guild_only()
+    @checks.admin()
+    @commands.group()
+    async def warnset(self, ctx):
+        """WarnSystem 設定相關"""
+        pass
+
+    @warnset.command(name="votechannel")
+    async def set_vote_channel(self, ctx, channel: discord.TextChannel):
+        """設定警告投票要發起的頻道"""
+        await self.data.guild(ctx.guild).vote_channel.set(channel.id)
+        await ctx.send(f"已設定警告投票頻道為 {channel.mention}")
+
     async def call_warn(
         self,
         ctx: commands.Context,
@@ -162,19 +129,62 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         time: Optional[timedelta] = None,
         ban_days: Optional[int] = None,
     ):
-        """No need to repeat, let's do what's common to all 5 warnings."""
+        """No need to repeat, let's do what's common to all warnings. 如果 level >=3，先發起投票"""
         reason = await self.api.format_reason(ctx.guild, reason)
-        if reason and len(reason) > 2000:  # embed limits
+        if reason and len(reason) > 2000:
             await ctx.send(
                 _(
                     "The reason is too long for an embed.\n\n"
                     "*Tip: You can use Github Gist to write a long text formatted in Markdown, "
                     "create a new file with the extension `.md` at the end and write as if you "
                     "were on Discord.\n<https://gist.github.com/>*"
-                    # I was paid $99999999 for this, you're welcome
                 )
             )
             return
+        if level >= 3:
+            guild_conf = await self.data.guild(ctx.guild).all()
+            vote_chan_id = guild_conf.get("vote_channel")
+            if not vote_chan_id:
+                await ctx.send("尚未設定警告投票頻道，請先使用 `warnset votechannel <頻道>` 設定。")
+                return
+            vote_channel = ctx.guild.get_channel(vote_chan_id)
+            if not vote_channel:
+                await ctx.send("設定的投票頻道不存在或機器人無法存取，請確認設定。")
+                return
+            embed = discord.Embed(title="警告投票", description=f"{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票", color=discord.Color.orange())
+            if reason:
+                embed.add_field(name="原因", value=reason, inline=False)
+            embed.set_footer(text="請在 24 小時內投票，淨贊成票達到 3 即通過。使用 ✅ 表示同意，❌ 表示拒絕。淨贊成票計算方式：贊成票數減去拒絕票數。")
+            vote_msg = await vote_channel.send(embed=embed)
+            await vote_msg.add_reaction("✅")
+            await vote_msg.add_reaction("❌")
+            def check(reaction, user):
+                return reaction.message.id == vote_msg.id and str(reaction.emoji) in ["✅", "❌"] and not user.bot
+            approved = False
+            end_time = datetime.utcnow() + timedelta(hours=24)
+            while datetime.utcnow() < end_time:
+                try:
+                    reaction, user = await self.bot.wait_for('reaction_add', timeout=(end_time - datetime.utcnow()).total_seconds(), check=check)
+                except AsyncTimeoutError:
+                    break
+                msg = await vote_channel.fetch_message(vote_msg.id)
+                approve_count = 0
+                reject_count = 0
+                for react in msg.reactions:
+                    if str(react.emoji) == "✅":
+                        # 減去機器人自己的反應
+                        approve_count = react.count - 1
+                    elif str(react.emoji) == "❌":
+                        reject_count = react.count - 1
+                net_votes = approve_count - reject_count
+                if net_votes >= 3:
+                    approved = True
+                    break
+            if not approved:
+                await vote_channel.send(f"{member.mention} 的 {level} 級警告投票未達到通過門檻，已取消警告。")
+                return
+            else:
+                await vote_channel.send(f"{member.mention} 的 {level} 級警告投票已通過，將執行警告。")
         try:
             fail = await self.api.warn(
                 guild=ctx.guild,
@@ -189,12 +199,16 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 raise fail[0]
         except errors.MissingPermissions as e:
             await ctx.send(e)
+            return
         except errors.MemberTooHigh as e:
             await ctx.send(e)
+            return
         except errors.LostPermissions as e:
             await ctx.send(e)
+            return
         except errors.SuicidePrevention as e:
             await ctx.send(e)
+            return
         except errors.MissingMuteRole:
             await ctx.send(
                 _(
@@ -202,6 +216,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     "Use the `[p]warnset mute` command for this."
                 )
             )
+            return
         except errors.NotFound:
             await ctx.send(
                 _(
@@ -212,30 +227,28 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     "*Load the `modlogs` cog and use the `[p]modlogset modlog` command.*"
                 )
             )
+            return
         except errors.NotAllowedByHierarchy:
             is_admin = mod.is_admin_or_superior(self.bot, member)
-            await ctx.send(
-                _(
-                    "You are not allowed to do this, {member} is higher than you in the role "
-                    "hierarchy. You can only warn members which top role is lower than yours.\n\n"
-                ).format(member=str(member))
-                + (
-                    _("You can disable this check by using the `[p]warnset hierarchy` command.")
-                    if is_admin
-                    else ""
-                )
-            )
+            msg = _(
+                "You are not allowed to do this, {member} is higher than you in the role "
+                "hierarchy. You can only warn members which top role is lower than yours.\n\n"
+            ).format(member=str(member))
+            if is_admin:
+                msg += _("You can disable this check by using the `[p]warnset hierarchy` command.")
+            await ctx.send(msg)
+            return
         except discord.errors.NotFound:
             await ctx.send(_("Hackban failed: No user found."))
+            return
+        if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
+            try:
+                await ctx.message.add_reaction("✅")
+            except discord.errors.NotFound:
+                pass
         else:
-            if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
-                try:
-                    await ctx.message.add_reaction("✅")
-                except discord.errors.NotFound:
-                    # retrigger or scheduler probably executed the command
-                    pass
-            else:
-                await ctx.send(_("Done."))
+            await ctx.send(_("Done."))
+
 
     async def call_masswarn(
         self,
