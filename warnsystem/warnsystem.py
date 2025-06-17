@@ -38,7 +38,7 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
-    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, fixed reaction user iteration'''
+    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, stop updates when ended'''
     default_global = {
         'data_version': '0.0'
     }
@@ -112,6 +112,9 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         info = self.active_votes.get(msg_id)
         if not info:
             return
+        # 如果已過結束時間，不再更新
+        if datetime.utcnow() >= info.get('end_time', datetime.utcnow()):
+            return
         guild = self.bot.get_guild(guild_id)
         if not guild:
             return
@@ -126,7 +129,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         reject_users: List[str] = []
         for react in vote_msg.reactions:
             if str(react.emoji) in ['✅', '❌']:
-                # iterate users asynchronously
                 async for u in react.users():
                     if u.bot:
                         continue
@@ -164,36 +166,70 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         channel = info['channel']
         member = info['member']
         level = info['level']
+        initiator = info['initiator']
+        reason = info.get('reason')
         try:
-            final_msg = await channel.fetch_message(msg_id)
+            vote_msg = await channel.fetch_message(msg_id)
         except Exception:
-            return
-        approve_count = 0
-        reject_count = 0
-        for react in final_msg.reactions:
-            if str(react.emoji) == '✅':
-                approve_count = react.count - 1
-            elif str(react.emoji) == '❌':
-                reject_count = react.count - 1
-        net_votes = approve_count - reject_count
-        if net_votes >= 3:
-            await channel.send(f'{member.mention} 的 {level} 級警告投票已通過，將執行警告。')
+            vote_msg = None
+        # 計算最終投票記錄
+        approve_users: List[str] = []
+        reject_users: List[str] = []
+        if vote_msg:
+            for react in vote_msg.reactions:
+                if str(react.emoji) in ['✅', '❌']:
+                    async for u in react.users():
+                        if u.bot:
+                            continue
+                        if str(react.emoji) == '✅':
+                            if u.display_name not in approve_users:
+                                approve_users.append(u.display_name)
+                        else:
+                            if u.display_name not in reject_users:
+                                reject_users.append(u.display_name)
+        lines: List[str] = []
+        for name in approve_users:
+            lines.append(f'{name} 同意')
+        for name in reject_users:
+            lines.append(f'{name} 反對')
+        record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
+        # 編輯 embed 顯示結束狀態
+        if vote_msg:
+            desc = f'{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票 (已結束)'
+            embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
+            if reason:
+                embed.add_field(name='原因', value=reason, inline=False)
+            embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
+            approve_count = len(approve_users)
+            reject_count = len(reject_users)
+            net_votes = approve_count - reject_count
+            result_text = '通過' if net_votes >= 3 else '未通過'
+            embed.add_field(name='結果', value=f'{result_text}', inline=False)
+            embed.set_footer(text='投票已結束')
             try:
-                fail = await self.api.warn(
-                    guild=channel.guild,
-                    members=[member],
-                    author=info['initiator'],
-                    level=level,
-                    reason=info.get('reason'),
-                    time=info.get('time'),
-                    ban_days=info.get('ban_days'),
-                )
-                if fail:
-                    raise fail[0]
-            except Exception as e:
-                await channel.send(str(e))
-        else:
-            await channel.send(f'{member.mention} 的 {level} 級警告投票未達到通過門檻，已取消警告。')
+                await vote_msg.edit(embed=embed)
+            except Exception:
+                pass
+        # 送出通知
+        if vote_msg:
+            if len(approve_users) - len(reject_users) >= 3:
+                await channel.send(f'{member.mention} 的 {level} 級警告投票已通過，將執行警告。')
+                try:
+                    fail = await self.api.warn(
+                        guild=channel.guild,
+                        members=[member],
+                        author=initiator,
+                        level=level,
+                        reason=reason,
+                        time=info.get('time'),
+                        ban_days=info.get('ban_days'),
+                    )
+                    if fail:
+                        raise fail[0]
+                except Exception as e:
+                    await channel.send(str(e))
+            else:
+                await channel.send(f'{member.mention} 的 {level} 級警告投票未達到通過門檻，已取消警告。')
 
     @commands.guild_only()
     @checks.admin()
@@ -258,7 +294,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         time: Optional[timedelta] = None,
         ban_days: Optional[int] = None,
     ):
-        '處理警告，如果 level >=3，先檢查禁止角色，再發起投票，並即時顯示投票記錄'
+        '處理警告，如果 level >=3，先檢查禁止角色，再發起投票，並即時顯示投票記錄，結束後停止更新'
         reason = await self.api.format_reason(ctx.guild, reason)
         if reason and len(reason) > 2000:
             await ctx.send(_('The reason is too long for an embed.'))
@@ -351,9 +387,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 pass
         else:
             await ctx.send(_('Done.'))
-
-
-
 
     async def call_masswarn(
         self,
