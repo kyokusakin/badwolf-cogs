@@ -3,16 +3,17 @@ import logging
 import asyncio
 
 from io import BytesIO
-from typing import Optional, TYPE_CHECKING, List, Dict
+from typing import Optional, TYPE_CHECKING, List, Dict, Tuple
 from asyncio import TimeoutError as AsyncTimeoutError
 from abc import ABC
 from datetime import datetime, timedelta
 
-from redbot.core import commands, Config, checks
+from redbot.core import commands, Config, checks, Red
 from redbot.core.commands.converter import TimedeltaConverter
 from redbot.core.i18n import Translator, cog_i18n
 from redbot.core.utils import predicates, menus, mod
 from redbot.core.utils.chat_formatting import pagify, text_to_file
+
 
 from warnsystem.components import WarningsSelector
 
@@ -38,11 +39,10 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
-    '''WarnSystem Cog with vote and forbidden roles, real-time vote display, stop updates when ended or threshold reached'''
-    __version__ = '1.5.7'
+    '''WarnSystem Cog with real-time admin-only voting, thresholds by level, and mod bypass.'''
+    __version__ = '1.5.10'
     __author__ = ['retke (El Laggron)']
 
-    # Global and guild default settings, including the new result_channel
     default_global = {'data_version': '0.0'}
     default_guild = {
         'delete_message': False,
@@ -59,8 +59,9 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         'embed_description_user': {str(i): EMBED_USER(i) for i in range(1, 6)},
         'substitutions': {},
         'thumbnails': {str(i): url for i, url in zip(range(1, 6), [
-            'https://i.imgur.com/Bl62rGd.png', 'https://i.imgur.com/cVtzp1M.png', 'https://i.imgur.com/uhrYzyt.png',
-            'https://i.imgur.com/uhrYzyt.png', 'https://i.imgur.com/DfBvmic.png'
+            'https://i.imgur.com/Bl62rGd.png', 'https://i.imgur.com/cVtzp1M.png',
+            'https://i.imgur.com/uhrYzyt.png', 'https://i.imgur.com/uhrYzyt.png',
+            'https://i.imgur.com/DfBvmic.png'
         ])},
         'colors': {str(i): color for i, color in zip(range(1, 6), [
             0xF4AA42, 0xD1ED35, 0xED9735, 0xED6F35, 0xFF4C4C
@@ -69,17 +70,11 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         'temporary_warns': {},
         'automod': {
             'enabled': False,
-            'antispam': {
-                'enabled': False,
-                'max_messages': 5,
-                'delay': 2,
-                'delay_before_action': 60,
-                'warn': {'level': 1, 'reason': 'Sending messages too fast!', 'time': None},
-                'whitelist': []
-            },
+            'antispam': {'enabled': False, 'max_messages': 5, 'delay': 2, 'delay_before_action': 60,
+                         'warn': {'level': 1, 'reason': 'Sending messages too fast!', 'time': None}, 'whitelist': []},
             'regex_edited_messages': False,
             'regex': {},
-            'warnings': [],
+            'warnings': []
         },
         'vote_channel': None,
         'result_channel': None,
@@ -103,61 +98,80 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        msg_id = payload.message_id
-        if msg_id in self.active_votes:
-            await self._update_vote_embed(payload.guild_id, payload.channel_id, msg_id)
+        if payload.message_id in self.active_votes:
+            await self._update_vote_embed(payload.guild_id, payload.channel_id, payload.message_id)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
-        msg_id = payload.message_id
-        if msg_id in self.active_votes:
-            await self._update_vote_embed(payload.guild_id, payload.channel_id, msg_id)
+        if payload.message_id in self.active_votes:
+            await self._update_vote_embed(payload.guild_id, payload.channel_id, payload.message_id)
+
+    async def _get_admins(self, guild: discord.Guild) -> List[discord.Member]:
+        # 使用 Redbot 內建函式取得 Admin 角色
+        admin_roles = await self.bot.get_admin_roles(guild)
+        admin_ids = {r.id for r in admin_roles}
+        return [m for m in guild.members if any(r.id in admin_ids for r in m.roles)]
+
+    def _get_status_label(self, status: discord.Status) -> str:
+        return {
+            discord.Status.online: '未投票',
+            discord.Status.idle: '未投票',
+            discord.Status.dnd: '未投票',
+            discord.Status.offline: '離席'
+        }.get(status, '離席')
+
+    async def _threshold_passed(self, level: int, approves: int, total_online: int) -> bool:
+        if level in (3, 4):
+            return total_online > 0 and approves / total_online >= 0.5
+        if level == 5:
+            return total_online > 0 and approves / total_online >= 0.75
+        return False
+
+    async def _collect_votes(self, vote_msg: discord.Message) -> Tuple[List[str], List[str]]:
+        approves, rejects = [], []
+        for react in vote_msg.reactions:
+            if str(react.emoji) in ('✅', '❌'):
+                async for user in react.users():
+                    if user.bot:
+                        continue
+                    name = user.display_name
+                    if str(react.emoji) == '✅' and name not in approves:
+                        approves.append(name)
+                    elif str(react.emoji) == '❌' and name not in rejects:
+                        rejects.append(name)
+        return approves, rejects
 
     async def _update_vote_embed(self, guild_id: int, channel_id: int, msg_id: int):
         info = self.active_votes.get(msg_id)
-        if not info:
-            return
-        now = datetime.utcnow()
-        end_time = info.get('end_time', now)
-        if now >= end_time:
+        if not info or datetime.utcnow() >= info['end_time']:
             return
         guild = self.bot.get_guild(guild_id)
-        channel = guild.get_channel(channel_id) if guild else None
-        try:
-            vote_msg = await channel.fetch_message(msg_id) if channel else None
-        except Exception:
-            return
-        approve_users: List[str] = []
-        reject_users: List[str] = []
-        for react in vote_msg.reactions:
-            if str(react.emoji) in ['✅', '❌']:
-                async for u in react.users():
-                    if u.bot:
-                        continue
-                    if str(react.emoji) == '✅' and u.display_name not in approve_users:
-                        approve_users.append(u.display_name)
-                    elif str(react.emoji) == '❌' and u.display_name not in reject_users:
-                        reject_users.append(u.display_name)
-        net_votes = len(approve_users) - len(reject_users)
-        if net_votes >= 3:
+        channel = guild.get_channel(channel_id)
+        vote_msg = await channel.fetch_message(msg_id)
+
+        admins = await self._get_admins(guild)
+        approves, rejects = await self._collect_votes(vote_msg)
+        lines = []
+        for m in admins:
+            mark = ('同意' if m.display_name in approves else
+                    '反對' if m.display_name in rejects else
+                    self._get_status_label(m.status))
+            lines.append(f"{m.display_name}: {mark}")
+
+        total_online = sum(1 for m in admins if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
+        embed = discord.Embed(
+            title='警告投票',
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票", 
+            color=discord.Color.orange()
+        )
+        if info.get('reason'):
+            embed.add_field(name='原因', value=info['reason'], inline=False)
+        embed.add_field(name='投票進度', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
+        embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
+        await vote_msg.edit(embed=embed)
+
+        if await self._threshold_passed(info['level'], len(approves), total_online):
             await self._end_vote(msg_id)
-            return
-        initiator = info['initiator']
-        target = info['target']
-        level = info['level']
-        reason = info.get('reason')
-        lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
-        record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
-        desc = f'{initiator.mention} 發起對 {target.mention} 的 {level} 級警告投票'
-        embed = discord.Embed(title='警告投票', description=desc, color=discord.Color.orange())
-        if reason:
-            embed.add_field(name='原因', value=reason, inline=False)
-        embed.add_field(name='投票記錄', value=f'```{record_text}```', inline=False)
-        embed.set_footer(text='請在 24 小時內投票，淨贊成票達到 3 即通過。使用 ✅ 表示同意，❌ 表示拒絕。')
-        try:
-            await vote_msg.edit(embed=embed)
-        except Exception:
-            pass
 
     async def _end_vote(self, msg_id: int):
         info = self.active_votes.pop(msg_id, None)
@@ -165,73 +179,67 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             return
         guild = info['channel'].guild
         vote_channel = info['channel']
-        result_channel_id = await self.data.guild(guild).result_channel()
-        result_channel = guild.get_channel(result_channel_id) if result_channel_id else None
+        result_ch_id = await self.data.guild(guild).result_channel()
+        result_channel = guild.get_channel(result_ch_id) if result_ch_id else None
 
-        # 收集投票結果
-        try:
-            vote_msg = await vote_channel.fetch_message(msg_id)
-        except Exception:
-            vote_msg = None
-        approve_users: List[str] = []
-        reject_users: List[str] = []
-        if vote_msg:
-            for react in vote_msg.reactions:
-                if str(react.emoji) in ['✅', '❌']:
-                    async for u in react.users():
-                        if u.bot:
-                            continue
-                        if str(react.emoji) == '✅' and u.display_name not in approve_users:
-                            approve_users.append(u.display_name)
-                        elif str(react.emoji) == '❌' and u.display_name not in reject_users:
-                            reject_users.append(u.display_name)
-        lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
-        record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
-        initiator = info['initiator']
-        member = info['member']
-        level = info['level']
-        reason = info.get('reason')
+        vote_msg = await vote_channel.fetch_message(msg_id)
+        approves, rejects = await self._collect_votes(vote_msg)
 
-        # 建立結束 embed
-        desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票"
-        embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
-        if reason:
-            embed.add_field(name='原因', value=reason, inline=False)
-        embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
-        net_votes = len(approve_users) - len(reject_users)
-        result_text = '通過' if net_votes >= 3 else '未通過'
-        embed.add_field(name='結果', value=result_text, inline=False)
+        # Mod bypass
+        mod_roles = await self.bot.get_mod_roles(guild)
+        mod_ids = {r.id for r in mod_roles}
+        is_mod = any(r.id in mod_ids for r in info['initiator'].roles)
+        total_online = sum(1 for m in await self._get_admins(guild) if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
+        passed = is_mod or await self._threshold_passed(info['level'], len(approves), total_online)
+
+        record = [f'{n} 同意' for n in approves] + [f'{n} 反對' for n in rejects] + [
+            f"{m.display_name}: {self._get_status_label(m.status)}" for m in await self._get_admins(guild)
+            if m.display_name not in approves + rejects
+        ]
+        embed = discord.Embed(
+            title='投票結束',
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票", 
+            color=discord.Color.greyple()
+        )
+        if info.get('reason'):
+            embed.add_field(name='原因', value=info['reason'], inline=False)
+        embed.add_field(name='最終投票記錄', value='```\n' + '\n'.join(record) + '\n```', inline=False)
+        embed.add_field(name='結果', value='通過' if passed else '未通過', inline=False)
         embed.set_footer(text='投票已結束')
-        target_channels = [vote_channel]
-        if result_channel and result_channel.id != vote_channel.id:
-            target_channels.append(result_channel)
-        for ch in target_channels:
-            try:
-                await ch.send(embed=embed)
-            except Exception:
-                pass
 
-        if net_votes >= 3:
+        targets = [vote_channel]
+        if result_channel and result_channel.id != vote_channel.id:
+            targets.append(result_channel)
+        for ch in targets:
+            await ch.send(embed=embed)
+
+        if passed:
+            member = await self.bot.get_or_fetch_member(guild, info['member'].id)
             try:
-                fail = await self.api.warn(
+                await self.api.warn(
                     guild=guild,
                     members=[member],
-                    author=initiator,
-                    level=level,
-                    reason=reason,
+                    author=info['initiator'],
+                    level=info['level'],
+                    reason=info.get('reason'),
                     time=info.get('time'),
                     ban_days=info.get('ban_days'),
                 )
-                if fail:
-                    raise fail[0]
-                for ch in target_channels:
-                    await ch.send(f'{member.mention} 的 {level} 級警告已執行。')
+                msg = f'{member.mention} 的 {info['level']} 級警告已執行。'
             except Exception as e:
-                for ch in target_channels:
-                    await ch.send(str(e))
+                msg = str(e)
         else:
-            for ch in target_channels:
-                await ch.send(f'{member.mention} 的 {level} 級警告投票未通過，已取消警告。')
+            msg = f'{info['target'].mention} 的 {info['level']} 級警告投票未通過，已取消警告。'
+        for ch in targets:
+            await ch.send(msg)
+
+    async def _vote_timeout(self, msg_id: int):
+        info = self.active_votes.get(msg_id)
+        if not info:
+            return
+        await asyncio.sleep((info['end_time'] - datetime.utcnow()).total_seconds())
+        if msg_id in self.active_votes:
+            await self._end_vote(msg_id)
 
     @commands.guild_only()
     @checks.admin()
@@ -242,57 +250,16 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @warnset.command(name='votechannel')
     async def set_vote_channel(self, ctx, channel: discord.TextChannel):
-        '設定警告投票要發起的頻道'
         await self.data.guild(ctx.guild).vote_channel.set(channel.id)
-        await ctx.send(f'已設定警告投票頻道為 {channel.mention}')
+        await ctx.send(f'已設定投票頻道為 {channel.mention}')
 
     @warnset.command(name='resultchannel')
     async def set_result_channel(self, ctx, channel: discord.TextChannel):
-        '設定投票結果要發布的頻道'
         await self.data.guild(ctx.guild).result_channel.set(channel.id)
-        await ctx.send(f'已設定投票結果頻道為 {channel.mention}')
+        await ctx.send(f'已設定結果頻道為 {channel.mention}')
 
-    @warnset.group(name='forbiddenroles')
-    async def forbidden_roles_group(self, ctx):
-        '管理禁止3級以上警告的角色清單'
-        pass
-
-    @forbidden_roles_group.command(name='add')
-    async def add_forbidden_role(self, ctx, role: discord.Role):
-        '將角色加入禁止3級以上警告清單'
-        guild_conf = await self.data.guild(ctx.guild).all()
-        lst: List[int] = guild_conf.get('forbidden_roles', []) or []
-        if role.id in lst:
-            await ctx.send(f'角色 {role.mention} 已在禁止清單中。')
-            return
-        lst.append(role.id)
-        await self.data.guild(ctx.guild).forbidden_roles.set(lst)
-        await ctx.send(f'已將角色 {role.mention} 加入禁止3級以上警告清單。')
-
-    @forbidden_roles_group.command(name='remove')
-    async def remove_forbidden_role(self, ctx, role: discord.Role):
-        '從禁止清單移除角色'
-        guild_conf = await self.data.guild(ctx.guild).all()
-        lst: List[int] = guild_conf.get('forbidden_roles', []) or []
-        if role.id not in lst:
-            await ctx.send(f'角色 {role.mention} 不在禁止清單中。')
-            return
-        lst.remove(role.id)
-        await self.data.guild(ctx.guild).forbidden_roles.set(lst)
-        await ctx.send(f'已將角色 {role.mention} 從禁止清單移除。')
-
-    @forbidden_roles_group.command(name='list')
-    async def list_forbidden_roles(self, ctx):
-        '列出所有禁止警告的角色'
-        guild_conf = await self.data.guild(ctx.guild).all()
-        lst: List[int] = guild_conf.get('forbidden_roles', []) or []
-        if not lst:
-            await ctx.send('目前沒有設定禁止3級以上警告的角色。')
-            return
-        roles = [ctx.guild.get_role(rid) for rid in lst]
-        roles = [r.mention for r in roles if r]
-        await ctx.send('禁止3級以上警告的角色: ' + ', '.join(roles))
-
+    @commands.guild_only()
+    @checks.mod()
     async def call_warn(
         self,
         ctx: commands.Context,
@@ -302,51 +269,42 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         time: Optional[timedelta] = None,
         ban_days: Optional[int] = None,
     ):
-        '處理警告，如果 level >=3，先檢查禁止角色，再發起投票，並即時顯示投票記錄，結束後停止更新'
         reason = await self.api.format_reason(ctx.guild, reason)
-        if reason and len(reason) > 2000:
-            await ctx.send(_('The reason is too long for an embed.'))
-            return
         if level >= 3:
             guild_conf = await self.data.guild(ctx.guild).all()
-            forbidden: List[int] = guild_conf.get('forbidden_roles', []) or []
-            member_roles = {r.id for r in member.roles}
-            if any(rid in member_roles for rid in forbidden):
-                await ctx.send(f'{member.mention} 擁有禁止接受3級以上警告的身分組，無法發起此級別警告。')
+            forbidden = guild_conf.get('forbidden_roles', []) or []
+            if any(r.id in forbidden for r in member.roles):
+                await ctx.send(f'{member.mention} 擁有禁止3級以上警告的身分組，無法發起此級別警告。')
                 return
-            vote_chan_id = guild_conf.get('vote_channel')
-            if not vote_chan_id:
-                await ctx.send('尚未設定警告投票頻道，請先使用 `warnset votechannel <頻道>` 設定。')
+            vote_id = guild_conf.get('vote_channel')
+            if not vote_id:
+                await ctx.send('尚未設定投票頻道。')
                 return
-            vote_channel = ctx.guild.get_channel(vote_chan_id)
-            if not vote_channel:
-                await ctx.send('設定的投票頻道不存在或機器人無法存取，請確認設定。')
-                return
-            embed = discord.Embed(title='警告投票', description=f'{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票', color=discord.Color.orange())
+            vote_ch = ctx.guild.get_channel(vote_id)
+            embed = discord.Embed(
+                title='警告投票',
+                description=f"{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票", 
+                color=discord.Color.orange()
+            )
             if reason:
                 embed.add_field(name='原因', value=reason, inline=False)
-            embed.add_field(name='投票記錄', value='```目前無投票記錄。```', inline=False)
-            embed.set_footer(text='請在 24 小時內投票，淨贊成票達到 3 即通過。使用 ✅ 表示同意，❌ 表示拒絕。')
-            vote_msg = await vote_channel.send(embed=embed)
-            await vote_msg.add_reaction('✅')
-            await vote_msg.add_reaction('❌')
-            info = {
+            embed.add_field(name='投票進度', value='```無投票記錄```', inline=False)
+            embed.set_footer(text='24 小時內，✅/❌ 投票，Admin 專屬。')
+            msg = await vote_ch.send(embed=embed)
+            await msg.add_reaction('✅')
+            await msg.add_reaction('❌')
+            self.active_votes[msg.id] = {
                 'initiator': ctx.author,
                 'target': member,
                 'level': level,
                 'reason': reason,
                 'time': time,
                 'ban_days': ban_days,
-                'channel': vote_channel,
+                'channel': vote_ch,
                 'member': member,
-                'message': vote_msg,
                 'end_time': datetime.utcnow() + timedelta(hours=24)
             }
-            self.active_votes[vote_msg.id] = info
-            async def vote_timer():
-                await asyncio.sleep((info['end_time'] - datetime.utcnow()).total_seconds())
-                await self._end_vote(vote_msg.id)
-            asyncio.create_task(vote_timer())
+            asyncio.create_task(self._vote_timeout(msg.id))
             return
         try:
             fail = await self.api.warn(
