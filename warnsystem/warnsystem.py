@@ -168,9 +168,17 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         )
         if info.get('reason'):
             embed.add_field(name='原因', value=info['reason'], inline=False)
-        embed.add_field(name='投票進度（限 Admin）', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
+        embed.add_field(name='投票進度', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
         embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
         await vote_msg.edit(embed=embed)
+
+        mod_roles = await self.bot.get_mod_roles(guild)
+        mod_ids = {r.id for r in mod_roles}
+        for name in approves:
+            member = discord.utils.get(guild.members, display_name=name)
+            if member and any(r.id in mod_ids for r in member.roles):
+                await self._end_vote(msg_id)
+                return
 
         if await self._threshold_passed(info['level'], len(approves), total_online):
             await self._end_vote(msg_id)
