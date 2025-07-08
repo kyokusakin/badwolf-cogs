@@ -8,12 +8,11 @@ from asyncio import TimeoutError as AsyncTimeoutError
 from abc import ABC
 from datetime import datetime, timedelta
 
-from redbot.core import commands, Config, checks, Red
+from redbot.core import commands, Config, checks
 from redbot.core.commands.converter import TimedeltaConverter
 from redbot.core.i18n import Translator, cog_i18n
 from redbot.core.utils import predicates, menus, mod
 from redbot.core.utils.chat_formatting import pagify, text_to_file
-
 
 from warnsystem.components import WarningsSelector
 
@@ -153,24 +152,27 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         approves, rejects = await self._collect_votes(vote_msg)
         lines = []
         for m in admins:
-            mark = ('同意' if m.display_name in approves else
-                    '反對' if m.display_name in rejects else
-                    self._get_status_label(m.status))
+            if m.display_name in approves:
+                mark = '同意'
+            elif m.display_name in rejects:
+                mark = '反對'
+            else:
+                mark = self._get_status_label(m.status)
             lines.append(f"{m.display_name}: {mark}")
 
         total_online = sum(1 for m in admins if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
         embed = discord.Embed(
             title='警告投票',
-            description=f"{info["initiator"].mention} 發起對 {info["target"].mention} 的 {info["level"]} 級警告投票", 
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票",
             color=discord.Color.orange()
         )
         if info.get('reason'):
             embed.add_field(name='原因', value=info['reason'], inline=False)
-        embed.add_field(name='投票進度', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
+        embed.add_field(name='投票進度（限 Admin）', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
         embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
         await vote_msg.edit(embed=embed)
 
-        if await self._threshold_passed(info["level"], len(approves), total_online):
+        if await self._threshold_passed(info['level'], len(approves), total_online):
             await self._end_vote(msg_id)
 
     async def _end_vote(self, msg_id: int):
@@ -185,20 +187,19 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         vote_msg = await vote_channel.fetch_message(msg_id)
         approves, rejects = await self._collect_votes(vote_msg)
 
-        # Mod bypass
         mod_roles = await self.bot.get_mod_roles(guild)
         mod_ids = {r.id for r in mod_roles}
-        is_mod = any(r.id in mod_ids for r in info["initiator"].roles)
+        is_mod = any(r.id in mod_ids for r in info['initiator'].roles)
         total_online = sum(1 for m in await self._get_admins(guild) if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
-        passed = is_mod or await self._threshold_passed(info["level"], len(approves), total_online)
+        passed = is_mod or await self._threshold_passed(info['level'], len(approves), total_online)
 
-        record = [f'{n} 同意' for n in approves] + [f'{n} 反對' for n in rejects] + [
+        record = [f"{n} 同意" for n in approves] + [f"{n} 反對" for n in rejects] + [
             f"{m.display_name}: {self._get_status_label(m.status)}" for m in await self._get_admins(guild)
             if m.display_name not in approves + rejects
         ]
         embed = discord.Embed(
             title='投票結束',
-            description=f"{info["initiator"].mention} 發起對 {info["target"].mention} 的 {info["level"]} 級警告投票", 
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票",
             color=discord.Color.greyple()
         )
         if info.get('reason'):
@@ -219,17 +220,17 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 await self.api.warn(
                     guild=guild,
                     members=[member],
-                    author=info["initiator"],
-                    level=info["level"],
+                    author=info['initiator'],
+                    level=info['level'],
                     reason=info.get('reason'),
                     time=info.get('time'),
                     ban_days=info.get('ban_days'),
                 )
-                msg = f'{member.mention} 的 {info["level"]} 級警告已執行。'
+                msg = f"{member.mention} 的 {info['level']} 級警告已執行。"
             except Exception as e:
                 msg = str(e)
         else:
-            msg = f'{info["target"].mention} 的 {info["level"]} 級警告投票未通過，已取消警告。'
+            msg = f"{info['target'].mention} 的 {info['level']} 級警告投票未通過，已取消警告。"
         for ch in targets:
             await ch.send(msg)
 
@@ -283,7 +284,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             vote_ch = ctx.guild.get_channel(vote_id)
             embed = discord.Embed(
                 title='警告投票',
-                description=f"{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票", 
+                description=f"{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票",
                 color=discord.Color.orange()
             )
             if reason:
