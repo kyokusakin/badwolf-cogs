@@ -71,7 +71,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         'automod': {
             'enabled': False,
             'antispam': {'enabled': False, 'max_messages': 5, 'delay': 2, 'delay_before_action': 60,
-                         'warn': {'level': 1, 'reason': 'Sending messages too fast!', 'time': None}, 'whitelist': []},
+                         'warn': {"level": 1, 'reason': 'Sending messages too fast!', 'time': None}, 'whitelist': []},
             'regex_edited_messages': False,
             'regex': {},
             'warnings': []
@@ -161,7 +161,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         total_online = sum(1 for m in admins if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
         embed = discord.Embed(
             title='警告投票',
-            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票", 
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info["level"]} 級警告投票", 
             color=discord.Color.orange()
         )
         if info.get('reason'):
@@ -170,7 +170,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
         await vote_msg.edit(embed=embed)
 
-        if await self._threshold_passed(info['level'], len(approves), total_online):
+        if await self._threshold_passed(info["level"], len(approves), total_online):
             await self._end_vote(msg_id)
 
     async def _end_vote(self, msg_id: int):
@@ -190,7 +190,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         mod_ids = {r.id for r in mod_roles}
         is_mod = any(r.id in mod_ids for r in info['initiator'].roles)
         total_online = sum(1 for m in await self._get_admins(guild) if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
-        passed = is_mod or await self._threshold_passed(info['level'], len(approves), total_online)
+        passed = is_mod or await self._threshold_passed(info["level"], len(approves), total_online)
 
         record = [f'{n} 同意' for n in approves] + [f'{n} 反對' for n in rejects] + [
             f"{m.display_name}: {self._get_status_label(m.status)}" for m in await self._get_admins(guild)
@@ -198,7 +198,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         ]
         embed = discord.Embed(
             title='投票結束',
-            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票", 
+            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info["level"]} 級警告投票", 
             color=discord.Color.greyple()
         )
         if info.get('reason'):
@@ -220,16 +220,16 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     guild=guild,
                     members=[member],
                     author=info['initiator'],
-                    level=info['level'],
+                    level=info["level"],
                     reason=info.get('reason'),
                     time=info.get('time'),
                     ban_days=info.get('ban_days'),
                 )
-                msg = f'{member.mention} 的 {info['level']} 級警告已執行。'
+                msg = f'{member.mention} 的 {info["level"]} 級警告已執行。'
             except Exception as e:
                 msg = str(e)
         else:
-            msg = f'{info['target'].mention} 的 {info['level']} 級警告投票未通過，已取消警告。'
+            msg = f'{info['target'].mention} 的 {info["level"]} 級警告投票未通過，已取消警告。'
         for ch in targets:
             await ch.send(msg)
 
@@ -296,7 +296,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             self.active_votes[msg.id] = {
                 'initiator': ctx.author,
                 'target': member,
-                'level': level,
+                "level": level,
                 'reason': reason,
                 'time': time,
                 'ban_days': ban_days,
