@@ -144,23 +144,48 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         info = self.active_votes.get(msg_id)
         if not info or datetime.utcnow() >= info['end_time']:
             return
+
         guild = self.bot.get_guild(guild_id)
         channel = guild.get_channel(channel_id)
         vote_msg = await channel.fetch_message(msg_id)
 
         admins = await self._get_admins(guild)
         approves, rejects = await self._collect_votes(vote_msg)
+
+        mod_roles = await self.bot.get_mod_roles(guild)
+        mod_ids = {r.id for r in mod_roles}
+
+        mods = [m for m in admins if any(r.id in mod_ids for r in m.roles)]
+        pure_admins = [m for m in admins if m not in mods]
+
         lines = []
-        for m in admins:
-            if m.display_name in approves:
-                mark = '同意'
-            elif m.display_name in rejects:
-                mark = '反對'
-            else:
-                mark = self._get_status_label(m.status)
-            lines.append(f"{m.display_name}: {mark}")
+
+        # 顯示 Mod 分區
+        if mods:
+            lines.append("==MOD==")
+            for m in sorted(mods, key=lambda m: m.display_name.lower()):
+                if m.display_name in approves:
+                    mark = '同意'
+                elif m.display_name in rejects:
+                    mark = '反對'
+                else:
+                    mark = self._get_status_label(m.status)
+                lines.append(f"{m.display_name} {mark}")
+
+        # 顯示 Admin 分區
+        if pure_admins:
+            lines.append("==管理員==")
+            for m in sorted(pure_admins, key=lambda m: m.display_name.lower()):
+                if m.display_name in approves:
+                    mark = '同意'
+                elif m.display_name in rejects:
+                    mark = '反對'
+                else:
+                    mark = self._get_status_label(m.status)
+                lines.append(f"{m.display_name} {mark}")
 
         total_online = sum(1 for m in admins if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
+
         embed = discord.Embed(
             title='警告投票',
             description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票",
@@ -172,8 +197,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
         await vote_msg.edit(embed=embed)
 
-        mod_roles = await self.bot.get_mod_roles(guild)
-        mod_ids = {r.id for r in mod_roles}
+        # 如果有 mod 投票通過則直接結束
         for name in approves:
             member = discord.utils.get(guild.members, display_name=name)
             if member and any(r.id in mod_ids for r in member.roles):
@@ -182,6 +206,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
         if await self._threshold_passed(info['level'], len(approves), total_online):
             await self._end_vote(msg_id)
+
 
     async def _end_vote(self, msg_id: int):
         info = self.active_votes.pop(msg_id, None)
