@@ -164,14 +164,13 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         if not info:
             return
         guild = info['channel'].guild
+        vote_channel = info['channel']
         result_channel_id = await self.data.guild(guild).result_channel()
-        target_channel = guild.get_channel(result_channel_id) if result_channel_id else info['channel']
-        member = info['member']
-        level = info['level']
-        initiator = info['initiator']
-        reason = info.get('reason')
+        result_channel = guild.get_channel(result_channel_id) if result_channel_id else None
+
+        # 收集投票結果
         try:
-            vote_msg = await info['channel'].fetch_message(msg_id)
+            vote_msg = await vote_channel.fetch_message(msg_id)
         except Exception:
             vote_msg = None
         approve_users: List[str] = []
@@ -188,6 +187,12 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                             reject_users.append(u.display_name)
         lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
         record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
+        initiator = info['initiator']
+        member = info['member']
+        level = info['level']
+        reason = info.get('reason')
+
+        # 建立結束 embed
         desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票"
         embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
         if reason:
@@ -197,10 +202,15 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         result_text = '通過' if net_votes >= 3 else '未通過'
         embed.add_field(name='結果', value=result_text, inline=False)
         embed.set_footer(text='投票已結束')
-        try:
-            await target_channel.send(embed=embed)
-        except Exception:
-            pass
+        target_channels = [vote_channel]
+        if result_channel and result_channel.id != vote_channel.id:
+            target_channels.append(result_channel)
+        for ch in target_channels:
+            try:
+                await ch.send(embed=embed)
+            except Exception:
+                pass
+
         if net_votes >= 3:
             try:
                 fail = await self.api.warn(
@@ -214,11 +224,14 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 )
                 if fail:
                     raise fail[0]
-                await target_channel.send(f'{member.mention} 的 {level} 級警告已執行。')
+                for ch in target_channels:
+                    await ch.send(f'{member.mention} 的 {level} 級警告已執行。')
             except Exception as e:
-                await target_channel.send(str(e))
+                for ch in target_channels:
+                    await ch.send(str(e))
         else:
-            await target_channel.send(f'{member.mention} 的 {level} 級警告投票未通過，已取消警告。')
+            for ch in target_channels:
+                await ch.send(f'{member.mention} 的 {level} 級警告投票未通過，已取消警告。')
 
     @commands.guild_only()
     @checks.admin()
