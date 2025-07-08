@@ -39,6 +39,10 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
     '''WarnSystem Cog with vote and forbidden roles, real-time vote display, stop updates when ended or threshold reached'''
+    __version__ = '1.5.7'
+    __author__ = ['retke (El Laggron)']
+
+    # Global and guild default settings, including the new result_channel
     default_global = {'data_version': '0.0'}
     default_guild = {
         'delete_message': False,
@@ -63,14 +67,22 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         ])},
         'url': None,
         'temporary_warns': {},
-        'automod': {'enabled': False, 'antispam': {'enabled': False, 'max_messages': 5, 'delay': 2,
-                        'delay_before_action': 60, 'warn': {'level': 1, 'reason': 'Sending messages too fast!', 'time': None},
-                        'whitelist': []},
-                     'regex_edited_messages': False,
-                     'regex': {},
-                     'warnings': [],
-                     },
+        'automod': {
+            'enabled': False,
+            'antispam': {
+                'enabled': False,
+                'max_messages': 5,
+                'delay': 2,
+                'delay_before_action': 60,
+                'warn': {'level': 1, 'reason': 'Sending messages too fast!', 'time': None},
+                'whitelist': []
+            },
+            'regex_edited_messages': False,
+            'regex': {},
+            'warnings': [],
+        },
         'vote_channel': None,
+        'result_channel': None,
         'forbidden_roles': [],
     }
     default_custom_member = {'x': []}
@@ -89,9 +101,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         self.api = API(self.bot, self.data, self.cache)
         self.active_votes: Dict[int, Dict] = {}
 
-    __version__ = '1.5.6'
-    __author__ = ['retke (El Laggron)']
-
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
         msg_id = payload.message_id
@@ -108,9 +117,10 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         info = self.active_votes.get(msg_id)
         if not info:
             return
-        # stop if ended
         now = datetime.utcnow()
         end_time = info.get('end_time', now)
+        if now >= end_time:
+            return
         guild = self.bot.get_guild(guild_id)
         channel = guild.get_channel(channel_id) if guild else None
         try:
@@ -129,14 +139,9 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                     elif str(react.emoji) == '❌' and u.display_name not in reject_users:
                         reject_users.append(u.display_name)
         net_votes = len(approve_users) - len(reject_users)
-        # if reached threshold, end vote immediately
         if net_votes >= 3:
             await self._end_vote(msg_id)
             return
-        # if time passed, skip updating
-        if now >= end_time:
-            return
-        # update embed
         initiator = info['initiator']
         target = info['target']
         level = info['level']
@@ -158,13 +163,15 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         info = self.active_votes.pop(msg_id, None)
         if not info:
             return
-        channel = info['channel']
+        guild = info['channel'].guild
+        result_channel_id = await self.data.guild(guild).result_channel()
+        target_channel = guild.get_channel(result_channel_id) if result_channel_id else info['channel']
         member = info['member']
         level = info['level']
         initiator = info['initiator']
         reason = info.get('reason')
         try:
-            vote_msg = await channel.fetch_message(msg_id)
+            vote_msg = await info['channel'].fetch_message(msg_id)
         except Exception:
             vote_msg = None
         approve_users: List[str] = []
@@ -181,41 +188,37 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                             reject_users.append(u.display_name)
         lines = [f'{name} 同意' for name in approve_users] + [f'{name} 反對' for name in reject_users]
         record_text = '\n'.join(lines) if lines else '目前無投票記錄。'
-        # edit embed to show ended
-        if vote_msg:
-            desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票"
-            embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
-            if reason:
-                embed.add_field(name='原因', value=reason, inline=False)
-            embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
-            net_votes = len(approve_users) - len(reject_users)
-            result_text = '通過' if net_votes >= 3 else '未通過'
-            embed.add_field(name='結果', value=f'{result_text}', inline=False)
-            embed.set_footer(text='投票已結束')
+        desc = f"{initiator.mention} 發起對 {member.mention} 的 {level} 級警告投票"
+        embed = discord.Embed(title='投票結束', description=desc, color=discord.Color.greyple())
+        if reason:
+            embed.add_field(name='原因', value=reason, inline=False)
+        embed.add_field(name='最終投票記錄', value=f'```{record_text}```', inline=False)
+        net_votes = len(approve_users) - len(reject_users)
+        result_text = '通過' if net_votes >= 3 else '未通過'
+        embed.add_field(name='結果', value=result_text, inline=False)
+        embed.set_footer(text='投票已結束')
+        try:
+            await target_channel.send(embed=embed)
+        except Exception:
+            pass
+        if net_votes >= 3:
             try:
-                await vote_msg.edit(embed=embed)
-            except Exception:
-                pass
-        # send notification
-        if vote_msg:
-            if len(approve_users) - len(reject_users) >= 3:
-                await channel.send(f'{member.mention} 的 {level} 級警告投票已通過，將執行警告。')
-                try:
-                    fail = await self.api.warn(
-                        guild=channel.guild,
-                        members=[member],
-                        author=initiator,
-                        level=level,
-                        reason=reason,
-                        time=info.get('time'),
-                        ban_days=info.get('ban_days'),
-                    )
-                    if fail:
-                        raise fail[0]
-                except Exception as e:
-                    await channel.send(str(e))
-            else:
-                await channel.send(f'{member.mention} 的 {level} 級警告投票未達到通過門檻，已取消警告。')
+                fail = await self.api.warn(
+                    guild=guild,
+                    members=[member],
+                    author=initiator,
+                    level=level,
+                    reason=reason,
+                    time=info.get('time'),
+                    ban_days=info.get('ban_days'),
+                )
+                if fail:
+                    raise fail[0]
+                await target_channel.send(f'{member.mention} 的 {level} 級警告已執行。')
+            except Exception as e:
+                await target_channel.send(str(e))
+        else:
+            await target_channel.send(f'{member.mention} 的 {level} 級警告投票未通過，已取消警告。')
 
     @commands.guild_only()
     @checks.admin()
@@ -229,6 +232,12 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         '設定警告投票要發起的頻道'
         await self.data.guild(ctx.guild).vote_channel.set(channel.id)
         await ctx.send(f'已設定警告投票頻道為 {channel.mention}')
+
+    @warnset.command(name='resultchannel')
+    async def set_result_channel(self, ctx, channel: discord.TextChannel):
+        '設定投票結果要發布的頻道'
+        await self.data.guild(ctx.guild).result_channel.set(channel.id)
+        await ctx.send(f'已設定投票結果頻道為 {channel.mention}')
 
     @warnset.group(name='forbiddenroles')
     async def forbidden_roles_group(self, ctx):
