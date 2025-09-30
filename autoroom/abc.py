@@ -24,11 +24,6 @@ class MixinMeta(ABC):
     bucket_autoroom_owner_claim: CooldownMapping
     extra_channel_name_change_delay: int
 
-    perms_public: dict[str, bool]
-    perms_locked: dict[str, bool]
-    perms_private: dict[str, bool]
-    perms_autoroom_owner: dict[str, bool]
-
     perms_legacy_text_allow: ClassVar[dict[str, bool]]
     perms_legacy_text_reset: ClassVar[dict[str, None]]
     perms_autoroom_owner_legacy_text: ClassVar[dict[str, bool]]
@@ -39,7 +34,9 @@ class MixinMeta(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def format_template_room_name(self, template: str, data: dict, num: int = 1) -> str:
+    async def format_template_room_name(
+        self, template: str, data: dict, num: int = 1
+    ) -> str:
         raise NotImplementedError
 
     @abstractmethod
@@ -71,7 +68,7 @@ class MixinMeta(ABC):
 
     @abstractmethod
     async def get_autoroom_source_config(
-        self, autoroom_source: discord.VoiceChannel
+        self, autoroom_source: discord.VoiceChannel | discord.abc.GuildChannel | None
     ) -> dict[str, Any] | None:
         raise NotImplementedError
 
