@@ -37,7 +37,10 @@ def _exc_classes(*names: str):
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
+# Suppress noisy SDK INFO logs (e.g. "AFC is enabled with max remote calls: 10.")
 logging.getLogger("genai").setLevel(logging.WARNING)
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("google_genai.models").setLevel(logging.WARNING)
 
 
 SEARCH_TOOL = types.Tool(google_search=types.GoogleSearch())
@@ -63,6 +66,7 @@ _MEMORY_TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
 _DISCORD_MENTION_RE = re.compile(r"<@!?\\d+>|@everyone|@here")
 _DISCORD_ID_RE = re.compile(r"\\b\\d{17,20}\\b")
 _JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
+_SCORE_FIELD_RE = re.compile(r'(?i)"?score"?\s*[:=]\s*([0-5])\b')
 _GUILD_MEMORY_KEYWORDS = (
     "伺服器",
     "本群",
@@ -82,9 +86,11 @@ _GUILD_MEMORY_KEYWORDS = (
 )
 
 def _extract_response_text(response: Any) -> str:
+    segments: List[str] = []
+
     text = getattr(response, "text", None)
     if isinstance(text, str) and text.strip():
-        return text.strip()
+        segments.append(text.strip())
 
     candidates = getattr(response, "candidates", None) or []
     for cand in candidates:
@@ -93,8 +99,73 @@ def _extract_response_text(response: Any) -> str:
         for part in parts:
             part_text = getattr(part, "text", None)
             if isinstance(part_text, str) and part_text.strip():
-                return part_text.strip()
-    return ""
+                segments.append(part_text.strip())
+
+    if not segments:
+        return ""
+
+    deduped: List[str] = []
+    seen = set()
+    for seg in segments:
+        key = seg.strip()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(key)
+
+    return "\n".join(deduped).strip()
+
+
+def _coerce_parsed_dict(parsed: Any) -> Optional[Dict[str, Any]]:
+    if parsed is None:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+
+    model_dump = getattr(parsed, "model_dump", None)
+    if callable(model_dump):
+        try:
+            dumped = model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        except Exception:
+            pass
+
+    dict_fn = getattr(parsed, "dict", None)
+    if callable(dict_fn):
+        try:
+            dumped = dict_fn()
+            if isinstance(dumped, dict):
+                return dumped
+        except Exception:
+            pass
+
+    try:
+        from dataclasses import asdict, is_dataclass
+
+        if is_dataclass(parsed):
+            dumped = asdict(parsed)
+            if isinstance(dumped, dict):
+                return dumped
+    except Exception:
+        pass
+
+    return None
+
+
+def _extract_score_fallback(text: str) -> Optional[int]:
+    s = str(text or "").strip()
+    if not s:
+        return None
+    if s in {"0", "1", "2", "3", "4", "5"}:
+        return int(s)
+    m = _SCORE_FIELD_RE.search(s)
+    if not m:
+        return None
+    try:
+        return int(m.group(1))
+    except Exception:
+        return None
 
 
 def _safe_json_loads(text: str) -> Any:
@@ -1212,9 +1283,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             ),
         )
 
-        parsed = getattr(response, "parsed", None)
-        if hasattr(parsed, "model_dump"):
-            parsed = parsed.model_dump()
+        parsed_obj = getattr(response, "parsed", None)
+        parsed = _coerce_parsed_dict(parsed_obj)
+        if parsed is None and parsed_obj is not None:
+            summary_attr = getattr(parsed_obj, "summary", None)
+            facts_attr = getattr(parsed_obj, "facts", None)
+            if summary_attr is not None or facts_attr is not None:
+                parsed = {"summary": summary_attr, "facts": facts_attr}
 
         if not isinstance(parsed, dict):
             content = _extract_response_text(response)
@@ -1336,9 +1411,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             ),
         )
 
-        parsed = getattr(response, "parsed", None)
-        if hasattr(parsed, "model_dump"):
-            parsed = parsed.model_dump()
+        parsed_obj = getattr(response, "parsed", None)
+        parsed = _coerce_parsed_dict(parsed_obj)
+        if parsed is None and parsed_obj is not None:
+            summary_attr = getattr(parsed_obj, "summary", None)
+            facts_attr = getattr(parsed_obj, "facts", None)
+            if summary_attr is not None or facts_attr is not None:
+                parsed = {"summary": summary_attr, "facts": facts_attr}
 
         if not isinstance(parsed, dict):
             content = _extract_response_text(response)
@@ -1838,19 +1917,27 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     max_output_tokens=200,
                     response_mime_type="application/json",
                     response_schema=MEMORY_SCHEMA,
-                ),
-            )
+            ),
+        )
 
-            parsed = getattr(response, "parsed", None)
-            if hasattr(parsed, "model_dump"):
-                parsed = parsed.model_dump()
-
+            parsed_obj = getattr(response, "parsed", None)
+            parsed = _coerce_parsed_dict(parsed_obj)
             if isinstance(parsed, dict):
                 score = max(0, min(int(parsed.get("score", 1)), 5))
                 return {"score": score}
+            score_attr = getattr(parsed_obj, "score", None)
+            if score_attr is not None:
+                score = max(0, min(int(score_attr), 5))
+                return {"score": score}
 
             content = _extract_response_text(response)
-            result = _safe_json_loads(content) if content else {}
+            try:
+                result = _safe_json_loads(content) if content else {}
+            except json.JSONDecodeError:
+                fallback = _extract_score_fallback(content)
+                if fallback is not None:
+                    return {"score": fallback}
+                raise
 
             score = max(0, min(int(result.get("score", 1)), 5)) if isinstance(result, dict) else 0
             
