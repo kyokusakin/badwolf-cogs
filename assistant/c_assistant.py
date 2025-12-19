@@ -39,8 +39,7 @@ class AssistantCommands():
         """設定 OpenAI API 金鑰 (僅限擁有者)。"""
         cog = self.bot.get_cog("OpenAIChat")
         encoded_key = cog.encode_key(key)
-        await cog.config.api_key.set(encoded_key)
-        await cog.config.api_keys.set([encoded_key])
+        await cog.config.api_keys.set({encoded_key: True})
         await ctx.send("API 金鑰已安全存儲，並已重設金鑰池（1 把）。")
 
     @openai.command(name="addkey")
@@ -50,20 +49,16 @@ class AssistantCommands():
         cog = self.bot.get_cog("OpenAIChat")
         encoded_key = cog.encode_key(key)
 
-        keys = await cog.config.api_keys()
-        if not keys:
-            legacy = await cog.config.api_key()
-            if legacy:
-                keys = [legacy]
+        raw_keys = await cog.config.api_keys()
+        key_map = dict(raw_keys) if isinstance(raw_keys, dict) else {}
 
-        if encoded_key in keys:
+        if encoded_key in key_map:
             await ctx.send("此 API 金鑰已存在於金鑰池中。")
             return
 
-        keys.append(encoded_key)
-        await cog.config.api_keys.set(keys)
-        await cog.config.api_key.set(keys[0])
-        await ctx.send(f"已新增 API 金鑰，目前金鑰池共有 {len(keys)} 把，將以 round-robin 輪詢使用。")
+        key_map[encoded_key] = True
+        await cog.config.api_keys.set(key_map)
+        await ctx.send(f"已新增 API 金鑰，目前金鑰池共有 {len(key_map)} 把，將以 round-robin 輪詢使用。")
 
     @openai.command(name="delkey")
     @commands.is_owner()
@@ -74,14 +69,12 @@ class AssistantCommands():
             return
 
         cog = self.bot.get_cog("OpenAIChat")
-        keys = await cog.config.api_keys()
+        raw_keys = await cog.config.api_keys()
+        key_map = dict(raw_keys) if isinstance(raw_keys, dict) else {}
+
+        keys = [k for k, enabled in key_map.items() if enabled]
 
         if not keys:
-            legacy = await cog.config.api_key()
-            if legacy and index == 1:
-                await cog.config.api_key.clear()
-                await ctx.send("已清除 legacy API 金鑰。")
-                return
             await ctx.send("目前金鑰池是空的（可用 `[p]openai addkey` 新增）。")
             return
 
@@ -89,13 +82,15 @@ class AssistantCommands():
             await ctx.send(f"序號超出範圍，目前金鑰池只有 {len(keys)} 把。")
             return
 
-        removed = keys.pop(index - 1)
-        await cog.config.api_keys.set(keys)
-        await cog.config.api_key.set(keys[0] if keys else None)
+        removed = keys[index - 1]
+        key_map.pop(removed, None)
+
+        await cog.config.api_keys.set(key_map)
+        remaining = sum(1 for enabled in key_map.values() if enabled)
 
         decoded = cog.decode_key(removed)
         await ctx.send(
-            f"已移除第 {index} 把金鑰（{self._mask_api_key(decoded)}），目前剩 {len(keys)} 把。"
+            f"已移除第 {index} 把金鑰（{self._mask_api_key(decoded)}），目前剩 {remaining} 把。"
         )
 
     @openai.command(name="listkeys")
@@ -103,14 +98,8 @@ class AssistantCommands():
     async def listkeys_owner(self, ctx: commands.Context):
         """列出已設定的 API 金鑰（遮罩顯示，僅限擁有者）。"""
         cog = self.bot.get_cog("OpenAIChat")
-        keys = await cog.config.api_keys()
-        source = "金鑰池"
-
-        if not keys:
-            legacy = await cog.config.api_key()
-            if legacy:
-                keys = [legacy]
-                source = "legacy"
+        raw_keys = await cog.config.api_keys()
+        keys = [k for k, enabled in raw_keys.items() if enabled] if isinstance(raw_keys, dict) else []
 
         if not keys:
             await ctx.send("尚未設定任何 API 金鑰。")
@@ -128,8 +117,7 @@ class AssistantCommands():
     async def clearkeys_owner(self, ctx: commands.Context):
         """清除所有 API 金鑰設定 (僅限擁有者)。"""
         cog = self.bot.get_cog("OpenAIChat")
-        await cog.config.api_keys.set([])
-        await cog.config.api_key.clear()
+        await cog.config.api_keys.set({})
         await ctx.send("已清除所有 API 金鑰設定。")
 
     @openai.command()

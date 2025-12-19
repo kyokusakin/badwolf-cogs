@@ -35,8 +35,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         super().__init__(bot)
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
-            "api_key": None,
-            "api_keys": [],
+            "api_keys": {},
             "api_url_base": "https://api.openai.com/v1",
             "model": "gpt-4",
             "default_delay": 1,
@@ -64,14 +63,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     async def _get_configured_encoded_api_keys(self) -> List[str]:
         """
         Returns the configured API key pool (encoded).
-        Backward compatible: if the pool is empty, falls back to legacy `api_key`.
         """
-        keys = await self.config.api_keys()
-        if keys:
-            return list(keys)
-
-        legacy = await self.config.api_key()
-        return [legacy] if legacy else []
+        key_map = await self.config.api_keys()
+        if not isinstance(key_map, dict) or not key_map:
+            return []
+        return [k for k, enabled in key_map.items() if enabled]
 
     @staticmethod
     def _is_retryable_openai_error(error: Exception) -> bool:
