@@ -1279,7 +1279,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 temperature=0,
                 max_output_tokens=3000,
                 response_mime_type="application/json",
-                response_schema=MEMORY_ITEM_SCHEMA,
+                response_json_schema=MEMORY_ITEM_SCHEMA,
             ),
         )
 
@@ -1407,7 +1407,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 temperature=0,
                 max_output_tokens=3000,
                 response_mime_type="application/json",
-                response_schema=MEMORY_ITEM_SCHEMA,
+                response_json_schema=MEMORY_ITEM_SCHEMA,
             ),
         )
 
@@ -1916,7 +1916,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     temperature=0,
                     max_output_tokens=200,
                     response_mime_type="application/json",
-                    response_schema=MEMORY_SCHEMA,
+                    response_json_schema=MEMORY_SCHEMA,
             ),
         )
 
