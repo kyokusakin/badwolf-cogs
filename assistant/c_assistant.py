@@ -13,6 +13,14 @@ class AssistantCommands():
         self.bot = bot
         super().__init__()
 
+    @staticmethod
+    def _mask_api_key(api_key: str) -> str:
+        if not api_key:
+            return ""
+        if len(api_key) <= 8:
+            return "*" * len(api_key)
+        return f"{api_key[:4]}...{api_key[-4:]}"
+
     def chat_histories_path(self) -> pathlib.Path:
         base_path = data_manager.cog_data_path(raw_name="OpenAIChat")
         chat_histories_folder = base_path / "chat_histories"
@@ -29,9 +37,100 @@ class AssistantCommands():
     @commands.is_owner()
     async def setkey_owner(self, ctx: commands.Context, key: str):
         """設定 OpenAI API 金鑰 (僅限擁有者)。"""
-        encoded_key = self.bot.get_cog("OpenAIChat").encode_key(key)
-        await self.bot.get_cog("OpenAIChat").config.api_key.set(encoded_key)
-        await ctx.send("API 金鑰已安全存儲。")
+        cog = self.bot.get_cog("OpenAIChat")
+        encoded_key = cog.encode_key(key)
+        await cog.config.api_key.set(encoded_key)
+        await cog.config.api_keys.set([encoded_key])
+        await ctx.send("API 金鑰已安全存儲，並已重設金鑰池（1 把）。")
+
+    @openai.command(name="addkey")
+    @commands.is_owner()
+    async def addkey_owner(self, ctx: commands.Context, key: str):
+        """新增 OpenAI API 金鑰到金鑰池 (僅限擁有者)。"""
+        cog = self.bot.get_cog("OpenAIChat")
+        encoded_key = cog.encode_key(key)
+
+        keys = await cog.config.api_keys()
+        if not keys:
+            legacy = await cog.config.api_key()
+            if legacy:
+                keys = [legacy]
+
+        if encoded_key in keys:
+            await ctx.send("此 API 金鑰已存在於金鑰池中。")
+            return
+
+        keys.append(encoded_key)
+        await cog.config.api_keys.set(keys)
+        await cog.config.api_key.set(keys[0])
+        await ctx.send(f"已新增 API 金鑰，目前金鑰池共有 {len(keys)} 把，將以 round-robin 輪詢使用。")
+
+    @openai.command(name="delkey")
+    @commands.is_owner()
+    async def delkey_owner(self, ctx: commands.Context, index: int):
+        """從金鑰池移除指定序號的 API 金鑰 (僅限擁有者)。"""
+        if index < 1:
+            await ctx.send("序號必須從 1 開始。")
+            return
+
+        cog = self.bot.get_cog("OpenAIChat")
+        keys = await cog.config.api_keys()
+
+        if not keys:
+            legacy = await cog.config.api_key()
+            if legacy and index == 1:
+                await cog.config.api_key.clear()
+                await ctx.send("已清除 legacy API 金鑰。")
+                return
+            await ctx.send("目前金鑰池是空的（可用 `[p]openai addkey` 新增）。")
+            return
+
+        if index > len(keys):
+            await ctx.send(f"序號超出範圍，目前金鑰池只有 {len(keys)} 把。")
+            return
+
+        removed = keys.pop(index - 1)
+        await cog.config.api_keys.set(keys)
+        await cog.config.api_key.set(keys[0] if keys else None)
+
+        decoded = cog.decode_key(removed)
+        await ctx.send(
+            f"已移除第 {index} 把金鑰（{self._mask_api_key(decoded)}），目前剩 {len(keys)} 把。"
+        )
+
+    @openai.command(name="listkeys")
+    @commands.is_owner()
+    async def listkeys_owner(self, ctx: commands.Context):
+        """列出已設定的 API 金鑰（遮罩顯示，僅限擁有者）。"""
+        cog = self.bot.get_cog("OpenAIChat")
+        keys = await cog.config.api_keys()
+        source = "金鑰池"
+
+        if not keys:
+            legacy = await cog.config.api_key()
+            if legacy:
+                keys = [legacy]
+                source = "legacy"
+
+        if not keys:
+            await ctx.send("尚未設定任何 API 金鑰。")
+            return
+
+        lines = []
+        for i, encoded in enumerate(keys, start=1):
+            decoded = cog.decode_key(encoded)
+            lines.append(f"{i}. {self._mask_api_key(decoded)}")
+
+        await ctx.send(f"{source}（共 {len(keys)} 把）：\n" + "\n".join(lines))
+
+    @openai.command(name="clearkeys")
+    @commands.is_owner()
+    async def clearkeys_owner(self, ctx: commands.Context):
+        """清除所有 API 金鑰設定 (僅限擁有者)。"""
+        cog = self.bot.get_cog("OpenAIChat")
+        await cog.config.api_keys.set([])
+        await cog.config.api_key.clear()
+        await ctx.send("已清除所有 API 金鑰設定。")
 
     @openai.command()
     @commands.is_owner()

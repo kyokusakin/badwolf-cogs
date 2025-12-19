@@ -8,15 +8,23 @@ import time
 import discord
 import openai
 import pathlib
+from dataclasses import dataclass
 from redbot.core import Config, commands, data_manager
 from redbot.core.bot import Red
 from .c_assistant import AssistantCommands
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("openai").setLevel(logging.WARNING)
+
+
+@dataclass
+class _APIKeyState:
+    cooldown_until: float = 0.0
+    failures: int = 0
+
 
 class OpenAIChat(commands.Cog, AssistantCommands):
     """A RedBot cog for OpenAI API integration with advanced features,
@@ -28,6 +36,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
             "api_key": None,
+            "api_keys": [],
             "api_url_base": "https://api.openai.com/v1",
             "model": "gpt-4",
             "default_delay": 1,
@@ -42,12 +51,113 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.queue = asyncio.Queue()
         self.queue_task = asyncio.create_task(self.process_queue())
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self._api_key_lock = asyncio.Lock()
+        self._api_key_states: Dict[str, _APIKeyState] = {}
+        self._rr_index = 0
     
     def encode_key(self, key: str) -> str:
         return base64.b64encode(key.encode()).decode()
 
     def decode_key(self, encoded_key: str) -> str:
         return base64.b64decode(encoded_key.encode()).decode()
+
+    async def _get_configured_encoded_api_keys(self) -> List[str]:
+        """
+        Returns the configured API key pool (encoded).
+        Backward compatible: if the pool is empty, falls back to legacy `api_key`.
+        """
+        keys = await self.config.api_keys()
+        if keys:
+            return list(keys)
+
+        legacy = await self.config.api_key()
+        return [legacy] if legacy else []
+
+    @staticmethod
+    def _is_retryable_openai_error(error: Exception) -> bool:
+        status_code = getattr(error, "status_code", None)
+        if status_code is not None:
+            return status_code not in {400, 404, 422}
+
+        non_retryable = tuple(
+            cls
+            for cls in (
+                getattr(openai, "BadRequestError", None),
+                getattr(openai, "NotFoundError", None),
+                getattr(openai, "UnprocessableEntityError", None),
+            )
+            if cls is not None
+        )
+        return not (non_retryable and isinstance(error, non_retryable))
+
+    @staticmethod
+    def _cooldown_seconds_for_error(error: Exception) -> float:
+        status_code = getattr(error, "status_code", None)
+        if status_code == 429:
+            return 20.0
+        if status_code in {500, 502, 503, 504}:
+            return 2.0
+
+        if isinstance(error, getattr(openai, "RateLimitError", ())):
+            return 20.0
+        if isinstance(error, getattr(openai, "APIConnectionError", ())):
+            return 5.0
+        if isinstance(error, getattr(openai, "APITimeoutError", ())):
+            return 5.0
+        if isinstance(error, getattr(openai, "APIStatusError", ())):
+            return 2.0
+        if isinstance(error, getattr(openai, "AuthenticationError", ())):
+            return 600.0
+        if isinstance(error, getattr(openai, "PermissionDeniedError", ())):
+            return 600.0
+
+        return 5.0
+
+    async def _pick_api_key(self, encoded_keys: List[str]) -> Tuple[str, str]:
+        """
+        Round-robin pick with cooldown skipping.
+        Returns: (encoded_key, decoded_key)
+        """
+        if not encoded_keys:
+            raise RuntimeError("No API keys configured")
+
+        now = time.monotonic()
+        async with self._api_key_lock:
+            current_keys = set(encoded_keys)
+            for encoded in list(self._api_key_states.keys()):
+                if encoded not in current_keys:
+                    del self._api_key_states[encoded]
+
+            for encoded in encoded_keys:
+                self._api_key_states.setdefault(encoded, _APIKeyState())
+
+            start = self._rr_index % len(encoded_keys)
+            for offset in range(len(encoded_keys)):
+                idx = (start + offset) % len(encoded_keys)
+                encoded = encoded_keys[idx]
+                if self._api_key_states[encoded].cooldown_until <= now:
+                    self._rr_index = (idx + 1) % len(encoded_keys)
+                    return encoded, self.decode_key(encoded)
+
+            encoded = encoded_keys[start]
+            self._rr_index = (start + 1) % len(encoded_keys)
+            return encoded, self.decode_key(encoded)
+
+    async def _mark_key_success(self, encoded_key: str):
+        async with self._api_key_lock:
+            state = self._api_key_states.get(encoded_key)
+            if not state:
+                return
+            state.failures = 0
+            state.cooldown_until = 0.0
+
+    async def _mark_key_failure(self, encoded_key: str, error: Exception):
+        cooldown = self._cooldown_seconds_for_error(error)
+        now = time.monotonic()
+        async with self._api_key_lock:
+            state = self._api_key_states.setdefault(encoded_key, _APIKeyState())
+            state.failures += 1
+            state.cooldown_until = max(state.cooldown_until, now + cooldown)
 
     def chat_histories_path(self) -> pathlib.Path:
         base_path = data_manager.cog_data_path(raw_name="OpenAIChat")
@@ -74,20 +184,18 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if not user_input:
             return None
 
-        api_key = await self.config.api_key()
-        if not api_key:
+        encoded_keys = await self._get_configured_encoded_api_keys()
+        if not encoded_keys:
             await message.channel.send("API key not set. Only the bot owner can set the key.")
             return None
 
-        api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
 
         user_name = message.author.display_name
         user_id = message.author.id
         bot_name = self.bot.user.display_name
-        config = await self.config.guild(message.guild).all()
-        prompt = config["prompt"]
+        prompt = await self.config.guild(message.guild).prompt()
 
         # Load chat history
         history = await self.load_chat_history(message.guild.id)
@@ -96,7 +204,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         # Build layered memory content with dynamic trimming
         current_time = time.time()
-        guild_history = await self.build_guild_history(
+        guild_history = self.build_guild_history(
             history, current_time, short_term_seconds=600, max_records=20, bot_name=bot_name
         )
 
@@ -113,35 +221,52 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
-        # Use thread executor for blocking API call
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self.executor,
-            self._blocking_openai_request,
-            api_key, api_url_base, model, sysprompt, guild_history, formatted_user_input
-        )
+        loop = asyncio.get_running_loop()
+        last_error: Optional[Exception] = None
+
+        for _ in range(len(encoded_keys)):
+            encoded_key, api_key = await self._pick_api_key(encoded_keys)
+            try:
+                result = await loop.run_in_executor(
+                    self.executor,
+                    self._blocking_openai_request,
+                    api_key,
+                    api_url_base,
+                    model,
+                    sysprompt,
+                    guild_history,
+                    formatted_user_input,
+                )
+                await self._mark_key_success(encoded_key)
+                return result
+            except openai.OpenAIError as e:
+                await self._mark_key_failure(encoded_key, e)
+                last_error = e
+                if not self._is_retryable_openai_error(e):
+                    break
+            except Exception as e:
+                last_error = e
+                log.exception("Unexpected error while calling OpenAI")
+                break
+
+        if last_error:
+            log.error(f"OpenAI request failed after trying {len(encoded_keys)} key(s): {last_error}")
+            return f"⚠️ API Error: {last_error}"
+        return None
 
     def _blocking_openai_request(
         self, api_key: str, api_url_base: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
         """Synchronous call to OpenAI API using client.chat.completions.create"""
-        try:
-            # Create client and set API key and base URL
-            client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
-            messages = [
-                {"role": "system", "content": prompt},
-                {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."},
-                {"role": "user", "content": user_input}
-            ]
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages
-            )
-            return response.choices[0].message.content
-        except openai.OpenAIError as e:
-            log.error(f"OpenAI error: {e}")
-            return f"⚠️ API Error: {e}"
+        client = openai.OpenAI(api_key=api_key, base_url=api_url_base)
+        messages = [
+            {"role": "system", "content": prompt},
+            {"role": "assistant", "content": "Chat histories:\n" + guild_history + "\nChat histories end."},
+            {"role": "user", "content": user_input},
+        ]
+        response = client.chat.completions.create(model=model, messages=messages)
+        return response.choices[0].message.content
 
     async def process_queue(self):
         """Background task: process messages in queue"""
@@ -230,7 +355,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except Exception as e:
             log.error(f"Error saving chat history: {e}")
 
-    async def build_guild_history(self, history: List[Dict], current_time: float, 
+    def build_guild_history(self, history: List[Dict], current_time: float, 
                                 short_term_seconds: int, max_records: int, bot_name: str) -> str:
         """优化后的记忆筛选逻辑，确保严格的数量控制和更合理的记忆排序"""
         # 分离短期记忆（按时间倒序）
@@ -272,20 +397,43 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         Let AI evaluate the memory importance of this conversation with JSON output
         Returns a dictionary with score (0-5), reason
         """
-        api_key = await self.config.api_key()
-        if not api_key:
+        encoded_keys = await self._get_configured_encoded_api_keys()
+        if not encoded_keys:
             return {"score": 1}
         
-        api_key = self.decode_key(api_key)
         api_url_base = await self.config.api_url_base()
         model = await self.config.model()
         
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(
-            self.executor,
-            self._blocking_evaluate_memory_json,
-            api_key, api_url_base, model, user_message, bot_response
-        )
+        loop = asyncio.get_running_loop()
+        last_error: Optional[Exception] = None
+
+        for _ in range(len(encoded_keys)):
+            encoded_key, api_key = await self._pick_api_key(encoded_keys)
+            try:
+                result = await loop.run_in_executor(
+                    self.executor,
+                    self._blocking_evaluate_memory_json,
+                    api_key,
+                    api_url_base,
+                    model,
+                    user_message,
+                    bot_response,
+                )
+                await self._mark_key_success(encoded_key)
+                return result
+            except openai.OpenAIError as e:
+                await self._mark_key_failure(encoded_key, e)
+                last_error = e
+                if not self._is_retryable_openai_error(e):
+                    break
+            except Exception as e:
+                last_error = e
+                log.exception("Unexpected error while evaluating memory")
+                break
+
+        if last_error:
+            log.error(f"Memory evaluation failed after trying {len(encoded_keys)} key(s): {last_error}")
+        return {"score": 0}
 
     def _blocking_evaluate_memory_json(self, api_key: str, api_url_base: str, model: str, 
                                      user_message: str, bot_response: str) -> Dict:
@@ -348,6 +496,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 "score": score,
             }
             
+        except openai.OpenAIError:
+            raise
         except json.JSONDecodeError as e:
             log.error(f"JSON 解析錯誤: {e}, 原始回應: {content}")
             return {"score": 0}
