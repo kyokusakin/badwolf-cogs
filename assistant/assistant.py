@@ -1277,7 +1277,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0,
-                max_output_tokens=3000,
                 response_mime_type="application/json",
                 response_json_schema=MEMORY_ITEM_SCHEMA,
             ),
@@ -1399,7 +1398,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
                 temperature=0,
-                max_output_tokens=3000,
                 response_mime_type="application/json",
                 response_json_schema=MEMORY_ITEM_SCHEMA,
             ),
@@ -1902,7 +1900,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
                     temperature=0,
-                    max_output_tokens=200,
                     response_mime_type="application/json",
                     response_json_schema=MEMORY_SCHEMA,
             ),
