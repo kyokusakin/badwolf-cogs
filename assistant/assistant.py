@@ -62,6 +62,7 @@ MEMORY_ITEM_SCHEMA: Dict[str, Any] = {
 _MEMORY_TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
 _DISCORD_MENTION_RE = re.compile(r"<@!?\\d+>|@everyone|@here")
 _DISCORD_ID_RE = re.compile(r"\\b\\d{17,20}\\b")
+_JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 _GUILD_MEMORY_KEYWORDS = (
     "伺服器",
     "本群",
@@ -79,6 +80,53 @@ _GUILD_MEMORY_KEYWORDS = (
     "role",
     "身分組",
 )
+
+def _extract_response_text(response: Any) -> str:
+    text = getattr(response, "text", None)
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    candidates = getattr(response, "candidates", None) or []
+    for cand in candidates:
+        content_obj = getattr(cand, "content", None)
+        parts = getattr(content_obj, "parts", None) or []
+        for part in parts:
+            part_text = getattr(part, "text", None)
+            if isinstance(part_text, str) and part_text.strip():
+                return part_text.strip()
+    return ""
+
+
+def _safe_json_loads(text: str) -> Any:
+    """
+    Best-effort JSON loader for LLM outputs.
+    Handles common wrappers like code fences or leading prose (e.g. "Here is the JSON: ...").
+    """
+    s = str(text or "").strip()
+    if not s:
+        raise json.JSONDecodeError("Empty JSON", s, 0)
+
+    m = _JSON_CODE_BLOCK_RE.search(s)
+    if m:
+        s = (m.group(1) or "").strip()
+
+    # Fast path.
+    try:
+        return json.loads(s)
+    except json.JSONDecodeError:
+        pass
+
+    decoder = json.JSONDecoder()
+    for i, ch in enumerate(s):
+        if ch not in "{[":
+            continue
+        try:
+            obj, _ = decoder.raw_decode(s[i:])
+        except json.JSONDecodeError:
+            continue
+        return obj
+
+    raise json.JSONDecodeError("No JSON object found", s, 0)
 
 
 @dataclass
@@ -1157,8 +1205,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.2,
-                max_output_tokens=300,
+                temperature=0,
+                max_output_tokens=3000,
                 response_mime_type="application/json",
                 response_schema=MEMORY_ITEM_SCHEMA,
             ),
@@ -1169,8 +1217,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             parsed = parsed.model_dump()
 
         if not isinstance(parsed, dict):
-            content = (getattr(response, "text", None) or "").strip()
-            parsed = json.loads(content) if content else {}
+            content = _extract_response_text(response)
+            try:
+                parsed = _safe_json_loads(content) if content else {}
+            except json.JSONDecodeError as e:
+                log.error(f"Long-term memory JSON 解析錯誤: {e}, 原始回應: {(content or '')[:400]}")
+                parsed = {}
 
         summary = str(parsed.get("summary", "") if isinstance(parsed, dict) else "").strip()
         raw_facts = parsed.get("facts", []) if isinstance(parsed, dict) else []
@@ -1277,8 +1329,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             contents=prompt,
             config=types.GenerateContentConfig(
                 system_instruction=system_instruction,
-                temperature=0.2,
-                max_output_tokens=300,
+                temperature=0,
+                max_output_tokens=3000,
                 response_mime_type="application/json",
                 response_schema=MEMORY_ITEM_SCHEMA,
             ),
@@ -1289,8 +1341,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             parsed = parsed.model_dump()
 
         if not isinstance(parsed, dict):
-            content = (getattr(response, "text", None) or "").strip()
-            parsed = json.loads(content) if content else {}
+            content = _extract_response_text(response)
+            try:
+                parsed = _safe_json_loads(content) if content else {}
+            except json.JSONDecodeError as e:
+                log.error(f"Guild memory JSON 解析錯誤: {e}, 原始回應: {(content or '')[:400]}")
+                parsed = {}
 
         summary = str(parsed.get("summary", "") if isinstance(parsed, dict) else "").strip()
         raw_facts = parsed.get("facts", []) if isinstance(parsed, dict) else []
@@ -1753,18 +1809,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 )
 
             client = genai.Client(api_key=api_key, http_options=self._http_options)
-            system_instruction = '''
+            system_instruction = """
 ## 角色定位
 你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並輸出結構化的 JSON 資料。
 
 ## 輸出格式
-請嚴格輸出 JSON（不要額外文字，也不要用 ```json 包起來）。
-
-```json
-{
-  "score": 0-5 的整數
-}
-```
+請只輸出一個 JSON 物件（不要額外文字、不要 markdown 或程式碼框）。
+輸出範例：{"score": 3}
 
 ## 評分標準 (0-5)
 - **0分**: 無需記憶 - 寒暄、無意義內容（如「你好」「XD」「我也覺得」）
@@ -1775,7 +1826,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 - **5分**: 關鍵資訊 - 重要個人資料（如「我對花生過敏」「我下月結婚」）
 
 記住：只輸出 JSON 格式，不要包含任何解釋或額外文字。
-                    '''
+                    """.strip()
 
             prompt = f"請評估以下對話的記憶價值：\n\n用戶：{user_message}\nAI：{bot_response}"
             response = client.models.generate_content(
@@ -1783,7 +1834,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 contents=prompt,
                 config=types.GenerateContentConfig(
                     system_instruction=system_instruction,
-                    temperature=0.2,
+                    temperature=0,
                     max_output_tokens=200,
                     response_mime_type="application/json",
                     response_schema=MEMORY_SCHEMA,
@@ -1798,8 +1849,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 score = max(0, min(int(parsed.get("score", 1)), 5))
                 return {"score": score}
 
-            content = (getattr(response, "text", None) or "").strip()
-            result = json.loads(content) if content else {}
+            content = _extract_response_text(response)
+            result = _safe_json_loads(content) if content else {}
 
             score = max(0, min(int(result.get("score", 1)), 5)) if isinstance(result, dict) else 0
             
@@ -1809,7 +1860,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             
         except json.JSONDecodeError as e:
             raw = locals().get("content", "")
-            log.error(f"JSON 解析錯誤: {e}, 原始回應: {raw}")
+            log.error(f"JSON 解析錯誤: {e}, 原始回應: {(raw or '')[:400]}")
             return {"score": 0}
         except Exception as e:
             log.error(f"記憶評估錯誤: {str(e)[:150]}")
