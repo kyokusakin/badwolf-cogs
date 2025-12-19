@@ -7,6 +7,7 @@ import aiofiles
 import time
 import discord
 import pathlib
+import httpx
 from google import genai
 from google.genai import types
 from dataclasses import dataclass
@@ -74,6 +75,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.queue = asyncio.Queue()
         self.queue_task = asyncio.create_task(self.process_queue())
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self._async_http = httpx.AsyncClient()
+        self._http_options = types.HttpOptions(httpx_async_client=self._async_http)
         self._api_key_lock = asyncio.Lock()
         self._api_key_states: Dict[str, _APIKeyState] = {}
         self._rr_index = 0
@@ -283,7 +286,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
             )
 
-        client = genai.Client(api_key=api_key)
+        client = genai.Client(api_key=api_key, http_options=self._http_options)
         content = (
             "Chat histories:\n"
             + (guild_history or "(none)")
@@ -482,7 +485,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
                 )
 
-            client = genai.Client(api_key=api_key)
+            client = genai.Client(api_key=api_key, http_options=self._http_options)
             system_instruction = '''
 ## 角色定位
 你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並輸出結構化的 JSON 資料。
@@ -557,3 +560,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             await self.queue.put(None)
             await self.queue_task
         self.executor.shutdown(wait=False)
+        try:
+            await self._async_http.aclose()
+        except Exception:
+            pass
