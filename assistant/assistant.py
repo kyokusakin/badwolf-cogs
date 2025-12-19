@@ -1390,12 +1390,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 3) 嚴禁敏感資訊：密碼、token、API key、金融資料、精準住址、電話、email、身分證/護照號等。
 4) 若沒有適合升級成伺服器記憶的內容，請回傳：{\"summary\":\"\",\"facts\":[]}。
 5) facts 用短句、去重、每條不要太長。
-
-請嚴格輸出 JSON（不要額外文字、不要用程式碼框包起來）：
-{
-  \"summary\": \"...\",
-  \"facts\": [\"...\", \"...\"]
-}
         """.strip()
 
         prompt = f"用戶：{user_message}\nAI：{bot_response}"
@@ -1892,10 +1886,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 ## 角色定位
 你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並輸出結構化的 JSON 資料。
 
-## 輸出格式
-請只輸出一個 JSON 物件（不要額外文字、不要 markdown 或程式碼框）。
-輸出範例：{"score": 3}
-
 ## 評分標準 (0-5)
 - **0分**: 無需記憶 - 寒暄、無意義內容（如「你好」「XD」「我也覺得」）
 - **1分**: 低價值 - 單次查詢型資訊（如「現在幾點」「Python 語法」）
@@ -1903,8 +1893,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 - **3分**: 中等價值 - 個人偏好或習慣（如「我喜歡咖啡」「我常熬夜」）
 - **4分**: 高價值 - 情感狀態或生活變化（如「我心情不好」「我換工作了」）
 - **5分**: 關鍵資訊 - 重要個人資料（如「我對花生過敏」「我下月結婚」）
-
-記住：只輸出 JSON 格式，不要包含任何解釋或額外文字。
                     """.strip()
 
             prompt = f"請評估以下對話的記憶價值：\n\n用戶：{user_message}\nAI：{bot_response}"
