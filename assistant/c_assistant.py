@@ -7,7 +7,7 @@ import pathlib
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
 class AssistantCommands():
-    """提供 OpenAI 聊天相關的指令。"""
+    """提供 Gemini 聊天相關的指令。"""
 
     def __init__(self, bot):
         self.bot = bot
@@ -29,23 +29,23 @@ class AssistantCommands():
 
     @commands.group()
     @commands.guild_only()
-    async def openai(self, ctx: commands.Context):
-        """OpenAI 設定指令群組。"""
+    async def genai(self, ctx: commands.Context):
+        """Gemini 設定指令群組。"""
         pass
 
-    @openai.command(name="setkey")
+    @genai.command(name="setkey")
     @commands.is_owner()
     async def setkey_owner(self, ctx: commands.Context, key: str):
-        """設定 OpenAI API 金鑰 (僅限擁有者)。"""
+        """設定 Gemini API 金鑰 (僅限擁有者)。"""
         cog = self.bot.get_cog("OpenAIChat")
         encoded_key = cog.encode_key(key)
         await cog.config.api_keys.set({encoded_key: True})
         await ctx.send("API 金鑰已安全存儲，並已重設金鑰池（1 把）。")
 
-    @openai.command(name="addkey")
+    @genai.command(name="addkey")
     @commands.is_owner()
     async def addkey_owner(self, ctx: commands.Context, key: str):
-        """新增 OpenAI API 金鑰到金鑰池 (僅限擁有者)。"""
+        """新增 Gemini API 金鑰到金鑰池 (僅限擁有者)。"""
         cog = self.bot.get_cog("OpenAIChat")
         encoded_key = cog.encode_key(key)
 
@@ -60,7 +60,7 @@ class AssistantCommands():
         await cog.config.api_keys.set(key_map)
         await ctx.send(f"已新增 API 金鑰，目前金鑰池共有 {len(key_map)} 把，將以 round-robin 輪詢使用。")
 
-    @openai.command(name="delkey")
+    @genai.command(name="delkey")
     @commands.is_owner()
     async def delkey_owner(self, ctx: commands.Context, index: int):
         """從金鑰池移除指定序號的 API 金鑰 (僅限擁有者)。"""
@@ -75,7 +75,7 @@ class AssistantCommands():
         keys = [k for k, enabled in key_map.items() if enabled]
 
         if not keys:
-            await ctx.send("目前金鑰池是空的（可用 `[p]openai addkey` 新增）。")
+            await ctx.send("目前金鑰池是空的（可用 `[p]genai addkey` 新增）。")
             return
 
         if index > len(keys):
@@ -93,7 +93,7 @@ class AssistantCommands():
             f"已移除第 {index} 把金鑰（{self._mask_api_key(decoded)}），目前剩 {remaining} 把。"
         )
 
-    @openai.command(name="listkeys")
+    @genai.command(name="listkeys")
     @commands.is_owner()
     async def listkeys_owner(self, ctx: commands.Context):
         """列出已設定的 API 金鑰（遮罩顯示，僅限擁有者）。"""
@@ -110,9 +110,9 @@ class AssistantCommands():
             decoded = cog.decode_key(encoded)
             lines.append(f"{i}. {self._mask_api_key(decoded)}")
 
-        await ctx.send(f"{source}（共 {len(keys)} 把）：\n" + "\n".join(lines))
+        await ctx.send(f"已設定的 API 金鑰（共 {len(keys)} 把）：\n" + "\n".join(lines))
 
-    @openai.command(name="clearkeys")
+    @genai.command(name="clearkeys")
     @commands.is_owner()
     async def clearkeys_owner(self, ctx: commands.Context):
         """清除所有 API 金鑰設定 (僅限擁有者)。"""
@@ -120,35 +120,28 @@ class AssistantCommands():
         await cog.config.api_keys.set({})
         await ctx.send("已清除所有 API 金鑰設定。")
 
-    @openai.command()
-    @commands.is_owner()
-    async def seturl(self, ctx: commands.Context, url_base: str):
-        """設定 OpenAI API 的基礎 URL。"""
-        await self.bot.get_cog("OpenAIChat").config.api_url_base.set(url_base.rstrip("/"))
-        await ctx.send(f"API 基礎 URL 已設置為: {url_base.rstrip('/')}")
-
-    @openai.command()
+    @genai.command()
     @commands.is_owner()
     async def setmodel(self, ctx: commands.Context, model: str):
-        """設定 OpenAI 使用的模型。"""
+        """設定 Gemini 使用的模型（例如 gemini-2.0-flash）。"""
         await self.bot.get_cog("OpenAIChat").config.model.set(model)
         await ctx.send(f"模型已設置為: {model}")
 
-    @openai.command()
+    @genai.command()
     @commands.has_permissions(administrator=True)
     async def setchannel(self, ctx: commands.Context, channel: discord.TextChannel):
-        """設定 OpenAI 回應的頻道。"""
+        """設定 Gemini 回應的頻道。"""
         async with self.bot.get_cog("OpenAIChat").config.guild(ctx.guild).channels() as channels:
             channels[str(channel.id)] = {}
-        await ctx.send(f"頻道 {channel.mention} 已設置為 OpenAI 回應頻道。")
+        await ctx.send(f"頻道 {channel.mention} 已設置為 Gemini 回應頻道。")
 
-    @openai.command()
+    @genai.command()
     @commands.has_permissions(administrator=True)
     async def delchannel(self, ctx: commands.Context):
-        """刪除所有已設定的 OpenAI 回應頻道。"""
+        """刪除所有已設定的 Gemini 回應頻道。"""
         async with self.bot.get_cog("OpenAIChat").config.guild(ctx.guild).channels() as channels:
             if not channels:
-                await ctx.send("目前沒有設定任何 OpenAI 回應頻道。")
+                await ctx.send("目前沒有設定任何 Gemini 回應頻道。")
                 return
             for channel_id in list(channels.keys()):
                 channel = ctx.guild.get_channel(int(channel_id))
@@ -158,14 +151,14 @@ class AssistantCommands():
                 else:
                     await ctx.send(f"頻道 ID {channel_id} 找不到，無法移除。")
 
-    @openai.command()
+    @genai.command()
     @commands.has_permissions(administrator=True)
     async def setprompt(self, ctx: commands.Context, *, prompt: str):
         """設定自訂提示詞 (Prompt)。"""
         await self.bot.get_cog("OpenAIChat").config.guild(ctx.guild).prompt.set(prompt)
         await ctx.send("自訂提示詞已設置。")
 
-    @openai.command()
+    @genai.command()
     @commands.is_owner()
     async def setdelay(self, ctx: commands.Context, delay: float):
         """設定請求之間的延遲時間。"""
@@ -175,18 +168,18 @@ class AssistantCommands():
         await self.bot.get_cog("OpenAIChat").config.default_delay.set(delay)
         await ctx.send(f"延遲時間已設置為 {delay} 秒。")
 
-    @openai.command(name="chat")
+    @genai.command(name="chat")
     @commands.guild_only()
     async def chat_command(self, ctx: commands.Context):
-        """發送訊息至 OpenAI 並獲得回應。"""
+        """發送訊息至 Gemini 並獲得回應。"""
         cog = self.bot.get_cog("OpenAIChat")
-        response = await cog.query_openai(ctx.message)
+        response = await cog.query_genai(ctx.message)
         if response:
             await ctx.send(response)
         else:
             await ctx.send("無法獲得回應。")
 
-    @openai.command(name="clearhistory")
+    @genai.command(name="clearhistory")
     @commands.guild_only()
     @commands.has_permissions(administrator=True)
     async def clearhistory(self, ctx: commands.Context):
