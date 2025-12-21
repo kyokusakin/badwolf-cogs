@@ -282,22 +282,74 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if api_exc is None:
             return True
 
+        status = OpenAIChat._extract_http_status_code(error)
+        if status == 429:
+            return True
+
+        # Some errors are request-scoped (retrying with a different key won't help),
+        # while others are key-scoped (e.g. invalid/revoked key, project not enabled,
+        # quota/rate limit) and should trigger failover to the next key.
         no_retry = tuple(
             cls
             for cls in (
                 getattr(api_exc, "BadRequest", None),
-                getattr(api_exc, "NotFound", None),
-                getattr(api_exc, "FailedPrecondition", None),
-                getattr(api_exc, "Unauthorized", None),
-                getattr(api_exc, "Forbidden", None),
             )
             if cls is not None
         )
         return not (no_retry and isinstance(error, no_retry))
 
     @staticmethod
+    def _extract_http_status_code(error: Exception) -> Optional[int]:
+        resp = getattr(error, "response", None)
+        status = getattr(resp, "status_code", None)
+        if isinstance(status, int):
+            return status
+
+        for attr in ("status_code", "code"):
+            value = getattr(error, attr, None)
+            if isinstance(value, int):
+                return value
+            if callable(value):
+                try:
+                    value = value()
+                except Exception:
+                    value = None
+            if hasattr(value, "value") and isinstance(getattr(value, "value", None), int):
+                return int(value.value)
+            if isinstance(value, int):
+                return value
+
+        return None
+
+    @staticmethod
+    def _extract_retry_after_seconds(error: Exception) -> Optional[float]:
+        resp = getattr(error, "response", None)
+        headers = getattr(resp, "headers", None)
+        if headers:
+            retry_after = headers.get("Retry-After") or headers.get("retry-after")
+            if retry_after is not None:
+                s = str(retry_after).strip()
+                if s.isdigit():
+                    try:
+                        return float(s)
+                    except Exception:
+                        pass
+
+        for attr in ("retry_after", "retry_after_seconds", "retry_delay"):
+            value = getattr(error, attr, None)
+            if isinstance(value, (int, float)) and value > 0:
+                return float(value)
+
+        return None
+
+    @staticmethod
     def _cooldown_seconds_for_error(error: Exception) -> float:
-        rate_limit = _exc_classes("TooManyRequests")
+        status = OpenAIChat._extract_http_status_code(error)
+        if status == 429:
+            retry_after = OpenAIChat._extract_retry_after_seconds(error)
+            return float(retry_after) if retry_after is not None else 20.0
+
+        rate_limit = _exc_classes("TooManyRequests", "ResourceExhausted")
         if rate_limit and isinstance(error, rate_limit):
             return 20.0
 
@@ -354,11 +406,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             state.cooldown_until = 0.0
 
     async def _mark_key_failure(self, encoded_key: str, error: Exception):
-        cooldown = self._cooldown_seconds_for_error(error)
         now = time.monotonic()
         async with self._api_key_lock:
             state = self._api_key_states.setdefault(encoded_key, _APIKeyState())
             state.failures += 1
+            cooldown = self._cooldown_seconds_for_error(error)
             state.cooldown_until = max(state.cooldown_until, now + cooldown)
 
     def chat_histories_path(self) -> pathlib.Path:
