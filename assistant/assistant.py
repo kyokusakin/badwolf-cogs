@@ -1988,7 +1988,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return {"score": 0}
         except Exception as e:
             log.error(f"記憶評估錯誤: {str(e)[:150]}")
-            raise
+            return {"score": 0}
 
     # 保留舊版本方法以支援向後相容性
     async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
