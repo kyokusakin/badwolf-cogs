@@ -432,8 +432,9 @@ class AssistantCommands():
 
     @openai.command(name="chat")
     @commands.guild_only()
-    async def chat_command(self, ctx: commands.Context):
+    async def chat_command(self, ctx: commands.Context, *, message: str):
         """發送訊息至 Gemini 並獲得回應。"""
+        ctx.message.content = message
         cog = self.bot.get_cog("OpenAIChat")
         response = await cog.query_genai(ctx.message)
         if response:

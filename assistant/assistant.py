@@ -1035,9 +1035,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         for _ in range(len(encoded_keys)):
             encoded_key, api_key = await self._pick_api_key(encoded_keys)
             try:
-                result = await loop.run_in_executor(
-                    self.executor,
-                    self._blocking_genai_request,
+                result = await self._genai_request(
                     api_key,
                     model,
                     sysprompt,
@@ -1058,11 +1056,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return f"⚠️ API Error: {last_error}"
         return None
 
-    def _blocking_genai_request(
+    async def _genai_request(
         self, api_key: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """Synchronous call to Google Gemini API using google-genai (Client.models.generate_content)."""
+        """Async call to Google Gemini API using google-genai (Client.aio.models.generate_content)."""
         if genai is None or types is None:
             raise RuntimeError(
                 "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
@@ -1075,7 +1073,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             + "\nChat histories end.\n\n"
             + user_input
         )
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=model,
             contents=content,
             config=types.GenerateContentConfig(
@@ -1277,9 +1275,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         for _ in range(len(encoded_keys)):
             encoded_key, api_key = await self._pick_api_key(encoded_keys)
             try:
-                result = await loop.run_in_executor(
-                    self.executor,
-                    self._blocking_extract_long_term_memory,
+                result = await self._extract_long_term_memory(
                     api_key,
                     model,
                     user_message,
@@ -1297,7 +1293,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Long-term memory extraction failed after trying {len(encoded_keys)} key(s): {last_error}")
         return None
 
-    def _blocking_extract_long_term_memory(
+    async def _extract_long_term_memory(
         self, api_key: str, model: str, user_message: str, bot_response: str
     ) -> Dict[str, Any]:
         if genai is None or types is None:
@@ -1323,7 +1319,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         """.strip()
 
         prompt = f"用戶：{user_message}\nAI：{bot_response}"
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -1403,9 +1399,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         for _ in range(len(encoded_keys)):
             encoded_key, api_key = await self._pick_api_key(encoded_keys)
             try:
-                result = await loop.run_in_executor(
-                    self.executor,
-                    self._blocking_extract_guild_memory,
+                result = await self._extract_guild_memory(
                     api_key,
                     model,
                     user_message,
@@ -1423,7 +1417,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Guild memory extraction failed after trying {len(encoded_keys)} key(s): {last_error}")
         return None
 
-    def _blocking_extract_guild_memory(
+    async def _extract_guild_memory(
         self, api_key: str, model: str, user_message: str, bot_response: str
     ) -> Dict[str, Any]:
         if genai is None or types is None:
@@ -1444,7 +1438,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         """.strip()
 
         prompt = f"用戶：{user_message}\nAI：{bot_response}"
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -1496,39 +1490,18 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         return {"summary": summary, "facts": dedup}
 
-    def _blocking_embed_text(self, api_key: str, model: str, text: str) -> Optional[List[float]]:
-        if genai is None or types is None:
-            raise RuntimeError(
-                "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
-            )
-        if not text.strip():
-            return None
-
-        client = genai.Client(api_key=api_key, http_options=self._http_options)
-        response = client.models.embed_content(model=model, contents=text)
-        embeddings = getattr(response, "embeddings", None) or []
-        if not embeddings:
-            return None
-        values = getattr(embeddings[0], "values", None)
-        if not values:
-            return None
-        return list(values)
-
     async def embed_text(self, text: str, embed_model: str) -> Optional[List[float]]:
         """Embed a single text using the configured API key pool (best-effort)."""
         encoded_keys = await self._get_encoded_api_keys()
         if not encoded_keys:
             return None
 
-        loop = asyncio.get_running_loop()
         last_error: Optional[Exception] = None
 
         for _ in range(len(encoded_keys)):
             encoded_key, api_key = await self._pick_api_key(encoded_keys)
             try:
-                result = await loop.run_in_executor(
-                    self.executor,
-                    self._blocking_embed_text,
+                result = await self._embed_text(
                     api_key,
                     embed_model,
                     text,
@@ -1544,6 +1517,24 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if last_error:
             log.error(f"Embedding failed after trying {len(encoded_keys)} key(s): {last_error}")
         return None
+
+    async def _embed_text(self, api_key: str, model: str, text: str) -> Optional[List[float]]:
+        if genai is None or types is None:
+            raise RuntimeError(
+                "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
+            )
+        if not text.strip():
+            return None
+
+        client = genai.Client(api_key=api_key, http_options=self._http_options)
+        response = await client.aio.models.embed_content(model=model, contents=text)
+        embeddings = getattr(response, "embeddings", None) or []
+        if not embeddings:
+            return None
+        values = getattr(embeddings[0], "values", None)
+        if not values:
+            return None
+        return list(values)
 
     async def save_chat_history(
         self,
@@ -1895,15 +1886,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         
         model = await self.config.model()
         
-        loop = asyncio.get_running_loop()
         last_error: Optional[Exception] = None
 
         for _ in range(len(encoded_keys)):
             encoded_key, api_key = await self._pick_api_key(encoded_keys)
             try:
-                result = await loop.run_in_executor(
-                    self.executor,
-                    self._blocking_evaluate_memory,
+                result = await self._evaluate_memory(
                     api_key,
                     model,
                     user_message,
@@ -1922,9 +1910,9 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             log.error(f"Memory evaluation failed after trying {len(encoded_keys)} key(s): {last_error}")
         return {"score": 0}
 
-    def _blocking_evaluate_memory(self, api_key: str, model: str, 
+    async def _evaluate_memory(self, api_key: str, model: str, 
                                      user_message: str, bot_response: str) -> Dict:
-        """AI記憶評估 - JSON 格式輸出版本"""
+        """AI記憶評估 - JSON 格式輸出版本 (Async)"""
         try:
             if genai is None or types is None:
                 raise RuntimeError(
@@ -1946,7 +1934,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     """.strip()
 
             prompt = f"請評估以下對話的記憶價值：\n\n用戶：{user_message}\nAI：{bot_response}"
-            response = client.models.generate_content(
+            response = await client.aio.models.generate_content(
                 model=model,
                 contents=prompt,
                 config=types.GenerateContentConfig(
@@ -1954,8 +1942,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                     temperature=0,
                     response_mime_type="application/json",
                     response_json_schema=MEMORY_SCHEMA,
-            ),
-        )
+                ),
+            )
 
             parsed_obj = getattr(response, "parsed", None)
             parsed = _coerce_parsed_dict(parsed_obj)
