@@ -1106,6 +1106,10 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 if response:
                     await self.process_response(message, response)
                 await asyncio.sleep(delay)
+            except asyncio.CancelledError:
+                # Gracefully handle cancellation
+                log.info("Queue processing task cancelled")
+                break
             except Exception as e:
                 log.error(f"Error processing queue: {e}")
 
@@ -1987,8 +1991,20 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     async def cog_unload(self):
         """Stop background tasks when Cog is unloaded"""
         if self.queue_task and not self.queue_task.done():
-            await self.queue.put(None)
-            await self.queue_task
+            # 取消隊列任務而不是等待它完成
+            self.queue_task.cancel()
+            try:
+                await self.queue_task
+            except asyncio.CancelledError:
+                pass
+        
+        # 清空隊列中的待處理消息
+        while not self.queue.empty():
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+        
         self.executor.shutdown(wait=False)
         try:
             await self._async_http.aclose()
