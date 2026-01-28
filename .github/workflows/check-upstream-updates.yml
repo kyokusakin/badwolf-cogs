@@ -137,65 +137,92 @@ jobs:
           
           if [ "$HAS_CONFLICTS" = "true" ]; then
             TITLE="⚠️ Update ${{ matrix.cog.name }} from upstream (Conflicts)"
-            CONFLICT_SECTION="## ⚠️ 合併衝突
-
-此更新包含合併衝突，需要手動解決。
-
-**衝突檔案**: ${CONFLICT_FILES}
-
-### 🔧 解決步驟
-
-1. Checkout 這個分支：
-\`\`\`bash
-git fetch origin
-git checkout ${{ env.branch_name }}
-\`\`\`
-
-2. 解決衝突檔案中的衝突標記：
-   - 開啟有衝突的檔案
-   - 尋找 \`<<<<<<<\`, \`=======\`, \`>>>>>>>\` 標記
-   - 決定保留哪些變更
-   - 移除衝突標記
-
-3. 完成解決：
-\`\`\`bash
-git add .
-git commit -m \"Resolve merge conflicts\"
-git push
-\`\`\`
-
----"
             LABELS="upstream-update,automated,merge-conflict"
+            
+            cat > pr_body.md <<'EOF'
+          ## 自動更新 ${{ matrix.cog.name }}
+          
+          此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+          
+          **上游倉庫**: ${{ matrix.cog.upstream }}
+          **分支**: ${{ steps.check.outputs.upstream_branch }}
+          **路徑**: ${{ matrix.cog.path }}
+          
+          ## ⚠️ 合併衝突
+          
+          此更新包含合併衝突，需要手動解決。
+          
+          **衝突檔案**: CONFLICT_FILES_PLACEHOLDER
+          
+          ### 🔧 解決步驟
+          
+          1. Checkout 這個分支：
+          ```bash
+          git fetch origin
+          git checkout BRANCH_NAME_PLACEHOLDER
+          ```
+          
+          2. 解決衝突檔案中的衝突標記：
+             - 開啟有衝突的檔案
+             - 尋找 \`<<<<<<<\`, \`=======\`, \`>>>>>>>\` 標記
+             - 決定保留哪些變更
+             - 移除衝突標記
+          
+          3. 完成解決：
+          ```bash
+          git add .
+          git commit -m "Resolve merge conflicts"
+          git push
+          ```
+          
+          ---
+          
+          ### ✅ 檢查清單
+          - [ ] 解決合併衝突
+          - [ ] 查看變更內容
+          - [ ] 測試功能是否正常
+          - [ ] 檢查是否需要更新依賴
+          - [ ] 確認授權條款未變更
+          
+          ---
+          🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成
+          EOF
+            
+            # 去除每行開頭的縮排 (10個空格)，以確保 markdown 格式正確
+            sed -i 's/^          //' pr_body.md
+            
+            sed -i "s|CONFLICT_FILES_PLACEHOLDER|${CONFLICT_FILES}|g" pr_body.md
+            sed -i "s|BRANCH_NAME_PLACEHOLDER|${{ env.branch_name }}|g" pr_body.md
+            
           else
             TITLE="⬆️ Update ${{ matrix.cog.name }} from upstream"
-            CONFLICT_SECTION=""
             LABELS="upstream-update,automated"
+            
+            cat > pr_body.md <<'EOF'
+          ## 自動更新 ${{ matrix.cog.name }}
+          
+          此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+          
+          **上游倉庫**: ${{ matrix.cog.upstream }}
+          **分支**: ${{ steps.check.outputs.upstream_branch }}
+          **路徑**: ${{ matrix.cog.path }}
+          
+          ### ✅ 檢查清單
+          - [ ] 查看變更內容
+          - [ ] 測試功能是否正常
+          - [ ] 檢查是否需要更新依賴
+          - [ ] 確認授權條款未變更
+          
+          ---
+          🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成
+          EOF
+            
+            sed -i 's/^          //' pr_body.md
           fi
           
-          PR_BODY="## 自動更新 ${{ matrix.cog.name }}
-
-此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
-
-**上游倉庫**: ${{ matrix.cog.upstream }}
-**分支**: ${{ steps.check.outputs.upstream_branch }}
-**路徑**: ${{ matrix.cog.path }}
-
-${CONFLICT_SECTION}
-
-### ✅ 檢查清單
-$([ "$HAS_CONFLICTS" = "true" ] && echo "- [ ] 解決合併衝突")
-- [ ] 查看變更內容
-- [ ] 測試功能是否正常
-- [ ] 檢查是否需要更新依賴
-- [ ] 確認授權條款未變更
-
----
-🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成"
-          
-          # 使用 gh CLI 創建 PR
           gh pr create \
             --title "${TITLE}" \
-            --body "${PR_BODY}" \
+            --body-file pr_body.md \
             --base main \
             --head ${{ env.branch_name }} \
             --label "${LABELS}"
