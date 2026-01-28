@@ -1,9 +1,7 @@
 {
-<<<<<<< HEAD
     "name": "AutoRoom",
     "author": [
-        "PhasecoreX (PhasecoreX#0635)",
-        "Badwolf_TW"
+        "PhasecoreX"
     ],
     "short": "Automatic voice channel management.",
     "description": "This cog facilitates automatic voice channel creation. When a member joins an AutoRoom Source (voice channel), this cog will move them to a brand new AutoRoom that they have control over. Once everyone leaves the AutoRoom, it is automatically deleted.",
@@ -28,13 +26,4 @@
         0
     ],
     "end_user_data_statement": "This cog does not persistently store data or metadata about users."
-=======
-    "name": "PCXCogs",
-    "author": [
-        "PhasecoreX"
-    ],
-    "short": "PhasecoreX's Cogs for Red-DiscordBot.",
-    "description": "My cogs focus on automation, where the bot will automatically respond or perform actions when needed, even if commands are not used. There's also other stuff thrown in there for fun.",
-    "install_msg": "Thank you for installing my repo!\nFor more information on my cogs, or to report any bugs/suggestions, go to my GitHub here: <https://github.com/PhasecoreX/PCXCogs>.\nYou can also find me in the Red Cog Support Discord server, or in my own PCXSupport Discord server here: https://discord.gg/QzdPp2b"
->>>>>>> upstream-autoroom/master
 }

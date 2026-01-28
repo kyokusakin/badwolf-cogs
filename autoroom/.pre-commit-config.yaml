@@ -1,0 +1,65 @@
+default_language_version:
+  python: python3.11
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.14.7
+    hooks:
+      - id: ruff
+        args:
+          - "--fix"
+          - "--exit-non-zero-on-fix"
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: '25.11.0'
+    hooks:
+      - id: black
+  - repo: https://github.com/Pierre-Sassoulas/black-disable-checker
+    rev: 'v1.1.3'
+    hooks:
+      - id: black-disable-checker
+  - repo: https://github.com/abravalheri/validate-pyproject
+    rev: v0.24.1
+    hooks:
+      - id: validate-pyproject
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      # JSON auto-formatter
+      # needs to come before mixed-line-ending, see:
+      # https://github.com/pre-commit/pre-commit-hooks/issues/622
+      - id: pretty-format-json
+        args:
+          - "--autofix"
+          - "--indent=4"
+          - "--no-sort-keys"
+
+      # all files should end with an empty line (for one, it minimizes the diffs)
+      - id: end-of-file-fixer
+        # po files are auto-generated so let's not touch them
+        exclude_types: [pofile]
+      # `.gitattributes` should technically already handle this
+      # but autocrlf can result in local files keeping the CRLF
+      # which is problematic for some tools
+      - id: mixed-line-ending
+        args:
+          - "--fix=lf"
+
+      # Trailing whitespace is evil
+      - id: trailing-whitespace
+
+      # Require literal syntax when initializing builtin types
+      - id: check-builtin-literals
+
+      # Ensure that links to code on GitHub use the permalinks
+      - id: check-vcs-permalinks
+
+      # Syntax validation
+      - id: check-ast
+      - id: check-json
+      - id: check-toml
+      # can be switched to yamllint when this issue gets resolved:
+      # https://github.com/adrienverge/yamllint/issues/238
+      - id: check-yaml
+
+      # Checks for git-related issues
+      - id: check-case-conflict
+      - id: check-merge-conflict
