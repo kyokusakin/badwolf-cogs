@@ -125,7 +125,7 @@ jobs:
       - name: Push Changes
         if: steps.check.outputs.has_updates == 'true'
         run: |
-          git push origin ${{ env.branch_name }}
+          git push -f origin ${{ env.branch_name }}
 
       - name: Ensure Labels Exist
         if: steps.check.outputs.has_updates == 'true'
