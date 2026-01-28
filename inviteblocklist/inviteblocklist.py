@@ -1,10 +1,12 @@
 import re
 from typing import Pattern, Union
 from datetime import timedelta
+import asyncio
 
 import discord
 from discord.ext.commands.converter import IDConverter
 from discord.ext.commands.errors import BadArgument
+from discord.utils import resolve_invite
 from red_commons.logging import getLogger
 from redbot.core import Config, VersionInfo, commands, version_info
 from redbot.core.i18n import Translator
@@ -15,12 +17,20 @@ log = getLogger("red.trusty-cogs.inviteblocklist")
 _ = Translator("ExtendedModLog", __file__)
 
 INVITE_RE: Pattern = re.compile(
-    r"(?:https?\:\/\/)?discord(?:\.gg|(?:app)?\.com\/invite)\/(.+)", re.I
+    r"(?:https?\:\/\/)?discord(?:\.gg|(?:app)?\.com\/invite)\/[^/\W]+", re.I
 )
+# https://github.com/Rapptz/discord.py/blob/9806aeb83179d0d1e90d903e30db7e69e0d492e5/discord/utils.py#L887
+# Slightly modified to ignore whitespace characters in the event multiple invite links
+# are in the same message
+
 
 class ChannelUserRole(IDConverter):
     """
     This will check to see if the provided argument is a channel, user, or role
+
+    Guidance code on how to do this from:
+    https://github.com/Rapptz/discord.py/blob/rewrite/discord/ext/commands/converter.py#L85
+    https://github.com/Cog-Creators/Red-DiscordBot/blob/V3/develop/redbot/cogs/mod/mod.py#L24
     """
 
     async def convert(
@@ -32,38 +42,38 @@ class ChannelUserRole(IDConverter):
         channel_match = re.match(r"<#([0-9]+)>$", argument)
         member_match = re.match(r"<@!?([0-9]+)>$", argument)
         role_match = re.match(r"<@&([0-9]+)>$", argument)
-
-        converters = {
-            "channel": (guild.get_channel, guild.text_channels),
-            "member": (guild.get_member, guild.get_member_named),
-            "role": (guild.get_role, guild._roles.values())
-        }
-
-        for converter, (by_id, by_name) in converters.items():
+        for converter in ["channel", "role", "member"]:
             if converter == "channel":
                 match = id_match or channel_match
-            elif converter == "member":
+                if match:
+                    channel_id = match.group(1)
+                    result = guild.get_channel(int(channel_id))
+                else:
+                    result = discord.utils.get(guild.text_channels, name=argument)
+            if converter == "member":
                 match = id_match or member_match
-            elif converter == "role":
+                if match:
+                    member_id = match.group(1)
+                    result = guild.get_member(int(member_id))
+                else:
+                    result = guild.get_member_named(argument)
+            if converter == "role":
                 match = id_match or role_match
-
-            if match:
-                entity_id = int(match.group(1))
-                result = by_id(entity_id)
-            else:
-                result = discord.utils.get(by_name, name=argument)
-
+                if match:
+                    role_id = match.group(1)
+                    result = guild.get_role(int(role_id))
+                else:
+                    result = discord.utils.get(guild._roles.values(), name=argument)
             if result:
                 break
-
         if not result:
-            msg = f"{argument} is not a valid channel, user or role."
+            msg = ("{arg} is not a valid channel, user or role.").format(arg=argument)
             raise BadArgument(msg)
-
         return result
 
+
 class InviteBlocklist(commands.Cog):
-    __author__ = ["TrustyJAID", "Badwolf_TW"]
+    __author__ = ["TrustyJAID"]
     __version__ = "1.1.6"
 
     def __init__(self, bot):
@@ -226,6 +236,7 @@ class InviteBlocklist(commands.Cog):
         pass
 
     @invite_block.group(name="blocklist", aliases=["blacklist", "bl", "block"])
+    @commands.guild_only()
     async def invite_blocklist(self, ctx: commands.Context):
         """
         Commands for setting the blocklist
@@ -233,6 +244,7 @@ class InviteBlocklist(commands.Cog):
         pass
 
     @invite_block.group(name="allowlist", aliases=["whitelist", "wl", "al", "allow"])
+    @commands.guild_only()
     async def invite_allowlist(self, ctx: commands.Context):
         """
         Commands for setting the blocklist
@@ -240,6 +252,7 @@ class InviteBlocklist(commands.Cog):
         pass
 
     @invite_block.group(name="immunity", aliases=["immune"])
+    @commands.guild_only()
     async def invite_immunity(self, ctx: commands.Context):
         """
         Commands for fine tuning allowed channels, users, or roles
@@ -462,9 +475,11 @@ class InviteBlocklist(commands.Cog):
         self, ctx: commands.Context, *channel_user_role: ChannelUserRole
     ):
         """
-        Add a guild ID to the allowlist, providing an invite link will also work
+        Add a channel, user, or role to the immunity list.
+        Any invite links posted in these channels, by users with this role, or users added
+        to this list will not have messages with invite links deleted.
 
-        `[channel_user_role...]` is the channel, user or role to whitelist
+        `[channel_user_role...]` is the channel, user or role to make immune.
         (You can supply more than one of any at a time)
         """
         if len(channel_user_role) < 1:
@@ -484,9 +499,11 @@ class InviteBlocklist(commands.Cog):
         self, ctx: commands.Context, *channel_user_role: ChannelUserRole
     ):
         """
-        Add a guild ID to the allowlist, providing an invite link will also work
+        remove a channel, user, or role from the immunity list.
+        Any invite links posted in these channels, by users with this role, or users added
+        to immunity will not have messages with invite links deleted.
 
-        `[channel_user_role...]` is the channel, user or role to remove from the whitelist
+        `[channel_user_role...]` is the channel, user or role to remove from the immunity list
         (You can supply more than one of any at a time)
         """
         if len(channel_user_role) < 1:
@@ -504,7 +521,7 @@ class InviteBlocklist(commands.Cog):
     @invite_immunity.command(name="info")
     async def allowlist_context_info(self, ctx: commands.Context):
         """
-        Show what channels, users, and roles are in the invite link allowlist
+        Show what channels, users, and roles are immune to inviteblocklist
         """
         msg = _("Invite immunity list for {guild}:\n").format(guild=ctx.guild.name)
         whitelist = await self.config.guild(ctx.guild).immunity_list()
