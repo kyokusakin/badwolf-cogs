@@ -7,37 +7,41 @@ on:
   workflow_dispatch: # 允許手動觸發
 
 jobs:
+  # 讀取配置檔並生成動態 matrix
+  load-config:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Read upstream-config.yml and generate matrix
+        id: set-matrix
+        run: |
+          # 使用 yq 解析 YAML 並轉換為 JSON matrix
+          # 只包含未被註解的 cogs
+          MATRIX=$(yq -o=json '.cogs | to_entries | map(select(.value != null)) | map({
+            "name": .key,
+            "upstream": .value.upstream,
+            "path": .value.path,
+            "branch": .value.branch
+          })' .github/upstream-config.yml | jq -c '{cog: .}')
+          
+          echo "Generated matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
   check-updates:
     runs-on: ubuntu-latest
+    needs: load-config
+    if: ${{ needs.load-config.outputs.matrix != '' && needs.load-config.outputs.matrix != '{"cog":[]}' }}
     permissions:
       contents: write
       issues: write
       pull-requests: write
     
     strategy:
-      matrix:
-        cog:
-          - name: anotherpingcog
-            upstream: https://github.com/Vexed01/Vex-Cogs
-            path: anotherpingcog
-          - name: autoroom
-            upstream: https://github.com/PhasecoreX/PCXCogs
-            path: autoroom
-          - name: counting
-            upstream: https://github.com/ltzmax/maxcogs
-            path: counting
-          - name: extendedmodlog
-            upstream: https://github.com/TrustyJAID/Trusty-cogs
-            path: extendedmodlog
-          - name: inviteblocklist
-            upstream: https://github.com/TrustyJAID/Trusty-cogs
-            path: inviteblocklist
-          - name: uptimeresponder
-            upstream: https://github.com/Vexed01/Vex-Cogs
-            path: uptimeresponder
-          - name: warnsystem
-            upstream: https://github.com/laggron42/Laggrons-Dumb-Cogs
-            path: warnsystem
+      matrix: ${{ fromJson(needs.load-config.outputs.matrix) }}
       fail-fast: false
 
     steps:
@@ -59,10 +63,13 @@ jobs:
       - name: Check for Updates
         id: check
         run: |
-          # 獲取上游的 main/master 分支
-          UPSTREAM_BRANCH=$(git ls-remote --symref upstream-${{ matrix.cog.name }} HEAD | head -n 1 | awk '{print $2}' | sed 's/refs\/heads\///')
+          # 使用配置檔中指定的分支，如果沒有則自動偵測
+          UPSTREAM_BRANCH="${{ matrix.cog.branch }}"
           if [ -z "$UPSTREAM_BRANCH" ]; then
-            UPSTREAM_BRANCH="main"
+            UPSTREAM_BRANCH=$(git ls-remote --symref upstream-${{ matrix.cog.name }} HEAD | head -n 1 | awk '{print $2}' | sed 's/refs\/heads\///')
+            if [ -z "$UPSTREAM_BRANCH" ]; then
+              UPSTREAM_BRANCH="main"
+            fi
           fi
           
           echo "upstream_branch=$UPSTREAM_BRANCH" >> $GITHUB_OUTPUT
@@ -89,43 +96,71 @@ jobs:
 
       - name: Create Update Branch
         if: steps.check.outputs.has_updates == 'true'
+        id: branch
         run: |
           BRANCH_NAME="update/${{ matrix.cog.name }}-$(date +%Y%m%d)"
           git checkout -b $BRANCH_NAME
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
 
       - name: Merge Upstream Changes
         if: steps.check.outputs.has_updates == 'true'
         id: merge
         continue-on-error: true
         run: |
-          # 嘗試合併上游的特定路徑
+          # 嘗試合併上游
           UPSTREAM_BRANCH=${{ steps.check.outputs.upstream_branch }}
           
-          # 使用 subtree merge 策略
-          git merge -X subtree=${{ matrix.cog.path }} \
-            --no-commit \
-            --allow-unrelated-histories \
+          echo "Merging changes from upstream..."
+          
+          # 這裡我們使用一個技巧：
+          # 1. 執行 merge (不 commit)
+          # 2. 將非目標目錄的檔案還原到 HEAD
+          # 3. 清理非目標目錄的未追蹤檔案
+          
+          git merge --no-commit --no-ff --allow-unrelated-histories \
             upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH || echo "merge_conflict=true" >> $GITHUB_OUTPUT
           
-          # 檢查是否有衝突
-          if git diff --name-only --diff-filter=U | grep -q .; then
+          echo "Isolating changes to ${{ matrix.cog.path }}..."
+          
+          # 1. 重置暫存區 (Index)，但保留工作目錄的變更
+          git reset HEAD
+          
+          # 2. 還原所有非目標路徑的檔案到 HEAD 狀態
+          # 使用 pathspec exclude :!path
+          git checkout HEAD -- . ":!${{ matrix.cog.path }}"
+          
+          # 3. 清理非目標路徑的新增檔案
+          # -f: force, -d: directories, -e: exclude pattern
+          git clean -fd -e "${{ matrix.cog.path }}/"
+          
+          # 4. 重新加入目標路徑的變更
+          git add ${{ matrix.cog.path }}/
+          
+          # 檢查是否有衝突標記 (在目標目錄中)
+          if grep -r "^<<<<<<< " ${{ matrix.cog.path }}/; then
             echo "has_conflicts=true" >> $GITHUB_OUTPUT
-            # 保留衝突狀態並提交
-            CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ', ' | sed 's/,$//')
+            
+            # 列出有衝突的檔案
+            CONFLICT_FILES=$(grep -l -r "^<<<<<<< " ${{ matrix.cog.path }}/ | tr '\n' ', ' | sed 's/,$//')
             echo "conflict_files=$CONFLICT_FILES" >> $GITHUB_OUTPUT
-            git add -A
+            
+            # 提交保留衝突內容
             git commit -m "⚠️ Update ${{ matrix.cog.name }} from upstream (with conflicts)" -m "Conflicts in: $CONFLICT_FILES"
           else
-            echo "has_conflicts=false" >> $GITHUB_OUTPUT
-            git add ${{ matrix.cog.path }}/
-            git commit -m "✅ Update ${{ matrix.cog.name }} from upstream" || true
+            # 檢查是否有變更需要提交
+            if ! git diff --cached --quiet; then
+              echo "has_conflicts=false" >> $GITHUB_OUTPUT
+              git commit -m "✅ Update ${{ matrix.cog.name }} from upstream"
+            else
+               echo "No effective changes after filtering"
+               echo "has_updates=false" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: Push Changes
         if: steps.check.outputs.has_updates == 'true'
         run: |
-          git push -f origin ${{ env.branch_name }}
+          git push -f origin ${{ steps.branch.outputs.branch_name }}
 
       - name: Ensure Labels Exist
         if: steps.check.outputs.has_updates == 'true'
@@ -201,7 +236,7 @@ jobs:
             sed -i 's/^          //' pr_body.md
             
             sed -i "s|CONFLICT_FILES_PLACEHOLDER|${CONFLICT_FILES}|g" pr_body.md
-            sed -i "s|BRANCH_NAME_PLACEHOLDER|${{ env.branch_name }}|g" pr_body.md
+            sed -i "s|BRANCH_NAME_PLACEHOLDER|${{ steps.branch.outputs.branch_name }}|g" pr_body.md
             
           else
             TITLE="⬆️ Update ${{ matrix.cog.name }} from upstream"
@@ -229,12 +264,16 @@ jobs:
             sed -i 's/^          //' pr_body.md
           fi
           
-          gh pr create \
+          # 使用 gh CLI 創建 PR
+          if ! gh pr create \
             --title "${TITLE}" \
             --body-file pr_body.md \
             --base main \
-            --head ${{ env.branch_name }} \
-            --label "${LABELS}"
+            --head ${{ steps.branch.outputs.branch_name }} \
+            --label "${LABELS}"; then
+            echo "::error::無法創建 PR。請確認 Repository Settings > Actions > General > Workflow permissions 中已勾選 'Allow GitHub Actions to create and approve pull requests'。"
+            exit 1
+          fi
           
           if [ "$HAS_CONFLICTS" = "true" ]; then
             echo "::notice::Created PR with merge conflicts that need manual resolution"
