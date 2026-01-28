@@ -180,6 +180,33 @@ class EventMixin:
             return True
         return False
 
+<<<<<<< HEAD
+=======
+    async def is_ignored_user(
+        self, guild: discord.Guild, user: Union[discord.User, discord.Member, int]
+    ) -> bool:
+        ignored_users = self.settings[guild.id]["ignored_users"]
+        if isinstance(user, int):
+            logger.debug("Ignored user %s in guild %s", user, guild)
+            return user in ignored_users
+        if user.id in ignored_users:
+            logger.debug("Ignored user %s in guild %s", user, guild)
+            return True
+        return False
+
+    async def is_ignored_mod(
+        self, guild: discord.Guild, user: Union[discord.User, discord.Member, int]
+    ) -> bool:
+        ignored_mods = self.settings[guild.id]["ignored_mods"]
+        if isinstance(user, int):
+            logger.debug("Ignored mod %s in guild %s", user, guild)
+            return user in ignored_mods
+        if user.id in ignored_mods:
+            logger.debug("Ignored mod %s in guild %s", user, guild)
+            return True
+        return False
+
+>>>>>>> upstream-extendedmodlog/master
     async def modlog_channel(self, guild: discord.Guild, event: str) -> discord.TextChannel:
         channel = None
         settings = self.settings[guild.id].get(event)
@@ -207,6 +234,13 @@ class EventMixin:
             return
         if await self.is_ignored_channel(guild, ctx.channel):
             return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, ctx.author):
+            return
+        if await self.is_ignored_mod(guild, ctx.author):
+            return
+>>>>>>> upstream-extendedmodlog/master
         if guild.me.is_timed_out():
             return
         try:
@@ -359,6 +393,10 @@ class EventMixin:
         self, payload: discord.RawMessageDeleteEvent, *, check_audit_log: bool = True
     ) -> None:
         # custom name of method used, because this is only supported in Red 3.1+
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream-extendedmodlog/master
         guild_id = payload.guild_id
         if guild_id is None:
             return
@@ -433,8 +471,14 @@ class EventMixin:
         if message.author.bot and not settings["bots"]:
             # return to ignore bot accounts if enabled
             return
+<<<<<<< HEAD
         if message.content == "" and message.attachments == []:
             return
+=======
+        if await self.is_ignored_user(guild, message.author):
+            return
+
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["message_delete"]["embed"]
@@ -449,9 +493,20 @@ class EventMixin:
         reason = None
         if channel.permissions_for(guild.me).view_audit_log and check_audit_log:
             action = discord.AuditLogAction.message_delete
+<<<<<<< HEAD
             entry = await self.get_audit_log_entry(guild, message.author, action)
             perp = getattr(entry, "user", None)
             reason = getattr(entry, "reason", None)
+=======
+            entry = await self.get_audit_log_entry(
+                guild, message.author, action, channel_id=message.channel.id
+            )
+            perp = getattr(entry, "user", None)
+            reason = getattr(entry, "reason", None)
+            if perp is not None:
+                if await self.is_ignored_mod(guild, perp):
+                    return
+>>>>>>> upstream-extendedmodlog/master
 
         replying = ""
         if message.reference and message.reference.resolved:
@@ -503,8 +558,43 @@ class EventMixin:
             if reason:
                 embed.add_field(name=_("Reason"), value=reason)
             if message.attachments:
+<<<<<<< HEAD
                 files = "\n".join(f"- [{inline(a.filename)}]({a.url})" for a in message.attachments)
                 embed.add_field(name=_("Attachments"), value=files[:1024])
+=======
+                files = "\n".join(f"- {inline(a.filename)}" for a in message.attachments)
+                embed.add_field(name=_("Attachments"), value=files[:1024])
+            if message.stickers:
+                files = ""
+                for sticker in message.stickers:
+                    if sticker.format is discord.StickerFormatType.lottie:
+                        files += f"- {inline(sticker.name)}\n"
+                    else:
+                        files += f"- [{inline(sticker.name)}]({sticker.url})"
+                embed.add_field(name=_("Stickers"), value=files[:1024])
+            if getattr(message, "poll", None) is not None:
+                poll = message.poll
+                poll_info = _("Poll Question: {question}\n").format(question=poll.question)
+                for answer in poll.answers:
+                    poll_info += f"- {answer.text}\n"
+                embed.description = poll_info
+
+            if getattr(message, "message_snapshots", None) is not None:
+                if len(message.message_snapshots) == 1:
+                    ss = message.message_snapshots[0]
+                    if ss.content:
+                        embed.description = ss.content
+                    elif ss.embeds:
+                        embed.description = "\n".join(
+                            f"{e.title}\n{e.description}" for e in ss.embeds
+                        )[:4096]
+                    embed.add_field(name=_("Forwarded Message"), value="True")
+                elif len(message.message_snapshots) > 1:
+                    logger.warning(
+                        "Discord has allowed more than 1 message snapshot and this needs to be updated. Please let TrustyJAID know."
+                    )
+
+>>>>>>> upstream-extendedmodlog/master
             if replying:
                 embed.add_field(name=_("Replying to:"), value=replying)
 
@@ -716,6 +806,11 @@ class EventMixin:
             return
         if await self.bot.cog_disabled_in_guild(self, guild):
             return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, member):
+            return
+>>>>>>> upstream-extendedmodlog/master
         if guild.me.is_timed_out():
             return
         try:
@@ -797,6 +892,11 @@ class EventMixin:
             return
         if guild.me.is_timed_out():
             return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, member):
+            return
+>>>>>>> upstream-extendedmodlog/master
         try:
             channel = await self.modlog_channel(guild, "user_left")
         except RuntimeError:
@@ -855,6 +955,11 @@ class EventMixin:
                 users=len(guild.members),
             )
             if perp:
+<<<<<<< HEAD
+=======
+                if await self.is_ignored_mod(guild, perp):
+                    return
+>>>>>>> upstream-extendedmodlog/master
                 msg = _(
                     "{emoji} {time} **{member}**(`{m_id}`) "
                     "was kicked by {perp}. Total members: {users}"
@@ -992,6 +1097,11 @@ class EventMixin:
         embed.add_field(name=_("Channel"), value=new_channel.mention)
         embed.add_field(name=_("Type"), value=channel_type)
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             perp_msg = _("by {perp} (`{perp_id}`)").format(perp=perp, perp_id=perp.id)
             embed.add_field(name=_("Created by "), value=perp.mention)
         if reason:
@@ -1056,6 +1166,11 @@ class EventMixin:
         embed.add_field(name=_("Type"), value=channel_type)
 
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             perp_msg = _("by {perp} (`{perp_id}`)").format(perp=perp, perp_id=perp.id)
             embed.add_field(name=_("Deleted by "), value=perp.mention)
         if reason:
@@ -1095,6 +1210,12 @@ class EventMixin:
         action: discord.AuditLogAction,
         *,
         extra: Optional[str] = None,
+<<<<<<< HEAD
+=======
+        before_roles: Optional[List[discord.Role]] = None,
+        after_roles: Optional[List[discord.Role]] = None,
+        channel_id: Optional[int] = None,
+>>>>>>> upstream-extendedmodlog/master
     ) -> Optional[discord.AuditLogEntry]:
         entry = None
         if isinstance(target, int) or target is None:
@@ -1111,9 +1232,37 @@ class EventMixin:
                 for log in self.audit_log[guild.id]:
                     if log.action != action:
                         continue
+<<<<<<< HEAD
                     if extra is not None:
                         if getattr(log.after, extra, None) is None:
                             continue
+=======
+                    if (
+                        datetime.datetime.now(datetime.timezone.utc) - log.created_at
+                    ) > datetime.timedelta(minutes=10):
+                        # ignore audit log actions older than 10 minutes
+                        # to reduce instances of false positives
+                        continue
+                    if channel_id is not None and action is discord.AuditLogAction.message_delete:
+                        if ex := getattr(log, "extra", None):
+                            if ex.channel is not None and ex.channel.id == channel_id:
+                                entry = log
+                    if extra is not None:
+                        if getattr(log.after, extra, None) is None:
+                            continue
+                    if log.action is discord.AuditLogAction.member_role_update and before_roles:
+                        if log_before := getattr(log.before, "roles", []):
+                            for role in log_before:
+                                if role in before_roles:
+                                    entry = log
+                            continue
+                    if log.action is discord.AuditLogAction.member_role_update and after_roles:
+                        if log_after := getattr(log.after, "roles", []):
+                            for role in log_after:
+                                if role in after_roles:
+                                    entry = log
+                            continue
+>>>>>>> upstream-extendedmodlog/master
                     if target_id == getattr(log.target, "id", None):
                         logger.trace("Found entry through cache")
                         entry = log
@@ -1123,9 +1272,37 @@ class EventMixin:
 
             if entry is None:
                 async for log in guild.audit_logs(limit=5, action=action):
+<<<<<<< HEAD
                     if extra is not None:
                         if getattr(log.after, extra, None) is None:
                             continue
+=======
+                    if (
+                        datetime.datetime.now(datetime.timezone.utc) - log.created_at
+                    ) > datetime.timedelta(minutes=10):
+                        # ignore audit log actions older than 10 minutes
+                        # to reduce instances of false positives
+                        continue
+                    if extra is not None:
+                        if getattr(log.after, extra, None) is None:
+                            continue
+                    if channel_id is not None and action is discord.AuditLogAction.message_delete:
+                        if ex := getattr(log, "extra", None):
+                            if ex.channel is not None and ex.channel.id == channel_id:
+                                entry = log
+                    if log.action is discord.AuditLogAction.member_role_update and before_roles:
+                        if log_before := getattr(log.before, "roles", []):
+                            for role in log_before:
+                                if role in before_roles:
+                                    entry = log
+                            continue
+                    if log.action is discord.AuditLogAction.member_role_update and after_roles:
+                        if log_after := getattr(log.after, "roles", []):
+                            for role in log_after:
+                                if role in after_roles:
+                                    entry = log
+                            continue
+>>>>>>> upstream-extendedmodlog/master
                     if target_id == getattr(log.target, "id", None):
                         logger.trace("Found perp through fetch")
                         entry = log
@@ -1237,6 +1414,11 @@ class EventMixin:
                 embed.add_field(name=_("Permissions"), value=page)
 
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             msg += _("Updated by ") + str(perp) + "\n"
             embed.add_field(name=_("Updated by "), value=perp.mention)
         if reason:
@@ -1278,6 +1460,12 @@ class EventMixin:
         entry = await self.get_audit_log_entry(guild, before, discord.AuditLogAction.role_update)
         perp = getattr(entry, "user", None)
         reason = getattr(entry, "reason", None)
+<<<<<<< HEAD
+=======
+        if perp:
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["role_change"]["embed"]
@@ -1372,6 +1560,12 @@ class EventMixin:
         entry = await self.get_audit_log_entry(guild, role, discord.AuditLogAction.role_create)
         perp = getattr(entry, "user", None)
         reason = getattr(entry, "reason", None)
+<<<<<<< HEAD
+=======
+        if perp:
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["role_create"]["embed"]
@@ -1421,6 +1615,12 @@ class EventMixin:
         entry = await self.get_audit_log_entry(guild, role, discord.AuditLogAction.role_delete)
         perp = getattr(entry, "user", None)
         reason = getattr(entry, "reason", None)
+<<<<<<< HEAD
+=======
+        if perp:
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["role_delete"]["embed"]
@@ -1476,6 +1676,11 @@ class EventMixin:
             return
         if await self.is_ignored_channel(guild, after.channel):
             return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, after.author):
+            return
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["message_edit"]["embed"]
@@ -1599,6 +1804,11 @@ class EventMixin:
             reason = getattr(entry, "reason", None)
 
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             embed.add_field(name=_("Updated by"), value=perp)
         if reason:
             embed.add_field(name=_("Reasons "), value=reason, inline=False)
@@ -1742,6 +1952,11 @@ class EventMixin:
                 perp = getattr(entry, "user", None)
                 reason = getattr(entry, "reason", None)
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             embed.add_field(name=_("Updated by "), value=perp.mention)
             msg += _("Updated by ") + str(perp) + "\n"
         if reason:
@@ -1777,6 +1992,11 @@ class EventMixin:
         if before.channel is not None:
             if await self.is_ignored_channel(guild, before.channel):
                 return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, member):
+            return
+>>>>>>> upstream-extendedmodlog/master
         embed_links = (
             channel.permissions_for(guild.me).embed_links
             and self.settings[guild.id]["voice_change"]["embed"]
@@ -1865,6 +2085,11 @@ class EventMixin:
                 perp = getattr(entry, "user", None)
                 reason = getattr(entry, "reason", None)
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             embed.add_field(name=_("Updated by"), value=perp.mention)
         if reason:
             msg += _("Reason ") + reason + "\n"
@@ -1887,6 +2112,11 @@ class EventMixin:
             return
         if not self.settings[guild.id]["user_change"]["bots"] and after.bot:
             return
+<<<<<<< HEAD
+=======
+        if await self.is_ignored_user(guild, after):
+            return
+>>>>>>> upstream-extendedmodlog/master
         try:
             channel = await self.modlog_channel(guild, "user_change")
         except RuntimeError:
@@ -1928,29 +2158,80 @@ class EventMixin:
                     before_roles = list(b - a)
                     after_roles = list(a - b)
                     logger.debug("on_member_update after_roles: %s", after_roles)
+<<<<<<< HEAD
                     if before_roles:
                         for role in before_roles:
+=======
+                    perps = set()
+                    reasons = set()
+                    if before_roles:
+                        for role in before_roles:
+                            entry = await self.get_audit_log_entry(
+                                guild,
+                                before,
+                                discord.AuditLogAction.member_role_update,
+                                before_roles=[role],
+                            )
+                            perp = getattr(entry, "user", None)
+                            reason = getattr(entry, "reason", None)
+>>>>>>> upstream-extendedmodlog/master
                             msg += _("{author} had the {role} role removed.").format(
                                 author=after.name, role=role.name
                             )
                             embed.description += _(
                                 "{author} had the {role} role removed.\n"
                             ).format(author=after.mention, role=role.mention)
+<<<<<<< HEAD
                             worth_sending = True
                     if after_roles:
                         for role in after_roles:
+=======
+                            if perp:
+                                perps.add(perp.mention)
+                            if reason:
+                                reasons.add(reason)
+                            worth_sending = True
+
+                    if after_roles:
+                        for role in after_roles:
+                            entry = await self.get_audit_log_entry(
+                                guild,
+                                before,
+                                discord.AuditLogAction.member_role_update,
+                                after_roles=[role],
+                            )
+                            perp = getattr(entry, "user", None)
+                            reason = getattr(entry, "reason", None)
+>>>>>>> upstream-extendedmodlog/master
                             msg += _("{author} had the {role} role applied.").format(
                                 author=after.name, role=role.name
                             )
                             embed.description += _(
                                 "{author} had the {role} role applied.\n"
                             ).format(author=after.mention, role=role.mention)
+<<<<<<< HEAD
                             worth_sending = True
                     entry = await self.get_audit_log_entry(
                         guild, before, discord.AuditLogAction.member_role_update
                     )
                     perp = getattr(entry, "user", None)
                     reason = getattr(entry, "reason", None)
+=======
+                            if perp:
+                                perps.add(perp.mention)
+                            if reason:
+                                reasons.add(reason)
+                            worth_sending = True
+                    if perps:
+                        msg += _("Updated by ") + humanize_list(list(perps)) + "."
+                        embed.add_field(
+                            name=_("Updated by "), value="\n".join(f"- {p}" for p in perps)
+                        )
+                    if reasons:
+                        reason_str = "\n".join(f"- {r}" for r in reasons)
+                        msg += _("Reason: ") + reason_str
+                        embed.add_field(name=_("Reason: "), value=reason_str)
+>>>>>>> upstream-extendedmodlog/master
                 elif attr == "flags":
                     changed_flags = [
                         key.replace("_", " ").title()
@@ -1996,6 +2277,15 @@ class EventMixin:
                     embed.description = _("{author} has updated.").format(author=after.mention)
                     before_text += f"- {update_type.get_name()}: {before_attr}\n"
                     after_text += f"- {update_type.get_name()}: {after_attr}\n"
+<<<<<<< HEAD
+=======
+                    if perp:
+                        msg += _("Updated by ") + f"{perp}\n"
+                        embed.add_field(name=_("Updated by "), value=perp.mention)
+                    if reason:
+                        msg += _("Reason: ") + f"{reason}\n"
+                        embed.add_field(name=_("Reason"), value=reason, inline=False)
+>>>>>>> upstream-extendedmodlog/master
                     # embed.add_field(name=_("Before ") + name, value=str(before_attr)[:1024])
                     # embed.add_field(name=_("After ") + name, value=str(after_attr)[:1024])
         if before_text and after_text:
@@ -2005,12 +2295,16 @@ class EventMixin:
                 embed.add_field(name=_("After"), value=page)
         if not worth_sending:
             return
+<<<<<<< HEAD
         if perp:
             msg += _("Updated by ") + f"{perp}\n"
             embed.add_field(name=_("Updated by "), value=perp.mention)
         if reason:
             msg += _("Reason: ") + f"{reason}\n"
             embed.add_field(name=_("Reason"), value=reason, inline=False)
+=======
+
+>>>>>>> upstream-extendedmodlog/master
         embed.add_field(name=_("Member ID"), value=box(str(after.id)))
         if embed_links:
             await channel.send(embed=embed, allowed_mentions=self.allowed_mentions)
@@ -2199,6 +2493,11 @@ class EventMixin:
                 msg += f"{name} {before_attr}\n"
                 embed.add_field(name=name, value=str(before_attr))
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             perp_str = getattr(perp, "mention", str(perp))
             msg += _("Deleted by") + f" {perp}.\n"
             embed.add_field(name=_("Deleted by"), value=perp_str)
@@ -2252,6 +2551,12 @@ class EventMixin:
         entry = await self.get_audit_log_entry(guild, thread, discord.AuditLogAction.thread_create)
         perp = getattr(entry, "user", None)
         reason = getattr(entry, "reason", None)
+<<<<<<< HEAD
+=======
+        if perp:
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
         if thread.owner:
             owner = thread.owner
         else:
@@ -2331,6 +2636,11 @@ class EventMixin:
         perp_msg = ""
         embed.add_field(name=_("Type"), value=channel_type)
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             perp_msg = _("by {perp} (`{perp_id}`)").format(perp=perp, perp_id=perp.id)
             embed.add_field(name=_("Deleted by "), value=perp.mention)
         if reason:
@@ -2434,6 +2744,11 @@ class EventMixin:
             reason = getattr(entry, "reason", None)
 
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             msg += _("Updated by ") + str(perp) + "\n"
             embed.add_field(name=_("Updated by "), value=perp.mention)
         if reason:
@@ -2581,6 +2896,11 @@ class EventMixin:
                 perp = getattr(entry, "user", None)
                 reason = getattr(entry, "reason", None)
         if perp:
+<<<<<<< HEAD
+=======
+            if await self.is_ignored_mod(guild, perp):
+                return
+>>>>>>> upstream-extendedmodlog/master
             embed.add_field(name=_("Updated by "), value=perp.mention)
             msg += _("Updated by ") + str(perp) + "\n"
         if reason:
@@ -2589,4 +2909,8 @@ class EventMixin:
         if embed_links:
             await channel.send(embed=embed, allowed_mentions=self.allowed_mentions)
         else:
+<<<<<<< HEAD
             await channel.send(msg, allowed_mentions=self.allowed_mentions)
+=======
+            await channel.send(msg, allowed_mentions=self.allowed_mentions)
+>>>>>>> upstream-extendedmodlog/master

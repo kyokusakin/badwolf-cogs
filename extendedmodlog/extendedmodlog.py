@@ -63,7 +63,11 @@ class ExtendedModLog(EventMixin, commands.Cog):
     """
 
     __author__ = ["RePulsar", "TrustyJAID"]
+<<<<<<< HEAD
     __version__ = "2.12.5"
+=======
+    __version__ = "2.13.0"
+>>>>>>> upstream-extendedmodlog/master
 
     def __init__(self, bot):
         self.bot = bot
@@ -166,6 +170,11 @@ class ExtendedModLog(EventMixin, commands.Cog):
                 data["ignored_channels"].remove(c)
             else:
                 ignored_channels.append(chn)
+<<<<<<< HEAD
+=======
+        ignored_users = [f"<@{uid}>" for uid in data["ignored_users"]]
+        ignored_mods = [f"<@{uid}>" for uid in data["ignored_mods"]]
+>>>>>>> upstream-extendedmodlog/master
         enabled = ""
         disabled = ""
         for settings, name in cur_settings.items():
@@ -189,9 +198,23 @@ class ExtendedModLog(EventMixin, commands.Cog):
         if ignored_channels:
             chans = ", ".join(c.mention for c in ignored_channels)
             msg += _("Ignored Channels") + ": " + chans
+<<<<<<< HEAD
         await self.config.guild(ctx.guild).set(data)
         # save the data back to config incase we had some deleted channels
         await ctx.maybe_send_embed(msg)
+=======
+        if ignored_users:
+            msg += _("Ignored Users: ") + humanize_list(ignored_users)
+        if ignored_mods:
+            msg += _("Ignored Mods: ") + humanize_list(ignored_mods)
+        await self.config.guild(ctx.guild).set(data)
+        # save the data back to config incase we had some deleted channels
+        if await ctx.embed_requested():
+            em = discord.Embed(description=msg)
+            await ctx.send(embed=em)
+        else:
+            await ctx.send(msg, allowed_mentions=self.allowed_mentions)
+>>>>>>> upstream-extendedmodlog/master
 
     @checks.admin_or_permissions(manage_channels=True)
     @commands.group(name="modlog", aliases=["modlogtoggle", "modlogs"])
@@ -258,7 +281,12 @@ class ExtendedModLog(EventMixin, commands.Cog):
         - `<true_or_false>` The desired embed setting either on or off.
         """
         if len(events) == 0:
+<<<<<<< HEAD
             return await ctx.send(_("You must provide which events should be included."))
+=======
+            await ctx.send(_("You must provide which events should be included."))
+            return
+>>>>>>> upstream-extendedmodlog/master
         if ctx.guild.id not in self.settings:
             self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
         for event in events:
@@ -286,7 +314,12 @@ class ExtendedModLog(EventMixin, commands.Cog):
         - `<new_emoji>` can be any discord emoji or unicode emoji the bot has access to use.
         """
         if len(events) == 0:
+<<<<<<< HEAD
             return await ctx.send(_("You must provide which events should be included."))
+=======
+            await ctx.send(_("You must provide which events should be included."))
+            return
+>>>>>>> upstream-extendedmodlog/master
         if ctx.guild.id not in self.settings:
             self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
         if isinstance(emoji, str):
@@ -319,7 +352,12 @@ class ExtendedModLog(EventMixin, commands.Cog):
         - `<true_or_false>` Either on or off.
         """
         if len(events) == 0:
+<<<<<<< HEAD
             return await ctx.send(_("You must provide which events should be included."))
+=======
+            await ctx.send(_("You must provide which events should be included."))
+            return
+>>>>>>> upstream-extendedmodlog/master
         if ctx.guild.id not in self.settings:
             self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
         for event in events:
@@ -346,7 +384,12 @@ class ExtendedModLog(EventMixin, commands.Cog):
         - `<channel>` The text channel to send the events to.
         """
         if len(events) == 0:
+<<<<<<< HEAD
             return await ctx.send(_("You must provide which events should be included."))
+=======
+            await ctx.send(_("You must provide which events should be included."))
+            return
+>>>>>>> upstream-extendedmodlog/master
         if ctx.guild.id not in self.settings:
             self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
         for event in events:
@@ -370,7 +413,12 @@ class ExtendedModLog(EventMixin, commands.Cog):
         Reset the modlog event to the default modlog channel.
         """
         if len(events) == 0:
+<<<<<<< HEAD
             return await ctx.send(_("You must provide which events should be included."))
+=======
+            await ctx.send(_("You must provide which events should be included."))
+            return
+>>>>>>> upstream-extendedmodlog/master
         if ctx.guild.id not in self.settings:
             self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
         for event in events:
@@ -662,8 +710,20 @@ class ExtendedModLog(EventMixin, commands.Cog):
         await self.save(ctx.guild)
         await ctx.send(msg + humanize_list(level))
 
+<<<<<<< HEAD
     @_modlog.command()
     async def ignore(
+=======
+    @_modlog.group()
+    async def ignore(self, ctx: commands.Context) -> None:
+        """
+        Commands for setting things to ignore
+        """
+        pass
+
+    @ignore.command(name="channel")
+    async def ignore_channel(
+>>>>>>> upstream-extendedmodlog/master
         self,
         ctx: commands.Context,
         channel: Union[
@@ -694,8 +754,74 @@ class ExtendedModLog(EventMixin, commands.Cog):
                 _("{channel} is already being ignored.").format(channel=channel.mention)
             )
 
+<<<<<<< HEAD
     @_modlog.command()
     async def unignore(
+=======
+    @ignore.command(name="user")
+    async def ignore_user(self, ctx: commands.Context, user: Union[discord.User, discord.Member]):
+        """
+        Ignore a user from any update event where they have been updated.
+        e.g. `member_update`, `role_update`, `message_x`
+
+        - `<user>` The user you want to ignore.
+        """
+        if ctx.guild.id not in self.settings:
+            self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
+        guild = ctx.message.guild
+        cur_ignored = await self.config.guild(guild).ignored_users()
+        if user.id not in cur_ignored:
+            cur_ignored.append(user.id)
+            self.settings[guild.id]["ignored_users"] = cur_ignored
+            await self.save(guild)
+            await ctx.send(
+                _("Now ignoring {user}.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+        else:
+            await ctx.send(
+                _("{user} is already ignored.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+
+    @ignore.command(name="mod")
+    async def ignore_mod(self, ctx: commands.Context, user: Union[discord.User, discord.Member]):
+        """
+        Ignore a mod who appears to have performed an action.
+
+        This may cause events to unexpectedly stop showing as looking up actions
+        in the audit log does not guarantee that the mod performed that action.
+
+        - `<user>` The user you want to ignore.
+        """
+        if ctx.guild.id not in self.settings:
+            self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
+        guild = ctx.message.guild
+        cur_ignored = await self.config.guild(guild).ignored_mods()
+        if user.id not in cur_ignored:
+            cur_ignored.append(user.id)
+            self.settings[guild.id]["ignored_mods"] = cur_ignored
+            await self.save(guild)
+            await ctx.send(
+                _("Now ignoring mod actions from {user}.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+        else:
+            await ctx.send(
+                _("I am already ignoring mod actions from {user}.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+
+    @_modlog.group()
+    async def unignore(self, ctx: commands.Context) -> None:
+        """
+        Commands to unignore things
+        """
+        pass
+
+    @unignore.command()
+    async def unignore_channel(
+>>>>>>> upstream-extendedmodlog/master
         self,
         ctx: commands.Context,
         channel: Union[
@@ -704,7 +830,11 @@ class ExtendedModLog(EventMixin, commands.Cog):
             discord.CategoryChannel,
             discord.VoiceChannel,
         ],
+<<<<<<< HEAD
     ) -> None:
+=======
+    ):
+>>>>>>> upstream-extendedmodlog/master
         """
         Unignore a channel from message delete/edit events and bot commands.
 
@@ -724,6 +854,65 @@ class ExtendedModLog(EventMixin, commands.Cog):
         else:
             await ctx.send(_("{channel} is not being ignored.").format(channel=channel.mention))
 
+<<<<<<< HEAD
+=======
+    @unignore.command(name="user")
+    async def unignore_user(
+        self, ctx: commands.Context, user: Union[discord.User, discord.Member]
+    ):
+        """
+        Ignore a user from any update event where they have been updated.
+        e.g. `member_update`, `role_update`, `message_x`
+
+        - `<user>` The user you want to ignore.
+        """
+        if ctx.guild.id not in self.settings:
+            self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
+        guild = ctx.message.guild
+        cur_ignored = await self.config.guild(guild).ignored_users()
+        if user.id in cur_ignored:
+            cur_ignored.remove(user.id)
+            self.settings[guild.id]["ignored_users"] = cur_ignored
+            await self.save(guild)
+            await ctx.send(
+                _("Now logging events from {user}.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+        else:
+            await ctx.send(
+                _("{user} is not being ignored.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+
+    @unignore.command(name="mod")
+    async def unignore_mod(self, ctx: commands.Context, user: Union[discord.User, discord.Member]):
+        """
+        Ignore a mod who appears to have performed an action.
+
+        This may cause events to unexpectedly stop showing as looking up actions
+        in the audit log does not guarantee that the mod performed that action.
+
+        - `<user>` The user you want to ignore.
+        """
+        if ctx.guild.id not in self.settings:
+            self.settings[ctx.guild.id] = await self.config.guild(ctx.guild).all()
+        guild = ctx.message.guild
+        cur_ignored = await self.config.guild(guild).ignored_mods()
+        if user.id in cur_ignored:
+            cur_ignored.remove(user.id)
+            self.settings[guild.id]["ignored_mods"] = cur_ignored
+            await self.save(guild)
+            await ctx.send(
+                _("Now logging mod actions from {user}.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+        else:
+            await ctx.send(
+                _("{user} is not being ignored for mod actions.").format(user=user.mention),
+                allowed_mentions=self.allowed_mentions,
+            )
+
+>>>>>>> upstream-extendedmodlog/master
     @_modlog.group(name="bot", aliases=["bots"])
     async def _modlog_bot(self, ctx: commands.Context) -> None:
         """Bot filter settings."""
@@ -796,4 +985,8 @@ class ExtendedModLog(EventMixin, commands.Cog):
         if setting:
             await ctx.send(_("Bots will no longer be tracked in voice update logs."))
         else:
+<<<<<<< HEAD
             await ctx.send(_("Bots will be tracked in voice update logs."))
+=======
+            await ctx.send(_("Bots will be tracked in voice update logs."))
+>>>>>>> upstream-extendedmodlog/master
