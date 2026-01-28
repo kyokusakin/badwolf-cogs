@@ -1,6 +1,5 @@
 {
     "author": [
-<<<<<<< HEAD
         "retke (El Laggron)"
     ],
     "bot_version": [
@@ -24,11 +23,4 @@
         "punish",
         "modlog"
     ]
-=======
-        "El Laggron"
-    ],
-    "description": "A buch of utility and quality cogs that brings unique features for your server. Made by Laggron.",
-    "install_msg": "Thanks for installing the repository! Please check the wiki for all informations about the cogs: https://laggrons-dumb-cogs.readthedocs.io/\nCheck out the #support_laggrons-dumb-cogs channel in the official 3rd party support server for questions or suggestions: https://discord.gg/GET4DVk",
-    "short": "Utility cogs for your server."
->>>>>>> upstream-warnsystem/v3
 }
