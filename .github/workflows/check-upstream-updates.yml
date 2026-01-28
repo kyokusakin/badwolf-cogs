@@ -1,0 +1,206 @@
+name: Check Upstream Updates
+
+on:
+  schedule:
+    # 每天 UTC 00:00 執行（台灣時間早上 8:00）
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    strategy:
+      matrix:
+        cog:
+          - name: anotherpingcog
+            upstream: https://github.com/Vexed01/Vex-Cogs
+            path: anotherpingcog
+          - name: autoroom
+            upstream: https://github.com/PhasecoreX/PCXCogs
+            path: autoroom
+          - name: counting
+            upstream: https://github.com/ltzmax/maxcogs
+            path: counting
+          - name: extendedmodlog
+            upstream: https://github.com/TrustyJAID/Trusty-cogs
+            path: extendedmodlog
+          - name: inviteblocklist
+            upstream: https://github.com/TrustyJAID/Trusty-cogs
+            path: inviteblocklist
+          - name: uptimeresponder
+            upstream: https://github.com/Vexed01/Vex-Cogs
+            path: uptimeresponder
+          - name: warnsystem
+            upstream: https://github.com/laggron42/Laggrons-Dumb-Cogs
+            path: warnsystem
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Upstream Remote
+        run: |
+          git remote add upstream-${{ matrix.cog.name }} ${{ matrix.cog.upstream }} || true
+          git fetch upstream-${{ matrix.cog.name }}
+
+      - name: Check for Updates
+        id: check
+        run: |
+          # 獲取上游的 main/master 分支
+          UPSTREAM_BRANCH=$(git ls-remote --symref upstream-${{ matrix.cog.name }} HEAD | head -n 1 | awk '{print $2}' | sed 's/refs\/heads\///')
+          if [ -z "$UPSTREAM_BRANCH" ]; then
+            UPSTREAM_BRANCH="main"
+          fi
+          
+          echo "upstream_branch=$UPSTREAM_BRANCH" >> $GITHUB_OUTPUT
+          
+          # 檢查上游路徑是否存在
+          if ! git ls-tree -r upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH --name-only | grep -q "^${{ matrix.cog.path }}/"; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Upstream path not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 比較差異
+          if [ -d "${{ matrix.cog.path }}" ]; then
+            DIFF=$(git diff HEAD upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH -- ${{ matrix.cog.path }}/ | wc -l)
+            if [ "$DIFF" -gt 0 ]; then
+              echo "has_updates=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_updates=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Local path not found" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Update Branch
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          BRANCH_NAME="update/${{ matrix.cog.name }}-$(date +%Y%m%d)"
+          git checkout -b $BRANCH_NAME
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_ENV
+
+      - name: Merge Upstream Changes
+        if: steps.check.outputs.has_updates == 'true'
+        id: merge
+        continue-on-error: true
+        run: |
+          # 嘗試合併上游的特定路徑
+          UPSTREAM_BRANCH=${{ steps.check.outputs.upstream_branch }}
+          
+          # 使用 subtree merge 策略
+          git merge -X subtree=${{ matrix.cog.path }} \
+            --no-commit \
+            --allow-unrelated-histories \
+            upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH || echo "merge_conflict=true" >> $GITHUB_OUTPUT
+          
+          # 檢查是否有衝突
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            # 保留衝突狀態並提交
+            CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ', ' | sed 's/,$//')
+            echo "conflict_files=$CONFLICT_FILES" >> $GITHUB_OUTPUT
+            git add -A
+            git commit -m "⚠️ Update ${{ matrix.cog.name }} from upstream (with conflicts)" -m "Conflicts in: $CONFLICT_FILES"
+          else
+            echo "has_conflicts=false" >> $GITHUB_OUTPUT
+            git add ${{ matrix.cog.path }}/
+            git commit -m "✅ Update ${{ matrix.cog.name }} from upstream" || true
+          fi
+
+      - name: Push Changes
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          git push origin main
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const hasConflicts = '${{ steps.merge.outputs.has_conflicts }}' === 'true';
+            const conflictFiles = '${{ steps.merge.outputs.conflict_files }}';
+            
+            const title = hasConflicts 
+              ? `⚠️ Update ${{ matrix.cog.name }} from upstream (Conflicts)`
+              : `⬆️ Update ${{ matrix.cog.name }} from upstream`;
+            
+            const conflictSection = hasConflicts ? `
+            ## ⚠️ 合併衝突
+            
+            此更新包含合併衝突，需要手動解決。
+            
+            **衝突檔案**: ${conflictFiles}
+            
+            ---
+            ` : '';
+            
+            const { data: pullRequest } = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: title,
+              head: 'main',
+              base: 'main',
+              body: `## 自動更新 ${{ matrix.cog.name }}
+              
+              此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+              
+              **上游倉庫**: ${{ matrix.cog.upstream }}
+              **分支**: ${{ steps.check.outputs.upstream_branch }}
+              **路徑**: ${{ matrix.cog.path }}
+              ${conflictSection}
+              ### ✅ 檢查清單
+              ${hasConflicts ? '- [ ] 解決合併衝突\n              ' : ''}- [ ] 查看變更內容
+              - [ ] 測試功能是否正常
+              - [ ] 檢查是否需要更新依賴
+              - [ ] 確認授權條款未變更
+              
+              ---
+              🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成`
+            });
+            
+            // 添加標籤
+            const labels = hasConflicts 
+              ? ['upstream-update', 'automated', 'merge-conflict']
+              : ['upstream-update', 'automated'];
+            
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pullRequest.number,
+              labels: labels
+            });
+            
+            // 如果有衝突，添加審核者請求（可選）
+            if (hasConflicts) {
+              core.notice(`Created PR #${pullRequest.number} with merge conflicts that need manual resolution`);
+            }
+
+      - name: Report Error
+        if: steps.check.outputs.error != ''
+        run: |
+          echo "::warning::${{ matrix.cog.name }}: ${{ steps.check.outputs.error }}"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "Upstream update check completed!"
+          echo "Check the Actions tab for detailed results."
