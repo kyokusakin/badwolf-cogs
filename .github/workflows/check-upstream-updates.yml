@@ -127,6 +127,15 @@ jobs:
         run: |
           git push origin ${{ env.branch_name }}
 
+      - name: Ensure Labels Exist
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create upstream-update --color 3fb542 --description "From upstream update" || true
+          gh label create automated --color ededed --description "Automated PR" || true
+          gh label create merge-conflict --color d73a4a --description "Has merge conflicts" || true
+
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true'
         env:
