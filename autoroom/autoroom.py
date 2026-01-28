@@ -3,7 +3,11 @@
 import random
 from abc import ABC
 from contextlib import suppress
+<<<<<<< HEAD
 from datetime import UTC, datetime, timedelta
+=======
+from datetime import UTC, datetime
+>>>>>>> upstream-autoroom/master
 from typing import Any, ClassVar
 
 import discord
@@ -39,14 +43,21 @@ class AutoRoom(
     """
 
     __author__ = "PhasecoreX"
+<<<<<<< HEAD
     __version__ = "4.0.6"
+=======
+    __version__ = "4.0.7"
+>>>>>>> upstream-autoroom/master
 
     default_global_settings: ClassVar[dict[str, int]] = {"schema_version": 0}
     default_guild_settings: ClassVar[dict[str, bool | list[int]]] = {
         "admin_access": True,
         "mod_access": False,
         "bot_access": [],
+<<<<<<< HEAD
         "timeout_seconds": -1,
+=======
+>>>>>>> upstream-autoroom/master
     }
     default_autoroom_source_settings: ClassVar[dict[str, int | str | None]] = {
         "dest_category_id": None,
@@ -407,6 +418,7 @@ class AutoRoom(
         )
         if not required_check or not optional_check:
             return
+<<<<<<< HEAD
         # Ignore self (the bot)
         if member.id == self.bot.user.id:
             # If the bot joins a voice channel, it should immediately leave
@@ -423,6 +435,11 @@ class AutoRoom(
         # Check that user isn't spamming
         bucket = self.bucket_autoroom_create.get_bucket(member)
         timeout_seconds = await self.config.guild(member.guild).timeout_seconds()
+=======
+
+        # Check that user isn't spamming
+        bucket = self.bucket_autoroom_create.get_bucket(member)
+>>>>>>> upstream-autoroom/master
         if bucket:
             retry_after = bucket.update_rate_limit()
             if retry_after:
@@ -435,6 +452,7 @@ class AutoRoom(
                             discord.HTTPException,
                         ):
                             await member.send(
+<<<<<<< HEAD
                                 "你好！看起來你想建立一個自動房間"
                                 "\n"
                                 f"請注意，您只被允許建立 **{bucket.rate}** 個自動房間"
@@ -445,6 +463,15 @@ class AutoRoom(
                             if timeout_seconds > 0:
                                 await member.timeout(timedelta(seconds=timeout_seconds), reason="Spam voice channel")
 
+=======
+                                "Hello there! It looks like you're trying to make an AutoRoom."
+                                "\n"
+                                f"Please note that you are only allowed to make **{bucket.rate}** AutoRooms "
+                                f"every **{humanize_timedelta(seconds=bucket.per)}**."
+                                "\n"
+                                f"You can try again in **{humanize_timedelta(seconds=max(retry_after, 1))}**."
+                            )
+>>>>>>> upstream-autoroom/master
                     return
 
         # Generate channel name
@@ -507,6 +534,7 @@ class AutoRoom(
             perms.update(role, autoroom_source_config["perms"]["allow"])
 
         # Create new AutoRoom
+<<<<<<< HEAD
         new_voice_channel = await guild.create_voice_channel(
             name=new_channel_name,
             category=dest_category,
@@ -515,6 +543,20 @@ class AutoRoom(
             bitrate=min(autoroom_source.bitrate, int(guild.bitrate_limit)),
             user_limit=autoroom_source.user_limit,
         )
+=======
+        voice_channel_config = {
+            "name": new_channel_name,
+            "category": dest_category,
+            "reason": "AutoRoom: New AutoRoom needed.",
+            "bitrate": min(autoroom_source.bitrate, int(guild.bitrate_limit)),
+            "user_limit": autoroom_source.user_limit,
+        }
+        if perms.overwrites:
+            voice_channel_config["overwrites"] = perms.overwrites
+        if autoroom_source.rtc_region:
+            voice_channel_config["rtc_region"] = autoroom_source.rtc_region
+        new_voice_channel = await guild.create_voice_channel(**voice_channel_config)
+>>>>>>> upstream-autoroom/master
         await self.config.channel(new_voice_channel).source_channel.set(
             autoroom_source.id
         )
