@@ -56,12 +56,22 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Add Upstream Remote
+        id: remote
         run: |
-          git remote add upstream-${{ matrix.cog.name }} ${{ matrix.cog.upstream }} || true
-          git fetch upstream-${{ matrix.cog.name }}
+          git remote add upstream-${{ matrix.cog.name }} ${{ matrix.cog.upstream }} 2>/dev/null || true
+          
+          # 嘗試 fetch，並捕獲錯誤
+          if ! git fetch upstream-${{ matrix.cog.name }} 2>&1; then
+            echo "fetch_failed=true" >> $GITHUB_OUTPUT
+            echo "::error::Failed to fetch from upstream: ${{ matrix.cog.upstream }}"
+            exit 0
+          fi
+          
+          echo "fetch_failed=false" >> $GITHUB_OUTPUT
 
       - name: Check for Updates
         id: check
+        if: steps.remote.outputs.fetch_failed != 'true'
         run: |
           # 使用配置檔中指定的分支，如果沒有則自動偵測
           UPSTREAM_BRANCH="${{ matrix.cog.branch }}"
@@ -73,6 +83,13 @@ jobs:
           fi
           
           echo "upstream_branch=$UPSTREAM_BRANCH" >> $GITHUB_OUTPUT
+          
+          # 驗證分支是否存在
+          if ! git rev-parse --verify "upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH" >/dev/null 2>&1; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Upstream branch '$UPSTREAM_BRANCH' not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           
           # 檢查上游路徑是否存在
           if ! git ls-tree -r upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH --name-only | grep -q "^${{ matrix.cog.path }}/"; then
