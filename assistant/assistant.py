@@ -893,10 +893,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             cleaned = cleaned[-max_records:]
         return cleaned
 
-    async def send_response(self, message: discord.Message, response: str):
-        await self._send_in_chunks(message, response)
-
-    async def _send_in_chunks(self, message: discord.Message, response: str):
+    async def _send_response(self, message: discord.Message, response: str):
         try:
             chunk_size = 2000
             chunks = [response[i: i + chunk_size] for i in range(0, len(response), chunk_size)]
@@ -1115,9 +1112,18 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
     async def process_response(self, message: discord.Message, response: str):
         """Process response and decide whether to store memory based on AI evaluation with JSON output"""
-        if response:
-            await self.send_response(message, response)
+        if not response:
+            return
+            
+        # 先發送回應，確保用戶能收到訊息
+        try:
+            await self._send_response(message, response)
+        except Exception as e:
+            log.error(f"Error sending response: {e}")
+            return
 
+        # 記憶系統處理 - 即使失敗也不影響回應
+        try:
             guild_settings = await self.config.guild(message.guild).all()
             opt_out_ids = set(guild_settings.get("memory_opt_out_user_ids") or [])
             if message.author.id in opt_out_ids:
@@ -1159,37 +1165,46 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
             score = 0
             if long_term_enabled or (guild_long_term_enabled and guild_auto_upgrade_enabled):
-                memory_eval = await self.evaluate_memory_json(message.content, response)
-                score = self._coerce_int(memory_eval.get("score"), default=0)
+                try:
+                    memory_eval = await self.evaluate_memory_json(message.content, response)
+                    score = self._coerce_int(memory_eval.get("score"), default=0)
+                except Exception as e:
+                    log.error(f"Error evaluating memory importance: {e}")
 
             # Short-term chat history (raw) with retention.
             if chat_retention_seconds != 0:
-                await self.save_chat_history(
-                    guild_id=message.guild.id,
-                    user_id=message.author.id,
-                    user_name=message.author.display_name,
-                    user_message=message.content,
-                    bot_response=response,
-                    importance=score,
-                    channel_id=message.channel.id,
-                )
+                try:
+                    await self.save_chat_history(
+                        guild_id=message.guild.id,
+                        user_id=message.author.id,
+                        user_name=message.author.display_name,
+                        user_message=message.content,
+                        bot_response=response,
+                        importance=score,
+                        channel_id=message.channel.id,
+                    )
+                except Exception as e:
+                    log.error(f"Error saving chat history: {e}")
 
             # Long-term memory: store facts/summary (not raw conversation).
             if long_term_enabled and score >= max(0, min(long_term_min_importance, 5)):
-                memory_item = await self.extract_long_term_memory_json(message.content, response)
-                if memory_item:
-                    summary = str(memory_item.get("summary", "")).strip()
-                    facts = memory_item.get("facts", [])
-                    facts = [str(f).strip() for f in facts] if isinstance(facts, list) else []
-                    facts = [f for f in facts if f]
+                try:
+                    memory_item = await self.extract_long_term_memory_json(message.content, response)
+                    if memory_item:
+                        summary = str(memory_item.get("summary", "")).strip()
+                        facts = memory_item.get("facts", [])
+                        facts = [str(f).strip() for f in facts] if isinstance(facts, list) else []
+                        facts = [f for f in facts if f]
 
-                    if summary or facts:
-                        embedding: Optional[List[float]] = None
-                        if embedding_enabled:
-                            embed_text = (summary + "\n" + "\n".join(facts)).strip()
-                            embedding = await self.embed_text(embed_text, embedding_model)
+                        if summary or facts:
+                            embedding: Optional[List[float]] = None
+                            if embedding_enabled:
+                                try:
+                                    embed_text = (summary + "\n" + "\n".join(facts)).strip()
+                                    embedding = await self.embed_text(embed_text, embedding_model)
+                                except Exception as e:
+                                    log.error(f"Error generating embedding for long-term memory: {e}")
 
-                        try:
                             await self._insert_long_term_memory(
                                 guild_id=message.guild.id,
                                 user_id=message.author.id,
@@ -1201,8 +1216,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                                 retention_days=max(0, retention_days),
                                 max_records=max(0, long_term_max_records),
                             )
-                        except Exception as e:
-                            log.error(f"Error saving long-term memory: {e}")
+                except Exception as e:
+                    log.error(f"Error processing/saving long-term memory: {e}")
 
             # Guild long-term memory: allow the model to upgrade some content to server-wide facts/summary.
             if (
@@ -1210,20 +1225,23 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 and guild_auto_upgrade_enabled
                 and score >= max(0, min(guild_upgrade_min_score, 5))
             ):
-                guild_item = await self.extract_guild_memory_json(message.content, response)
-                if guild_item:
-                    summary = str(guild_item.get("summary", "")).strip()
-                    facts = guild_item.get("facts", [])
-                    facts = [str(f).strip() for f in facts] if isinstance(facts, list) else []
-                    facts = [f for f in facts if f]
+                try:
+                    guild_item = await self.extract_guild_memory_json(message.content, response)
+                    if guild_item:
+                        summary = str(guild_item.get("summary", "")).strip()
+                        facts = guild_item.get("facts", [])
+                        facts = [str(f).strip() for f in facts] if isinstance(facts, list) else []
+                        facts = [f for f in facts if f]
 
-                    if (summary or facts) and self._guild_memory_passes_safety(summary, facts):
-                        embedding: Optional[List[float]] = None
-                        if embedding_enabled:
-                            embed_text = (summary + "\n" + "\n".join(facts)).strip()
-                            embedding = await self.embed_text(embed_text, embedding_model)
+                        if (summary or facts) and self._guild_memory_passes_safety(summary, facts):
+                            embedding: Optional[List[float]] = None
+                            if embedding_enabled:
+                                try:
+                                    embed_text = (summary + "\n" + "\n".join(facts)).strip()
+                                    embedding = await self.embed_text(embed_text, embedding_model)
+                                except Exception as e:
+                                    log.error(f"Error generating embedding for guild memory: {e}")
 
-                        try:
                             await self._insert_guild_long_term_memory(
                                 guild_id=message.guild.id,
                                 created_at=time.time(),
@@ -1234,8 +1252,10 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                                 retention_days=max(0, guild_retention_days),
                                 max_records=max(0, guild_long_term_max_records),
                             )
-                        except Exception as e:
-                            log.error(f"Error saving guild long-term memory: {e}")
+                except Exception as e:
+                    log.error(f"Error processing/saving guild long-term memory: {e}")
+        except Exception as e:
+            log.error(f"Error in memory system: {e}")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -1981,12 +2001,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         except Exception as e:
             log.error(f"記憶評估錯誤: {str(e)[:150]}")
             return {"score": 0}
-
-    # 保留舊版本方法以支援向後相容性
-    async def evaluate_memory(self, user_message: str, bot_response: str) -> int:
-        """Legacy method - returns only the score for backward compatibility"""
-        result = await self.evaluate_memory_json(user_message, bot_response)
-        return result["score"]
 
     async def cog_unload(self):
         """Stop background tasks when Cog is unloaded"""
