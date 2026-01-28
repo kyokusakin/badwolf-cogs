@@ -125,70 +125,84 @@ jobs:
       - name: Push Changes
         if: steps.check.outputs.has_updates == 'true'
         run: |
-          git push origin main
+          git push origin ${{ env.branch_name }}
 
       - name: Create Pull Request
         if: steps.check.outputs.has_updates == 'true'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const hasConflicts = '${{ steps.merge.outputs.has_conflicts }}' === 'true';
-            const conflictFiles = '${{ steps.merge.outputs.conflict_files }}';
-            
-            const title = hasConflicts 
-              ? `⚠️ Update ${{ matrix.cog.name }} from upstream (Conflicts)`
-              : `⬆️ Update ${{ matrix.cog.name }} from upstream`;
-            
-            const conflictSection = hasConflicts ? `
-            ## ⚠️ 合併衝突
-            
-            此更新包含合併衝突，需要手動解決。
-            
-            **衝突檔案**: ${conflictFiles}
-            
-            ---
-            ` : '';
-            
-            const { data: pullRequest } = await github.rest.pulls.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: title,
-              head: 'main',
-              base: 'main',
-              body: `## 自動更新 ${{ matrix.cog.name }}
-              
-              此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
-              
-              **上游倉庫**: ${{ matrix.cog.upstream }}
-              **分支**: ${{ steps.check.outputs.upstream_branch }}
-              **路徑**: ${{ matrix.cog.path }}
-              ${conflictSection}
-              ### ✅ 檢查清單
-              ${hasConflicts ? '- [ ] 解決合併衝突\n              ' : ''}- [ ] 查看變更內容
-              - [ ] 測試功能是否正常
-              - [ ] 檢查是否需要更新依賴
-              - [ ] 確認授權條款未變更
-              
-              ---
-              🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成`
-            });
-            
-            // 添加標籤
-            const labels = hasConflicts 
-              ? ['upstream-update', 'automated', 'merge-conflict']
-              : ['upstream-update', 'automated'];
-            
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: pullRequest.number,
-              labels: labels
-            });
-            
-            // 如果有衝突，添加審核者請求（可選）
-            if (hasConflicts) {
-              core.notice(`Created PR #${pullRequest.number} with merge conflicts that need manual resolution`);
-            }
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HAS_CONFLICTS="${{ steps.merge.outputs.has_conflicts }}"
+          CONFLICT_FILES="${{ steps.merge.outputs.conflict_files }}"
+          
+          if [ "$HAS_CONFLICTS" = "true" ]; then
+            TITLE="⚠️ Update ${{ matrix.cog.name }} from upstream (Conflicts)"
+            CONFLICT_SECTION="## ⚠️ 合併衝突
+
+此更新包含合併衝突，需要手動解決。
+
+**衝突檔案**: ${CONFLICT_FILES}
+
+### 🔧 解決步驟
+
+1. Checkout 這個分支：
+\`\`\`bash
+git fetch origin
+git checkout ${{ env.branch_name }}
+\`\`\`
+
+2. 解決衝突檔案中的衝突標記：
+   - 開啟有衝突的檔案
+   - 尋找 \`<<<<<<<\`, \`=======\`, \`>>>>>>>\` 標記
+   - 決定保留哪些變更
+   - 移除衝突標記
+
+3. 完成解決：
+\`\`\`bash
+git add .
+git commit -m \"Resolve merge conflicts\"
+git push
+\`\`\`
+
+---"
+            LABELS="upstream-update,automated,merge-conflict"
+          else
+            TITLE="⬆️ Update ${{ matrix.cog.name }} from upstream"
+            CONFLICT_SECTION=""
+            LABELS="upstream-update,automated"
+          fi
+          
+          PR_BODY="## 自動更新 ${{ matrix.cog.name }}
+
+此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+
+**上游倉庫**: ${{ matrix.cog.upstream }}
+**分支**: ${{ steps.check.outputs.upstream_branch }}
+**路徑**: ${{ matrix.cog.path }}
+
+${CONFLICT_SECTION}
+
+### ✅ 檢查清單
+$([ "$HAS_CONFLICTS" = "true" ] && echo "- [ ] 解決合併衝突")
+- [ ] 查看變更內容
+- [ ] 測試功能是否正常
+- [ ] 檢查是否需要更新依賴
+- [ ] 確認授權條款未變更
+
+---
+🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成"
+          
+          # 使用 gh CLI 創建 PR
+          gh pr create \
+            --title "${TITLE}" \
+            --body "${PR_BODY}" \
+            --base main \
+            --head ${{ env.branch_name }} \
+            --label "${LABELS}"
+          
+          if [ "$HAS_CONFLICTS" = "true" ]; then
+            echo "::notice::Created PR with merge conflicts that need manual resolution"
+          fi
 
       - name: Report Error
         if: steps.check.outputs.error != ''
