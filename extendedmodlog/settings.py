@@ -162,5 +162,10 @@ inv_settings = {
         "embed": True,
     },
     "ignored_channels": [],
+<<<<<<< HEAD
+=======
+    "ignored_users": [],
+    "ignored_mods": [],
+>>>>>>> upstream-extendedmodlog/master
     "invite_links": {},
 }
