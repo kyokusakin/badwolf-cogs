@@ -1,8 +1,12 @@
 {
     "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
     "author": [
+<<<<<<< HEAD
         "Vexed (@vexingvexed)",
         "Badwolf_TW"
+=======
+        "Vexed (@vexingvexed)"
+>>>>>>> upstream-anotherpingcog/master
     ],
     "description": "Replace the ping command with a rich embed that shows ping time and message time. It is colour coded: red, orange and green, and the bot owner can customise the colours and emojis for different latency levels, as well as force an embed.",
     "end_user_data_statement": "This cog does not persistently store data or metadata about users.",
