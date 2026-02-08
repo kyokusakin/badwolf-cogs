@@ -1,0 +1,23 @@
+{
+  "author": [
+    "Badwolf_TW"
+  ],
+  "description": "提供簡單賭博遊戲的 cog，例如擲骰子、老虎機與 21 點。",
+  "install_msg": "感謝安裝 casino cog。請使用 `[p]help casino` 獲取更多資訊。",
+  "short": "賭場小遊戲合集。",
+  "min_python_version": [
+    3,
+    9,
+    0
+  ],
+  "requirements": [
+    "discord.py"
+  ],
+  "tags": [
+    "casino",
+    "games",
+    "fun"
+  ],
+  "type": "COG",
+  "end_user_data_statement": "這個 cog 不會儲存任何使用者資料或元數據。"
+}

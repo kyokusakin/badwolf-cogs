@@ -1,0 +1,28 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "author": [
+        "Badwolf_TW"
+    ],
+    "description": "Integrates OpenAI's API with your Discord server, allowing advanced AI interactions such as responding to messages, generating images, and supporting custom prompts.",
+    "end_user_data_statement": "This cog securely stores API keys and configuration. It may store short-term chat logs and extracted long-term memories (summary/facts) to improve responses. Users can opt out and delete their stored data, and guild admins can configure retention/limits.",
+    "install_msg": "Thank you for installing the OpenAI Chat cog! Configure it by setting your API key using `[p]genai setkey`. Customize channels, prompts, and more with `[p]genai` commands.",
+    "min_bot_version": "3.5.1",
+    "min_python_version": [
+        3,
+        8,
+        1
+    ],
+    "name": "OpenAIChat",
+  "requirements": [
+    "google-genai",
+    "tenacity",
+    "aiosqlite"
+  ],
+    "short": "Advanced AI Chatbot Integration",
+    "tags": [
+        "ai",
+        "genai",
+        "chatbot",
+        "utility"
+    ]
+}

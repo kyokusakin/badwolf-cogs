@@ -1,0 +1,312 @@
+name: Check Upstream Updates
+
+on:
+  schedule:
+    # 每天 UTC 00:00 執行（台灣時間早上 8:00）
+    - cron: '0 0 * * *'
+  workflow_dispatch: # 允許手動觸發
+
+jobs:
+  # 讀取配置檔並生成動態 matrix
+  load-config:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Read upstream-config.yml and generate matrix
+        id: set-matrix
+        run: |
+          # 使用 yq 解析 YAML 並轉換為 JSON matrix
+          # 只包含未被註解的 cogs
+          MATRIX=$(yq -o=json '.cogs | to_entries | map(select(.value != null)) | map({
+            "name": .key,
+            "upstream": .value.upstream,
+            "path": .value.path,
+            "branch": .value.branch
+          })' .github/upstream-config.yml | jq -c '{cog: .}')
+          
+          echo "Generated matrix: $MATRIX"
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  check-updates:
+    runs-on: ubuntu-latest
+    needs: load-config
+    if: ${{ needs.load-config.outputs.matrix != '' && needs.load-config.outputs.matrix != '{"cog":[]}' }}
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    
+    strategy:
+      matrix: ${{ fromJson(needs.load-config.outputs.matrix) }}
+      fail-fast: false
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add Upstream Remote
+        id: remote
+        run: |
+          git remote add upstream-${{ matrix.cog.name }} ${{ matrix.cog.upstream }} 2>/dev/null || true
+          
+          # 嘗試 fetch，並捕獲錯誤
+          if ! git fetch upstream-${{ matrix.cog.name }} 2>&1; then
+            echo "fetch_failed=true" >> $GITHUB_OUTPUT
+            echo "::error::Failed to fetch from upstream: ${{ matrix.cog.upstream }}"
+            exit 0
+          fi
+          
+          echo "fetch_failed=false" >> $GITHUB_OUTPUT
+
+      - name: Check for Updates
+        id: check
+        if: steps.remote.outputs.fetch_failed != 'true'
+        run: |
+          # 使用配置檔中指定的分支，如果沒有則自動偵測
+          UPSTREAM_BRANCH="${{ matrix.cog.branch }}"
+          if [ -z "$UPSTREAM_BRANCH" ]; then
+            UPSTREAM_BRANCH=$(git ls-remote --symref upstream-${{ matrix.cog.name }} HEAD | head -n 1 | awk '{print $2}' | sed 's/refs\/heads\///')
+            if [ -z "$UPSTREAM_BRANCH" ]; then
+              UPSTREAM_BRANCH="main"
+            fi
+          fi
+          
+          echo "upstream_branch=$UPSTREAM_BRANCH" >> $GITHUB_OUTPUT
+          
+          # 驗證分支是否存在
+          if ! git rev-parse --verify "upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH" >/dev/null 2>&1; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Upstream branch '$UPSTREAM_BRANCH' not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 檢查上游路徑是否存在
+          if ! git ls-tree -r upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH --name-only | grep -q "^${{ matrix.cog.path }}/"; then
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Upstream path not found" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # 比較差異
+          if [ -d "${{ matrix.cog.path }}" ]; then
+            DIFF=$(git diff HEAD upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH -- ${{ matrix.cog.path }}/ | wc -l)
+            if [ "$DIFF" -gt 0 ]; then
+              echo "has_updates=true" >> $GITHUB_OUTPUT
+            else
+              echo "has_updates=false" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "has_updates=false" >> $GITHUB_OUTPUT
+            echo "error=Local path not found" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Update Branch
+        if: steps.check.outputs.has_updates == 'true'
+        id: branch
+        run: |
+          BRANCH_NAME="update/${{ matrix.cog.name }}-$(date +%Y%m%d)"
+          git checkout -b $BRANCH_NAME
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+
+      - name: Merge Upstream Changes
+        if: steps.check.outputs.has_updates == 'true'
+        id: merge
+        continue-on-error: true
+        run: |
+          # 嘗試合併上游
+          UPSTREAM_BRANCH=${{ steps.check.outputs.upstream_branch }}
+          
+          echo "Merging changes from upstream..."
+          
+          # 這裡我們使用一個技巧：
+          # 1. 執行 merge (不 commit)
+          # 2. 將非目標目錄的檔案還原到 HEAD
+          # 3. 清理非目標目錄的未追蹤檔案
+          
+          git merge --no-commit --no-ff --allow-unrelated-histories \
+            upstream-${{ matrix.cog.name }}/$UPSTREAM_BRANCH || echo "merge_conflict=true" >> $GITHUB_OUTPUT
+          
+          echo "Isolating changes to ${{ matrix.cog.path }}..."
+          
+          # 1. 重置暫存區 (Index)，但保留工作目錄的變更
+          git reset HEAD
+          
+          # 2. 還原所有非目標路徑的檔案到 HEAD 狀態
+          # 使用 pathspec exclude :!path
+          git checkout HEAD -- . ":!${{ matrix.cog.path }}"
+          
+          # 3. 清理非目標路徑的新增檔案
+          # -f: force, -d: directories, -e: exclude pattern
+          git clean -fd -e "${{ matrix.cog.path }}/"
+          
+          # 4. 重新加入目標路徑的變更
+          git add ${{ matrix.cog.path }}/
+          
+          # 檢查是否有衝突標記 (在目標目錄中)
+          if grep -r "^<<<<<<< " ${{ matrix.cog.path }}/; then
+            echo "has_conflicts=true" >> $GITHUB_OUTPUT
+            
+            # 列出有衝突的檔案
+            CONFLICT_FILES=$(grep -l -r "^<<<<<<< " ${{ matrix.cog.path }}/ | tr '\n' ', ' | sed 's/,$//')
+            echo "conflict_files=$CONFLICT_FILES" >> $GITHUB_OUTPUT
+            
+            # 提交保留衝突內容
+            git commit -m "⚠️ Update ${{ matrix.cog.name }} from upstream (with conflicts)" -m "Conflicts in: $CONFLICT_FILES"
+          else
+            # 檢查是否有變更需要提交
+            if ! git diff --cached --quiet; then
+              echo "has_conflicts=false" >> $GITHUB_OUTPUT
+              git commit -m "✅ Update ${{ matrix.cog.name }} from upstream"
+            else
+               echo "No effective changes after filtering"
+               echo "has_updates=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
+      - name: Push Changes
+        if: steps.check.outputs.has_updates == 'true'
+        run: |
+          git push -f origin ${{ steps.branch.outputs.branch_name }}
+
+      - name: Ensure Labels Exist
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh label create upstream-update --color 3fb542 --description "From upstream update" || true
+          gh label create automated --color ededed --description "Automated PR" || true
+          gh label create merge-conflict --color d73a4a --description "Has merge conflicts" || true
+
+      - name: Create Pull Request
+        if: steps.check.outputs.has_updates == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HAS_CONFLICTS="${{ steps.merge.outputs.has_conflicts }}"
+          CONFLICT_FILES="${{ steps.merge.outputs.conflict_files }}"
+          
+          if [ "$HAS_CONFLICTS" = "true" ]; then
+            TITLE="⚠️ Update ${{ matrix.cog.name }} from upstream (Conflicts)"
+            LABELS="upstream-update,automated,merge-conflict"
+            
+            cat > pr_body.md <<'EOF'
+          ## 自動更新 ${{ matrix.cog.name }}
+          
+          此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+          
+          **上游倉庫**: ${{ matrix.cog.upstream }}
+          **分支**: ${{ steps.check.outputs.upstream_branch }}
+          **路徑**: ${{ matrix.cog.path }}
+          
+          ## ⚠️ 合併衝突
+          
+          此更新包含合併衝突，需要手動解決。
+          
+          **衝突檔案**: CONFLICT_FILES_PLACEHOLDER
+          
+          ### 🔧 解決步驟
+          
+          1. Checkout 這個分支：
+          ```bash
+          git fetch origin
+          git checkout BRANCH_NAME_PLACEHOLDER
+          ```
+          
+          2. 解決衝突檔案中的衝突標記：
+             - 開啟有衝突的檔案
+             - 尋找 \`<<<<<<<\`, \`=======\`, \`>>>>>>>\` 標記
+             - 決定保留哪些變更
+             - 移除衝突標記
+          
+          3. 完成解決：
+          ```bash
+          git add .
+          git commit -m "Resolve merge conflicts"
+          git push
+          ```
+          
+          ---
+          
+          ### ✅ 檢查清單
+          - [ ] 解決合併衝突
+          - [ ] 查看變更內容
+          - [ ] 測試功能是否正常
+          - [ ] 檢查是否需要更新依賴
+          - [ ] 確認授權條款未變更
+          
+          ---
+          🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成
+          EOF
+            
+            # 去除每行開頭的縮排 (10個空格)，以確保 markdown 格式正確
+            sed -i 's/^          //' pr_body.md
+            
+            sed -i "s|CONFLICT_FILES_PLACEHOLDER|${CONFLICT_FILES}|g" pr_body.md
+            sed -i "s|BRANCH_NAME_PLACEHOLDER|${{ steps.branch.outputs.branch_name }}|g" pr_body.md
+            
+          else
+            TITLE="⬆️ Update ${{ matrix.cog.name }} from upstream"
+            LABELS="upstream-update,automated"
+            
+            cat > pr_body.md <<'EOF'
+          ## 自動更新 ${{ matrix.cog.name }}
+          
+          此 PR 由 GitHub Actions 自動創建，從上游倉庫更新 cog。
+          
+          **上游倉庫**: ${{ matrix.cog.upstream }}
+          **分支**: ${{ steps.check.outputs.upstream_branch }}
+          **路徑**: ${{ matrix.cog.path }}
+          
+          ### ✅ 檢查清單
+          - [ ] 查看變更內容
+          - [ ] 測試功能是否正常
+          - [ ] 檢查是否需要更新依賴
+          - [ ] 確認授權條款未變更
+          
+          ---
+          🤖 由 [Check Upstream Updates](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 自動生成
+          EOF
+            
+            sed -i 's/^          //' pr_body.md
+          fi
+          
+          # 使用 gh CLI 創建 PR
+          if ! gh pr create \
+            --title "${TITLE}" \
+            --body-file pr_body.md \
+            --base main \
+            --head ${{ steps.branch.outputs.branch_name }} \
+            --label "${LABELS}"; then
+            echo "::error::無法創建 PR。請確認 Repository Settings > Actions > General > Workflow permissions 中已勾選 'Allow GitHub Actions to create and approve pull requests'。"
+            exit 1
+          fi
+          
+          if [ "$HAS_CONFLICTS" = "true" ]; then
+            echo "::notice::Created PR with merge conflicts that need manual resolution"
+          fi
+
+      - name: Report Error
+        if: steps.check.outputs.error != ''
+        run: |
+          echo "::warning::${{ matrix.cog.name }}: ${{ steps.check.outputs.error }}"
+
+  summary:
+    runs-on: ubuntu-latest
+    needs: check-updates
+    if: always()
+    steps:
+      - name: Check Results
+        run: |
+          echo "Upstream update check completed!"
+          echo "Check the Actions tab for detailed results."

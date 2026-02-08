@@ -1,0 +1,51 @@
+# Upstream Configuration for Cogs
+# 這個檔案定義了每個 cog 的上游來源
+
+cogs:
+  anotherpingcog:
+    upstream: https://github.com/Vexed01/Vex-Cogs
+    path: anotherpingcog
+    branch: master
+    notes: Vexed 的 ping cog
+
+  autoroom:
+    upstream: https://github.com/PhasecoreX/PCXCogs
+    path: autoroom
+    branch: master
+    notes: PhasecoreX 的自動語音頻道管理
+
+#  counting:
+#    upstream: https://github.com/ltzmax/maxcogs
+#    path: counting
+#    branch: main
+#    notes: fakesmile/ltzmax 的計數遊戲
+
+  extendedmodlog:
+    upstream: https://github.com/TrustyJAID/Trusty-cogs
+    path: extendedmodlog
+    branch: master
+    notes: TrustyJAID 的擴展 modlog
+
+  inviteblocklist:
+    upstream: https://github.com/TrustyJAID/Trusty-cogs
+    path: inviteblocklist
+    branch: master
+    notes: TrustyJAID 的邀請封鎖清單
+
+  #uptimeresponder:
+  #  upstream: https://github.com/Vexed01/Vex-Cogs
+  #  path: uptimeresponder
+  #  branch: master
+  #  notes: Vexed 的運行時間監控
+
+  warnsystem:
+    upstream: https://github.com/laggron42/Laggrons-Dumb-Cogs
+    path: warnsystem
+    branch: v3
+    notes: retke (El Laggron) 的警告系統
+
+# 說明：
+# - upstream: 上游 Git 倉庫的 URL
+# - path: cog 在上游倉庫中的路徑
+# - branch: 要追蹤的分支（通常是 main 或 master）
+# - notes: 備註說明
