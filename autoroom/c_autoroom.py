@@ -128,13 +128,10 @@ class AutoRoomCommands(MixinMeta, ABC):
 
         await ctx.send(str(room_settings.display(access_settings)))
 
-    @autoroom.command(name='timeout')
+    @autoroom.command(name="timeout")
     @commands.mod_or_can_manage_channel()
     async def autoroom_timeout(self, ctx: commands.Context, seconds: int) -> None:
-        """
-        Set the auto-room timeout.
-        Use -1 to disable the timeout.
-        """
+        """Set the auto-room timeout. Use -1 to disable the timeout."""
         if not ctx.guild:
             return
         if seconds == -1:
@@ -145,7 +142,6 @@ class AutoRoomCommands(MixinMeta, ABC):
         else:
             await self.config.guild(ctx.guild).timeout_seconds.set(seconds)
             await ctx.send(f"Auto-room timeout has been set to {seconds} seconds.")
-
     @autoroom.command(name="name")
     async def autoroom_name(self, ctx: commands.Context, *, name: str) -> None:
         """Change the name of your AutoRoom."""

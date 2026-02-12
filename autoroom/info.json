@@ -1,7 +1,7 @@
 {
     "name": "AutoRoom",
     "author": [
-        "PhasecoreX (PhasecoreX#0635)",
+        "PhasecoreX",
         "Badwolf_TW"
     ],
     "short": "Automatic voice channel management.",

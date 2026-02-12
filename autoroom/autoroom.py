@@ -407,6 +407,7 @@ class AutoRoom(
         )
         if not required_check or not optional_check:
             return
+
         # Ignore self (the bot)
         if member.id == self.bot.user.id:
             # If the bot joins a voice channel, it should immediately leave
@@ -420,6 +421,7 @@ class AutoRoom(
             if member.voice and member.voice.channel in dest_category.voice_channels:
                 await member.edit(voice_channel=None)
             return
+
         # Check that user isn't spamming
         bucket = self.bucket_autoroom_create.get_bucket(member)
         timeout_seconds = await self.config.guild(member.guild).timeout_seconds()
@@ -435,16 +437,18 @@ class AutoRoom(
                             discord.HTTPException,
                         ):
                             await member.send(
-                                "你好！看起來你想建立一個自動房間"
+                                "Hello there! It looks like you're trying to make an AutoRoom."
                                 "\n"
-                                f"請注意，您只被允許建立 **{bucket.rate}** 個自動房間"
-                                f"每 **{humanize_timedelta(seconds=bucket.per)}**"
+                                f"Please note that you are only allowed to make **{bucket.rate}** AutoRooms "
+                                f"every **{humanize_timedelta(seconds=bucket.per)}**."
                                 "\n"
-                                f"你可以在 **{humanize_timedelta(seconds=max(retry_after, 1))}** 後再試一次"
+                                f"You can try again in **{humanize_timedelta(seconds=max(retry_after, 1))}**."
                             )
                             if timeout_seconds > 0:
-                                await member.timeout(timedelta(seconds=timeout_seconds), reason="Spam voice channel")
-
+                                await member.timeout(
+                                    timedelta(seconds=timeout_seconds),
+                                    reason="Spam voice channel",
+                                )
                     return
 
         # Generate channel name
