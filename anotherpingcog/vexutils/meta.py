@@ -2,19 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-<<<<<<< HEAD
-=======
 from logging import Logger, getLogger
->>>>>>> upstream-anotherpingcog/master
 from pathlib import Path
 from typing import Literal, NamedTuple
 
 import aiohttp
-<<<<<<< HEAD
-from red_commons.logging import RedTraceLogger
-from red_commons.logging import getLogger as red_get_logger
-=======
->>>>>>> upstream-anotherpingcog/master
 from redbot.core import VersionInfo, commands
 from redbot.core import version_info as cur_red_version
 from rich import box as rich_box
@@ -24,21 +16,13 @@ from .chat import no_colour_rich_markup
 from .consts import DOCS_BASE, GREEN_CIRCLE, RED_CIRCLE
 from .loop import VexLoop
 
-<<<<<<< HEAD
-log = red_get_logger("red.vex-utils")
-=======
 log = getLogger("red.vex-utils")
->>>>>>> upstream-anotherpingcog/master
 
 
 cog_ver_lock = asyncio.Lock()
 
 
-<<<<<<< HEAD
-def get_vex_logger(name: str) -> RedTraceLogger:
-=======
 def get_vex_logger(name: str) -> Logger:
->>>>>>> upstream-anotherpingcog/master
     """Get a logger for the given name.
 
     Parameters
@@ -58,11 +42,7 @@ def get_vex_logger(name: str) -> Logger:
     else:  # otherwise use full path
         final_name += name
 
-<<<<<<< HEAD
-    return red_get_logger(final_name)
-=======
     return getLogger(final_name)
->>>>>>> upstream-anotherpingcog/master
 
 
 def format_help(self: commands.Cog, ctx: commands.Context) -> str:
@@ -84,12 +64,6 @@ def format_help(self: commands.Cog, ctx: commands.Context) -> str:
     """
     docs = DOCS_BASE.format(self.qualified_name.lower())
     pre_processed = super(type(self), self).format_help_for_context(ctx)  # type:ignore
-<<<<<<< HEAD
-
-    return (
-        f"{pre_processed}\n\nAuthor: **`{self.__author__}`**\nCog Version: "  # type:ignore
-        f"**`{self.__version__}`**\n{docs}"  # type:ignore
-=======
     contribs = (
         f"\nContributors: **`{','.join(self.__contributors__)}`**"
         if hasattr(self, "__contributors__")
@@ -99,7 +73,6 @@ def format_help(self: commands.Cog, ctx: commands.Context) -> str:
     return (
         f"{pre_processed}\n\nAuthor: **`{self.__author__}`**{contribs}\n"  # type:ignore
         f"Cog Version: **`{self.__version__}`**\n{docs}"  # type:ignore
->>>>>>> upstream-anotherpingcog/master
     )
     # adding docs link here so doesn't show up in auto generated docs
 

@@ -27,13 +27,8 @@ DEFAULT_CONF = {
 }
 
 DEFAULT_FOOTER = (
-<<<<<<< HEAD
+    "若機器人體感順暢，不必過度在意較高數值\n"
     "延遲分級: 極佳 | 良好 | 普通 | 差 | 極差"
-
-=======
-    "If the bot feels fast, don't worry about high numbers\nScale: Excellent | "
-    "Good | Alright | Bad | Very Bad"
->>>>>>> upstream-anotherpingcog/master
 )
 
 LEFT_ARROW = "\N{LEFTWARDS BLACK ARROW}\N{VARIATION SELECTOR-16}"
@@ -69,11 +64,7 @@ class AnotherPingCog(commands.Cog):
         log.trace("Cache loaded: %s", self.cache)
 
     async def cog_unload(self) -> None:
-<<<<<<< HEAD
-        global old_ping
-=======
         global old_ping  # noqa: F824
->>>>>>> upstream-anotherpingcog/master
         if old_ping:
             with contextlib.suppress(Exception):
                 self.bot.remove_command("ping")
@@ -159,21 +150,12 @@ class AnotherPingCog(commands.Cog):
             extra = box(f"{ws_latency} ms", "py")
             embed.set_field_at(0, name="Discord WS", value=f"{ws_latency_text}{extra}")
             extra = box(f"{m_latency} ms", "py")
-<<<<<<< HEAD
             embed.add_field(name="訊息發送", value=f"{m_latency_text}{extra}")
-=======
-            embed.add_field(name="Message Send", value=f"{m_latency_text}{extra}")
->>>>>>> upstream-anotherpingcog/master
             embed.colour = colour
             await message.edit(
                 content=(
                     (
-<<<<<<< HEAD
-                        "Discord的斜線指令會導致訊息發送延遲過高，請直接使用指令來檢查"
-=======
-                        "Message Send is worse for slash commands. Try using the text command for "
-                        "a better result."
->>>>>>> upstream-anotherpingcog/master
+                        "斜線指令的訊息發送延遲通常較高，建議改用文字指令以取得更準確結果。"
                     )
                     if ctx.interaction
                     else None
@@ -183,11 +165,7 @@ class AnotherPingCog(commands.Cog):
 
         else:
             data = [
-<<<<<<< HEAD
                 ["Discord WS", "訊息發送"],
-=======
-                ["Discord WS", "Message Send"],
->>>>>>> upstream-anotherpingcog/master
                 [ws_latency_text, m_latency_text],
                 [f"{ws_latency} ms", f"{m_latency} ms"],
             ]
@@ -209,7 +187,6 @@ class AnotherPingCog(commands.Cog):
         self, ws_latency: int, m_latency: int, settings: Cache, emojis: bool
     ) -> tuple[str, str]:
         if ws_latency < 50:
-<<<<<<< HEAD
             ws_latency_text = f"{settings.green.emoji} 極佳" if emojis else "極佳"
         elif ws_latency < 150:
             ws_latency_text = f"{settings.green.emoji} 良好" if emojis else "良好"
@@ -230,28 +207,6 @@ class AnotherPingCog(commands.Cog):
             m_latency_text = f"{settings.red.emoji} 差" if emojis else "差"
         else:
             m_latency_text = f"{settings.red.emoji} 極差" if emojis else "極差"
-=======
-            ws_latency_text = f"{settings.green.emoji} Excellent" if emojis else "Excellent"
-        elif ws_latency < 150:
-            ws_latency_text = f"{settings.green.emoji} Good" if emojis else "Good"
-        elif ws_latency < 250:
-            ws_latency_text = f"{settings.orange.emoji} Alright" if emojis else "Alright"
-        elif ws_latency < 500:
-            ws_latency_text = f"{settings.red.emoji} Bad" if emojis else "Bad"
-        else:
-            ws_latency_text = f"{settings.red.emoji} Very Bad" if emojis else "Very Bad"
-
-        if m_latency < 75:
-            m_latency_text = f"{settings.green.emoji} Excellent" if emojis else "Excellent"
-        elif m_latency < 225:
-            m_latency_text = f"{settings.green.emoji} Good" if emojis else "Good"
-        elif m_latency < 350:
-            m_latency_text = f"{settings.orange.emoji} Alright" if emojis else "Alright"
-        elif m_latency < 600:
-            m_latency_text = f"{settings.red.emoji} Bad" if emojis else "Bad"
-        else:
-            m_latency_text = f"{settings.red.emoji} Very Bad" if emojis else "Very Bad"
->>>>>>> upstream-anotherpingcog/master
 
         return ws_latency_text, m_latency_text
 
