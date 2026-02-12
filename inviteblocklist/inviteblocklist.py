@@ -1,10 +1,6 @@
 import re
 from typing import Pattern, Union
-<<<<<<< HEAD
-from datetime import timedelta
 import asyncio
-=======
->>>>>>> upstream-inviteblocklist/master
 
 import discord
 from discord.ext.commands.converter import IDConverter
@@ -86,7 +82,6 @@ class InviteBlocklist(commands.Cog):
             blacklist=[],
             whitelist=[],
             all_invites=False,
-<<<<<<< HEAD
             staff_role=None,
             immunity_list=[],
         )
@@ -103,10 +98,6 @@ class InviteBlocklist(commands.Cog):
             await asyncio.sleep(1)
         log.warning("WarnSystem cog is not available. Some functionalities will be disabled.")
         return False
-=======
-            immunity_list=[],
-        )
->>>>>>> upstream-inviteblocklist/master
 
     async def red_delete_data_for_user(self, **kwargs):
         """
@@ -114,42 +105,34 @@ class InviteBlocklist(commands.Cog):
         """
         return
 
-<<<<<<< HEAD
     async def check_immunity_list(self, message: discord.Message) -> bool:
-        if not message.guild or await self.bot.is_owner(message.author):
+        is_immune = False
+        if not message.guild:
             return True
-
-        mod_role_id = await self.config.guild(message.guild).mod_role()
-        mod_role = discord.utils.get(message.guild.roles, id=mod_role_id)
-
-        permissions = getattr(message.author, 'guild_permissions', None)
-        if permissions and (
-            permissions.administrator or
-            permissions.manage_guild or
-            permissions.manage_channels or
-            (mod_role and mod_role in message.author.roles)
-        ):
+        if await self.bot.is_owner(message.author):
             return True
-
+        global_perms = await self.bot.allowed_by_whitelist_blacklist(message.author)
+        if not global_perms:
+            return global_perms
         immunity_list = await self.config.guild(message.guild).immunity_list()
         channel = message.channel
-        return any([
-            channel.id in immunity_list,
-            channel.category_id in immunity_list if channel.category_id else False,
-            message.author.id in immunity_list,
-            any(role.id in immunity_list for role in getattr(message.author, "roles", []) if not role.is_default())
-        ])
+        if immunity_list:
+            if channel.id in immunity_list:
+                is_immune = True
+            if getattr(channel, "category_id", None) in immunity_list:
+                is_immune = True
+            if message.author.id in immunity_list:
+                is_immune = True
+            for role in getattr(message.author, "roles", []):
+                if role.is_default():
+                    continue
+                if role.id in immunity_list:
+                    is_immune = True
+        return is_immune
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or not message.guild:
-=======
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot:
-            return
-        if not message.guild:
->>>>>>> upstream-inviteblocklist/master
             return
         await self._handle_message_search(message)
 
@@ -158,31 +141,6 @@ class InviteBlocklist(commands.Cog):
         """
         Handle messages edited with links
         """
-<<<<<<< HEAD
-        channel = self.bot.get_channel(payload.channel_id)
-        if not channel:
-            return
-        try:
-            message = await channel.fetch_message(payload.message_id)
-        except discord.NotFound:
-            return
-        if message.author.bot or not message.guild:
-            return
-        await self._handle_message_search(message)
-
-    async def _process_edit_payload(self, guild, payload, chan):
-        guild_settings = await self.config.guild(guild).all()
-        if guild_settings["blacklist"] or guild_settings["whitelist"] or guild_settings["all_invites"]:
-            if payload.cached_message:
-                await self._handle_message_search(payload.cached_message)
-            elif "edited_timestamp" in payload.data:
-                msg = discord.Message(state=chan._state, channel=chan, data=payload.data)
-                await self._handle_message_search(msg)
-
-    async def _handle_message_search(self, message: discord.Message):
-        if await self.bot.is_automod_immune(message.author):
-            log.debug("Message context is Bypass")
-=======
         if not payload.guild_id:
             return
         if payload.cached_message:
@@ -210,53 +168,22 @@ class InviteBlocklist(commands.Cog):
                     # This should only be happening on links posted by users
                     return
                 msg = discord.Message(state=chan._state, channel=chan, data=payload.data)
-                # construct the message object regardless of cache state
-                # d.py will normally ignore these edits and not build the full object
-                # so we manually construct it here for simplicity
+                # Construct a message object when discord.py does not.
                 await self._handle_message_search(msg)
-
-    async def check_immunity_list(self, message: discord.Message) -> bool:
-        is_immune = False
-        if not message.guild:
-            return True
-        if await self.bot.is_owner(message.author):
-            return True
-        global_perms = await self.bot.allowed_by_whitelist_blacklist(message.author)
-        if not global_perms:
-            return global_perms
-        immunity_list = await self.config.guild(message.guild).immunity_list()
-        channel = message.channel
-        if immunity_list:
-            if channel.id in immunity_list:
-                is_immune = True
-            if getattr(channel, "category_id", None) in immunity_list:
-                is_immune = True
-            if message.author.id in immunity_list:
-                is_immune = True
-            for role in getattr(message.author, "roles", []):
-                if role.is_default():
-                    continue
-                if role.id in immunity_list:
-                    is_immune = True
-        return is_immune
 
     async def _handle_message_search(self, message: discord.Message):
         if await self.bot.is_automod_immune(message.author):
->>>>>>> upstream-inviteblocklist/master
             return
         if version_info >= VersionInfo.from_str("3.4.0"):
             if await self.bot.cog_disabled_in_guild(self, message.guild):
                 return
-<<<<<<< HEAD
-        if await self.check_immunity_list(message):
-            log.debug("Message context is immune from invite blocklist")
+        if await self.check_immunity_list(message) is True:
+            log.debug("%r is immune from invite blocklist", message)
             return
-
         find = INVITE_RE.findall(message.clean_content)
-        if not find:
-            return
-
         guild = message.guild
+        if guild is None or not find:
+            return
         staff_role_id = await self.config.guild(guild).staff_role()
         if staff_role_id:
             staff_role_mention = f"<@&{staff_role_id}>"
@@ -266,29 +193,48 @@ class InviteBlocklist(commands.Cog):
         await self._process_invites(guild, message, find, staff_role_mention)
 
     async def _process_invites(self, guild, message, invites, staff_role_mention):
-        whitelist = await self.config.guild(guild).whitelist()
-        blacklist = await self.config.guild(guild).blacklist()
-        all_invites = await self.config.guild(guild).all_invites()
-
-        for invite_code in invites:
-            try:
-                invite = await self.bot.fetch_invite(invite_code)
-            except discord.NotFound:
-                continue
-
-            if invite.guild.id == guild.id:
-                return
-
-            if whitelist and invite.guild.id in whitelist:
-                return
-
-            if blacklist and invite.guild.id in blacklist:
-                await self._handle_unauthorized_invite(guild, message, staff_role_mention)
-                return
-
-            if all_invites:
-                await self._handle_unauthorized_invite(guild, message, staff_role_mention)
-                return
+        error_message = (
+            "There was an error fetching a potential invite link. "
+            f"The server ID could not be obtained so message ID {repr(message)} "
+            "may not have been properly deleted."
+        )
+        if invites and await self.config.guild(guild).all_invites():
+            await self._handle_unauthorized_invite(guild, message, staff_role_mention)
+            return
+        if whitelist := await self.config.guild(guild).whitelist():
+            for i in invites:
+                inv = resolve_invite(i)
+                try:
+                    invite = await self.bot.fetch_invite(inv.code)
+                except discord.errors.NotFound:
+                    log.error(error_message)
+                    continue
+                except Exception:
+                    log.exception(error_message)
+                    continue
+                if invite.guild.id == guild.id:
+                    continue
+                if invite.guild.id not in whitelist:
+                    await self._handle_unauthorized_invite(guild, message, staff_role_mention)
+                    return
+            return
+        if blacklist := await self.config.guild(guild).blacklist():
+            for i in invites:
+                inv = resolve_invite(i)
+                try:
+                    invite = await self.bot.fetch_invite(inv.code)
+                except discord.errors.NotFound:
+                    log.error(error_message)
+                    continue
+                except Exception:
+                    log.exception(error_message)
+                    continue
+                if invite.guild.id == guild.id:
+                    continue
+                if invite.guild.id in blacklist:
+                    await self._handle_unauthorized_invite(guild, message, staff_role_mention)
+                    return
+            return
 
     async def _handle_unauthorized_invite(self, guild, message, staff_role_mention):
         try:
@@ -308,82 +254,7 @@ class InviteBlocklist(commands.Cog):
 
     @commands.group(name="inviteblock", aliases=["ibl", "inviteblocklist"])
     @commands.mod_or_permissions(manage_messages=True)
-=======
-        if await self.check_immunity_list(message) is True:
-            log.debug("%r is immune from invite blocklist", message)
-            return
-        find = INVITE_RE.findall(message.clean_content)
-        guild = message.guild
-        error_message = (
-            "There was an error fetching a potential invite link. "
-            f"The server ID could not be obtained so message ID {repr(message)} "
-            "may not have been properly deleted."
-        )
-        if guild is None:
-            return
-        if find and await self.config.guild(guild).all_invites():
-            try:
-                await message.delete()
-            except discord.errors.Forbidden:
-                log.error(
-                    "I tried to delete an invite link posted in %r "
-                    "but lack the manage messages permission.",
-                    message.channel,
-                )
-            return
-        if whitelist := await self.config.guild(guild).whitelist():
-            for i in find:
-                inv = resolve_invite(i)
-                try:
-                    invite = await self.bot.fetch_invite(inv.code)
-                except discord.errors.NotFound:
-                    log.error(error_message)
-                    continue
-                except Exception:
-                    log.exception(error_message)
-                    continue
-                if invite.guild.id == guild.id:
-                    continue
-                if invite.guild.id not in whitelist:
-                    try:
-                        await message.delete()
-                    except discord.errors.Forbidden:
-                        log.error(
-                            "I tried to delete an invite link posted in %r "
-                            "but lack the manage messages permission.",
-                            message.channel,
-                        )
-                    return
-            return
-        if blacklist := await self.config.guild(guild).blacklist():
-            for i in find:
-                inv = resolve_invite(i)
-                try:
-                    invite = await self.bot.fetch_invite(inv.code)
-                except discord.errors.NotFound:
-                    log.error(error_message)
-                    continue
-                except Exception:
-                    log.exception(error_message)
-                    continue
-                if invite.guild.id == guild.id:
-                    continue
-                if invite.guild.id in blacklist:
-                    try:
-                        await message.delete()
-                    except discord.errors.Forbidden:
-                        log.error(
-                            "I tried to delete an invite link posted in %r "
-                            "but lack the manage messages permission.",
-                            message.channel,
-                        )
-                    return
-            return
-
-    @commands.group(name="inviteblock", aliases=["ibl", "inviteblocklist"])
-    @commands.mod_or_permissions(manage_messages=True)
     @commands.guild_only()
->>>>>>> upstream-inviteblocklist/master
     async def invite_block(self, ctx: commands.Context):
         """
         Settings for managing invite link blocking
@@ -413,7 +284,6 @@ class InviteBlocklist(commands.Cog):
         Commands for fine tuning allowed channels, users, or roles
         """
         pass
-<<<<<<< HEAD
     
     @invite_block.group(name="staffrole")
     async def staffrole(self, ctx: commands.Context):
@@ -421,9 +291,6 @@ class InviteBlocklist(commands.Cog):
         Commands for tag
         """
         pass
-=======
-
->>>>>>> upstream-inviteblocklist/master
     ##########################################################################################
     #                                    Blocklist Settings                                  #
     ##########################################################################################
@@ -697,7 +564,6 @@ class InviteBlocklist(commands.Cog):
                 msg += f"{obj.name}\n"
         for page in pagify(msg):
             await ctx.maybe_send_embed(page)
-<<<<<<< HEAD
             
     ##########################################################################################
     #                                  Staff Settings                                        #
@@ -714,5 +580,3 @@ class InviteBlocklist(commands.Cog):
         """Remove the staff role to mention when an invite link is deleted"""
         await self.config.guild(ctx.guild).staff_role.set(None)
         await ctx.send("Staff role for invite links has been removed.")
-=======
->>>>>>> upstream-inviteblocklist/master
