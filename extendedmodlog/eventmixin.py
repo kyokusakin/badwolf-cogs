@@ -387,6 +387,10 @@ class EventMixin:
         self, payload: discord.RawMessageDeleteEvent, *, check_audit_log: bool = True
     ) -> None:
         # custom name of method used, because this is only supported in Red 3.1+
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream-extendedmodlog/master
         guild_id = payload.guild_id
         if guild_id is None:
             return
@@ -2186,6 +2190,10 @@ class EventMixin:
                 embed.add_field(name=_("After"), value=page)
         if not worth_sending:
             return
+<<<<<<< HEAD
+=======
+
+>>>>>>> upstream-extendedmodlog/master
         embed.add_field(name=_("Member ID"), value=box(str(after.id)))
         if embed_links:
             await channel.send(embed=embed, allowed_mentions=self.allowed_mentions)
