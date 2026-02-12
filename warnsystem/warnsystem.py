@@ -1,3 +1,4 @@
+# WarnSystem by retke, aka El Laggron
 import discord
 import logging
 import asyncio
@@ -336,7 +337,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 'ban_days': ban_days,
                 'channel': vote_ch,
                 'member': member,
-                'end_time': datetime.utcnow() + timedelta(hours=24)
+                'end_time': datetime.now(datetime.timezone.utc) + timedelta(hours=24)
             }
             asyncio.create_task(self._vote_timeout(msg.id))
             return
@@ -354,39 +355,53 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 raise fail[0]
         except errors.MissingPermissions as e:
             await ctx.send(e)
-            return
         except errors.MemberTooHigh as e:
             await ctx.send(e)
-            return
         except errors.LostPermissions as e:
             await ctx.send(e)
-            return
         except errors.SuicidePrevention as e:
             await ctx.send(e)
-            return
         except errors.MissingMuteRole:
-            await ctx.send(_('You need to set up the mute role before doing this.'))
-            return
+            await ctx.send(
+                _(
+                    "You need to set up the mute role before doing this.\n"
+                    "Use the `[p]warnset mute` command for this."
+                )
+            )
         except errors.NotFound:
-            await ctx.send(_('Please set up a modlog channel before warning a member.'))
-            return
+            await ctx.send(
+                _(
+                    "Please set up a modlog channel before warning a member.\n\n"
+                    "**With WarnSystem**\n"
+                    "*Use the `[p]warnset channel` command.*\n\n"
+                    "**With Red Modlog**\n"
+                    "*Load the `modlogs` cog and use the `[p]modlogset modlog` command.*"
+                )
+            )
         except errors.NotAllowedByHierarchy:
             is_admin = mod.is_admin_or_superior(self.bot, member)
-            msg = _('You are not allowed to do this, {member} is higher than you in the role hierarchy.').format(member=str(member))
-            if is_admin:
-                msg += _(' You can disable this check by using the `[p]warnset hierarchy` command.')
-            await ctx.send(msg)
-            return
+            await ctx.send(
+                _(
+                    "You are not allowed to do this, {member} is higher than you in the role "
+                    "hierarchy. You can only warn members which top role is lower than yours.\n\n"
+                ).format(member=str(member))
+                + (
+                    _("You can disable this check by using the `[p]warnset hierarchy` command.")
+                    if is_admin
+                    else ""
+                )
+            )
         except discord.errors.NotFound:
-            await ctx.send(_('Hackban failed: No user found.'))
-            return
-        if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
-            try:
-                await ctx.message.add_reaction('✅')
-            except discord.errors.NotFound:
-                pass
+            await ctx.send(_("Hackban failed: No user found."))
         else:
-            await ctx.send(_('Done.'))
+            if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
+                try:
+                    await ctx.message.add_reaction("✅")
+                except discord.errors.NotFound:
+                    # retrigger or scheduler probably executed the command
+                    pass
+            else:
+                await ctx.send(_("Done."))
 
     async def call_masswarn(
         self,
@@ -1154,6 +1169,9 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
+        if not member.guild:
+            # bot was kicked
+            return
         await self.on_manual_action(member.guild, member, 3)
 
     async def on_manual_action(self, guild: discord.Guild, member: discord.Member, level: int):
