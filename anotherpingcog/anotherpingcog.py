@@ -27,8 +27,8 @@ DEFAULT_CONF = {
 }
 
 DEFAULT_FOOTER = (
+    "若機器人體感順暢，不必過度在意較高數值\n"
     "延遲分級: 極佳 | 良好 | 普通 | 差 | 極差"
-
 )
 
 LEFT_ARROW = "\N{LEFTWARDS BLACK ARROW}\N{VARIATION SELECTOR-16}"
@@ -64,7 +64,7 @@ class AnotherPingCog(commands.Cog):
         log.trace("Cache loaded: %s", self.cache)
 
     async def cog_unload(self) -> None:
-        global old_ping
+        global old_ping  # noqa: F824
         if old_ping:
             with contextlib.suppress(Exception):
                 self.bot.remove_command("ping")
@@ -155,7 +155,7 @@ class AnotherPingCog(commands.Cog):
             await message.edit(
                 content=(
                     (
-                        "Discord的斜線指令會導致訊息發送延遲過高，請直接使用指令來檢查"
+                        "斜線指令的訊息發送延遲通常較高，建議改用文字指令以取得更準確結果。"
                     )
                     if ctx.interaction
                     else None
