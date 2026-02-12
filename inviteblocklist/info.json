@@ -1,7 +1,11 @@
 {
     "author": [
+<<<<<<< HEAD
         "TrustyJAID",
         "Badwolf_TW"
+=======
+        "TrustyJAID"
+>>>>>>> upstream-inviteblocklist/master
     ],
     "description": "Automatically delete discord invite links from specific guilds or allow only specified guild invites to be posted.",
     "disabled": false,
