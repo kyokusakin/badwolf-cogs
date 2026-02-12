@@ -99,7 +99,11 @@ class AutomodMixin(MixinMeta):
         )
         return embed
 
+<<<<<<< HEAD
     @commands.group()
+=======
+    @commands.group(name="wautomod")
+>>>>>>> upstream-warnsystem/v3
     @checks.admin_or_permissions(administrator=True)
     async def automod(self, ctx: commands.Context):
         """

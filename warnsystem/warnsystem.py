@@ -1,12 +1,23 @@
+<<<<<<< HEAD
+=======
+# WarnSystem by retke, aka El Laggron
+>>>>>>> upstream-warnsystem/v3
 import discord
 import logging
 import asyncio
 
 from io import BytesIO
+<<<<<<< HEAD
 from typing import Optional, TYPE_CHECKING, List, Dict, Tuple
 from asyncio import TimeoutError as AsyncTimeoutError
 from abc import ABC
 from datetime import datetime, timedelta
+=======
+from typing import Optional, TYPE_CHECKING
+from asyncio import TimeoutError as AsyncTimeoutError
+from abc import ABC
+from datetime import datetime, timedelta, timezone
+>>>>>>> upstream-warnsystem/v3
 
 from redbot.core import commands, Config, checks
 from redbot.core.commands.converter import TimedeltaConverter
@@ -26,6 +37,7 @@ from .settings import SettingsMixin
 if TYPE_CHECKING:
     from redbot.core.bot import Red
 
+<<<<<<< HEAD
 log = logging.getLogger('red.laggron.warnsystem')
 _ = Translator('WarnSystem', __file__)
 
@@ -83,10 +95,121 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     def __init__(self, bot: 'Red'):
         self.bot = bot
+=======
+log = logging.getLogger("red.laggron.warnsystem")
+_ = Translator("WarnSystem", __file__)
+
+EMBED_MODLOG = lambda x: _("A member got a level {} warning.").format(x)
+EMBED_USER = lambda x: _("The moderation team set you a level {} warning.").format(x)
+
+
+class CompositeMetaClass(type(commands.Cog), type(ABC)):
+    """
+    This allows the metaclass used for proper type detection to
+    coexist with discord.py's metaclass
+
+    Credit to https://github.com/Cog-Creators/Red-DiscordBot (mod cog) for all mixin stuff.
+    """
+
+    pass
+
+
+@cog_i18n(_)
+class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
+    """
+    An alternative to the Red core moderation system, providing a different system of moderation\
+    similar to Dyno.
+
+    Report a bug or ask a question: https://discord.gg/GET4DVk
+    Full documentation and FAQ: http://laggron.red/warnsystem.html
+    """
+
+    default_global = {
+        "data_version": "0.0"  # will be edited after config update, current version is 1.0
+    }
+    default_guild = {
+        "delete_message": False,  # if the [p]warn commands should delete the context message
+        "show_mod": False,  # if the responsible mod should be revealed to the warned user
+        "mute_role": None,  # the role used for mute
+        "update_mute": False,  # if the bot should update perms of each new text channel/category
+        "remove_roles": False,  # if the bot should remove all other roles on mute
+        "respect_hierarchy": False,  # if the bot should check if the mod is allowed by hierarchy
+        # TODO use bot settingfor respect_hierarchy ?
+        "reinvite": True,  # if the bot should try to send an invite to an unbanned/kicked member
+        "log_manual": False,  # if the bot should log manual kicks and bans
+        "channels": {  # modlog channels
+            "main": None,  # default
+            "1": None,
+            "2": None,
+            "3": None,
+            "4": None,
+            "5": None,
+        },
+        "bandays": {  # the number of days of messages to delte in case of a ban/softban
+            "softban": 7,
+            "ban": 0,
+        },
+        "embed_description_modlog": {  # the description of each type of warn in modlog
+            "1": EMBED_MODLOG(1),
+            "2": EMBED_MODLOG(2),
+            "3": EMBED_MODLOG(3),
+            "4": EMBED_MODLOG(4),
+            "5": EMBED_MODLOG(5),
+        },
+        "embed_description_user": {  # the description of each type of warn for the user
+            "1": EMBED_USER(1),
+            "2": EMBED_USER(2),
+            "3": EMBED_USER(3),
+            "4": EMBED_USER(4),
+            "5": EMBED_USER(5),
+        },
+        "substitutions": {},
+        "thumbnails": {  # image at the top right corner of an embed
+            "1": "https://i.imgur.com/Bl62rGd.png",
+            "2": "https://i.imgur.com/cVtzp1M.png",
+            "3": "https://i.imgur.com/uhrYzyt.png",
+            "4": "https://i.imgur.com/uhrYzyt.png",
+            "5": "https://i.imgur.com/DfBvmic.png",
+        },
+        "colors": {  # color bar of an embed
+            "1": 0xF4AA42,
+            "2": 0xD1ED35,
+            "3": 0xED9735,
+            "4": 0xED6F35,
+            "5": 0xFF4C4C,
+        },
+        "url": None,  # URL set for the title of all embeds
+        "temporary_warns": {},  # list of temporary warns (need to unmute/unban after some time)
+        "automod": {  # everything related to auto moderation
+            "enabled": False,
+            "antispam": {
+                "enabled": False,
+                "max_messages": 5,  # maximum number of messages allowed within the delay
+                "delay": 2,  # in seconds
+                "delay_before_action": 60,  # if triggered twice within this delay, take action
+                "warn": {  # data of the warn
+                    "level": 1,
+                    "reason": "Sending messages too fast!",
+                    "time": None,
+                },
+                "whitelist": [],
+            },
+            "regex_edited_messages": False,  # if the bot should check message edits
+            "regex": {},  # all regex expressions
+            "warnings": [],  # all automatic warns
+        },
+    }
+    default_custom_member = {"x": []}  # cannot set a list as base group
+
+    def __init__(self, bot: "Red"):
+        self.bot = bot
+
+>>>>>>> upstream-warnsystem/v3
         self.data = Config.get_conf(self, 260, force_registration=True)
         self.data.register_global(**self.default_global)
         self.data.register_guild(**self.default_guild)
         try:
+<<<<<<< HEAD
             self.data.init_custom('MODLOGS', 2)
         except AttributeError:
             pass
@@ -294,6 +417,22 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.guild_only()
     @checks.mod()
+=======
+            self.data.init_custom("MODLOGS", 2)
+        except AttributeError:
+            pass
+        self.data.register_custom("MODLOGS", **self.default_custom_member)
+
+        self.cache = MemoryCache(self.bot, self.data)
+        self.api = API(self.bot, self.data, self.cache)
+
+        self.task: asyncio.Task
+
+    __version__ = "1.5.7"
+    __author__ = ["retke (El Laggron)"]
+
+    # helpers
+>>>>>>> upstream-warnsystem/v3
     async def call_warn(
         self,
         ctx: commands.Context,
@@ -303,6 +442,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         time: Optional[timedelta] = None,
         ban_days: Optional[int] = None,
     ):
+<<<<<<< HEAD
         reason = await self.api.format_reason(ctx.guild, reason)
         if level >= 3:
             guild_conf = await self.data.guild(ctx.guild).all()
@@ -339,6 +479,20 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 'end_time': datetime.utcnow() + timedelta(hours=24)
             }
             asyncio.create_task(self._vote_timeout(msg.id))
+=======
+        """No need to repeat, let's do what's common to all 5 warnings."""
+        reason = await self.api.format_reason(ctx.guild, reason)
+        if reason and len(reason) > 2000:  # embed limits
+            await ctx.send(
+                _(
+                    "The reason is too long for an embed.\n\n"
+                    "*Tip: You can use Github Gist to write a long text formatted in Markdown, "
+                    "create a new file with the extension `.md` at the end and write as if you "
+                    "were on Discord.\n<https://gist.github.com/>*"
+                    # I was paid $99999999 for this, you're welcome
+                )
+            )
+>>>>>>> upstream-warnsystem/v3
             return
         try:
             fail = await self.api.warn(
@@ -354,6 +508,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 raise fail[0]
         except errors.MissingPermissions as e:
             await ctx.send(e)
+<<<<<<< HEAD
             return
         except errors.MemberTooHigh as e:
             await ctx.send(e)
@@ -387,6 +542,55 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 pass
         else:
             await ctx.send(_('Done.'))
+=======
+        except errors.MemberTooHigh as e:
+            await ctx.send(e)
+        except errors.LostPermissions as e:
+            await ctx.send(e)
+        except errors.SuicidePrevention as e:
+            await ctx.send(e)
+        except errors.MissingMuteRole:
+            await ctx.send(
+                _(
+                    "You need to set up the mute role before doing this.\n"
+                    "Use the `[p]warnset mute` command for this."
+                )
+            )
+        except errors.NotFound:
+            await ctx.send(
+                _(
+                    "Please set up a modlog channel before warning a member.\n\n"
+                    "**With WarnSystem**\n"
+                    "*Use the `[p]warnset channel` command.*\n\n"
+                    "**With Red Modlog**\n"
+                    "*Load the `modlogs` cog and use the `[p]modlogset modlog` command.*"
+                )
+            )
+        except errors.NotAllowedByHierarchy:
+            is_admin = mod.is_admin_or_superior(self.bot, member)
+            await ctx.send(
+                _(
+                    "You are not allowed to do this, {member} is higher than you in the role "
+                    "hierarchy. You can only warn members which top role is lower than yours.\n\n"
+                ).format(member=str(member))
+                + (
+                    _("You can disable this check by using the `[p]warnset hierarchy` command.")
+                    if is_admin
+                    else ""
+                )
+            )
+        except discord.errors.NotFound:
+            await ctx.send(_("Hackban failed: No user found."))
+        else:
+            if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
+                try:
+                    await ctx.message.add_reaction("✅")
+                except discord.errors.NotFound:
+                    # retrigger or scheduler probably executed the command
+                    pass
+            else:
+                await ctx.send(_("Done."))
+>>>>>>> upstream-warnsystem/v3
 
     async def call_masswarn(
         self,
@@ -1154,6 +1358,12 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
+<<<<<<< HEAD
+=======
+        if not member.guild:
+            # bot was kicked
+            return
+>>>>>>> upstream-warnsystem/v3
         await self.on_manual_action(member.guild, member, 3)
 
     async def on_manual_action(self, guild: discord.Guild, member: discord.Member, level: int):
