@@ -18,128 +18,72 @@ msgstr ""
 #: warnsystem/__init__.py:112 warnsystem/api.py:206
 #: warnsystem/warnsystem.py:56
 msgid "year"
-<<<<<<< HEAD
 msgstr "年"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:112 warnsystem/api.py:206
 #: warnsystem/warnsystem.py:56
 msgid "years"
-<<<<<<< HEAD
 msgstr "年"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:113 warnsystem/api.py:207
 #: warnsystem/warnsystem.py:57
 msgid "month"
-<<<<<<< HEAD
 msgstr "月"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:113 warnsystem/api.py:207
 #: warnsystem/warnsystem.py:57
 msgid "months"
-<<<<<<< HEAD
 msgstr "月"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:114 warnsystem/api.py:208
 #: warnsystem/warnsystem.py:58
 msgid "week"
-<<<<<<< HEAD
 msgstr "周"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:114 warnsystem/api.py:208
 #: warnsystem/warnsystem.py:58
 msgid "weeks"
-<<<<<<< HEAD
 msgstr "周"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:115 warnsystem/api.py:209
 #: warnsystem/warnsystem.py:59
 msgid "day"
-<<<<<<< HEAD
 msgstr "天"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:115 warnsystem/api.py:209
 #: warnsystem/warnsystem.py:59
 msgid "days"
-<<<<<<< HEAD
 msgstr "天"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:116 warnsystem/api.py:210
 #: warnsystem/warnsystem.py:60
 msgid "hour"
-<<<<<<< HEAD
 msgstr "小時"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:116 warnsystem/api.py:210
 #: warnsystem/warnsystem.py:60
 msgid "hours"
-<<<<<<< HEAD
 msgstr "小時"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:117 warnsystem/api.py:211
 #: warnsystem/warnsystem.py:61
 msgid "minute"
-<<<<<<< HEAD
 msgstr "分鐘"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:117 warnsystem/api.py:211
 #: warnsystem/warnsystem.py:61
 msgid "minutes"
-<<<<<<< HEAD
 msgstr "分鐘"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:118 warnsystem/api.py:212
 #: warnsystem/warnsystem.py:62
 msgid "second"
-<<<<<<< HEAD
 msgstr "秒"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:118 warnsystem/api.py:212
 #: warnsystem/warnsystem.py:62
 msgid "seconds"
-<<<<<<< HEAD
 msgstr "秒"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/__init__.py:120 warnsystem/api.py:221
 #: warnsystem/warnsystem.py:404
@@ -153,7 +97,6 @@ msgstr ""
 
 #: warnsystem/api.py:592 warnsystem/api.py:1103
 msgid "warn"
-<<<<<<< HEAD
 msgstr "警告"
 
 #: warnsystem/api.py:592
@@ -199,58 +142,10 @@ msgstr "未知"
 #: warnsystem/api.py:600
 msgid "No reason was provided."
 msgstr "未提供理由"
-=======
-msgstr ""
-
-#: warnsystem/api.py:592
-msgid "warns"
-msgstr ""
-
-#: warnsystem/api.py:593 warnsystem/api.py:1103 warnsystem/api.py:1192
-msgid "mute"
-msgstr ""
-
-#: warnsystem/api.py:593
-msgid "mutes"
-msgstr ""
-
-#: warnsystem/api.py:594 warnsystem/api.py:1103
-msgid "kick"
-msgstr ""
-
-#: warnsystem/api.py:594
-msgid "kicks"
-msgstr ""
-
-#: warnsystem/api.py:595 warnsystem/api.py:1103
-msgid "softban"
-msgstr ""
-
-#: warnsystem/api.py:595
-msgid "softbans"
-msgstr ""
-
-#: warnsystem/api.py:596 warnsystem/api.py:1103 warnsystem/api.py:1192
-msgid "ban"
-msgstr ""
-
-#: warnsystem/api.py:596
-msgid "bans"
-msgstr ""
-
-#: warnsystem/api.py:597 warnsystem/api.py:1104 warnsystem/warnsystem.py:820
-msgid "unknown"
-msgstr ""
-
-#: warnsystem/api.py:600
-msgid "No reason was provided."
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:601
 msgid "\n"
 "Edit this with `[p]warnings {id}`"
-<<<<<<< HEAD
 msgstr "\n"
 "用 [p]warnings {id} 來編輯"
 
@@ -281,37 +176,6 @@ msgstr "警告"
 #: warnsystem/api.py:618
 msgid "warning"
 msgstr "警告"
-=======
-msgstr ""
-
-#: warnsystem/api.py:612
-msgid "{who} now {verb} {total} {warning} ({total_type} {action})"
-msgstr ""
-
-#: warnsystem/api.py:615
-msgid "The member"
-msgstr ""
-
-#: warnsystem/api.py:615
-msgid "You"
-msgstr ""
-
-#: warnsystem/api.py:616
-msgid "has"
-msgstr ""
-
-#: warnsystem/api.py:616
-msgid "have"
-msgstr ""
-
-#: warnsystem/api.py:618
-msgid "warnings"
-msgstr ""
-
-#: warnsystem/api.py:618
-msgid "warning"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:630 warnsystem/api.py:636
 msgid "*[couldn't create an invite]*"
@@ -319,7 +183,6 @@ msgstr ""
 
 #: warnsystem/api.py:644
 msgid "*[No time given]*"
-<<<<<<< HEAD
 msgstr "*[未定]*"
 
 #: warnsystem/api.py:666
@@ -337,52 +200,21 @@ msgstr "管理員"
 #: warnsystem/api.py:673 warnsystem/api.py:698 warnsystem/warnsystem.py:876
 msgid "Duration"
 msgstr "時間"
-=======
-msgstr ""
-
-#: warnsystem/api.py:666
-msgid "Level {level} warning ({action})"
-msgstr ""
-
-#: warnsystem/api.py:670
-msgid "Member"
-msgstr ""
-
-#: warnsystem/api.py:671 warnsystem/warnsystem.py:872
-msgid "Moderator"
-msgstr ""
-
-#: warnsystem/api.py:673 warnsystem/api.py:698 warnsystem/warnsystem.py:876
-msgid "Duration"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:674 warnsystem/api.py:692 warnsystem/warnsystem.py:882
 #: warnsystem/warnsystem.py:940
 msgid "Reason"
-<<<<<<< HEAD
 msgstr "理由"
 
 #: warnsystem/api.py:675 warnsystem/api.py:695
 msgid "Status"
 msgstr "狀態"
-=======
-msgstr ""
-
-#: warnsystem/api.py:675 warnsystem/api.py:695
-msgid "Status"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:682
 msgid "\n\n"
 "***The message could not be delivered to the user. They may have DMs disabled, blocked the bot, or may not have a mutual server.***"
-<<<<<<< HEAD
 msgstr "\n\n"
 "***無法將訊息傳送給該用戶。他們可能已禁用私訊、封鎖了機器人，或沒有共同的伺服器。***"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:740 warnsystem/api.py:1081 warnsystem/settings.py:484
 msgid "I can't manage roles, please give me this permission to continue."
@@ -448,19 +280,11 @@ msgstr ""
 #: warnsystem/api.py:1112
 msgid "\n\n"
 "Duration: {time} "
-<<<<<<< HEAD
 msgstr "時間: {time} "
 
 #: warnsystem/api.py:1115
 msgid "Reason: {reason}"
 msgstr "理由: {reason}"
-=======
-msgstr ""
-
-#: warnsystem/api.py:1115
-msgid "Reason: {reason}"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:1117
 msgid "Reason too long to be shown."
@@ -473,11 +297,7 @@ msgstr ""
 
 #: warnsystem/api.py:1200
 msgid "End of timed {action} of {member} requested by {author} that lasted for {time}. Reason of the {action}: {reason}"
-<<<<<<< HEAD
 msgstr "計時結束了 {member} 的 {action}，由 {author} 要求，持續了 {time}。{action} 的原因是 {reason}。"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/api.py:1463
 msgid "{member} you're sending messages too fast!"
@@ -494,7 +314,6 @@ msgstr ""
 
 #: warnsystem/automod.py:68 warnsystem/automod.py:69 warnsystem/automod.py:244
 msgid "Not set."
-<<<<<<< HEAD
 msgstr "未設定。"
 
 #: warnsystem/automod.py:70
@@ -516,29 +335,6 @@ msgstr "時間間隔: {time}\n"
 #: warnsystem/automod.py:77
 msgid "Duration: {time}\n"
 msgstr "時間: {time}\n"
-=======
-msgstr ""
-
-#: warnsystem/automod.py:70
-msgid "Number of warnings until action: {num}\n"
-msgstr ""
-
-#: warnsystem/automod.py:73
-msgid "Warning level: {level}\n"
-msgstr ""
-
-#: warnsystem/automod.py:74
-msgid "Warning reason: {reason}\n"
-msgstr ""
-
-#: warnsystem/automod.py:75
-msgid "Time interval: {time}\n"
-msgstr ""
-
-#: warnsystem/automod.py:77
-msgid "Duration: {time}\n"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/automod.py:78
 msgid "Lock to level: {level}\n"
@@ -547,7 +343,6 @@ msgstr ""
 #: warnsystem/automod.py:79 warnsystem/automod.py:134
 #: warnsystem/automod.py:529 warnsystem/automod.py:549
 msgid "disabled"
-<<<<<<< HEAD
 msgstr "禁用"
 
 #: warnsystem/automod.py:81
@@ -561,21 +356,6 @@ msgstr "是"
 #: warnsystem/automod.py:82
 msgid "no"
 msgstr "否"
-=======
-msgstr ""
-
-#: warnsystem/automod.py:81
-msgid "Only count automod: {enabled}\n\n"
-msgstr ""
-
-#: warnsystem/automod.py:82
-msgid "yes"
-msgstr ""
-
-#: warnsystem/automod.py:82
-msgid "no"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/automod.py:85
 msgid "What will happen:"
@@ -1798,11 +1578,7 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:111
 msgid "The moderation team set you a level {} warning."
-<<<<<<< HEAD
 msgstr "管理團隊給了你一個等級 {} 的警告。"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:127
 #, docstring
@@ -2079,19 +1855,11 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:843
 msgid "User modlog summary."
-<<<<<<< HEAD
 msgstr "用戶日誌摘要"
 
 #: warnsystem/warnsystem.py:846
 msgid "Total number of warnings: "
 msgstr "警告總數："
-=======
-msgstr ""
-
-#: warnsystem/warnsystem.py:846
-msgid "Total number of warnings: "
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:849
 msgid "{len} last warnings"
@@ -2103,7 +1871,6 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:855
 msgid "Click on the reactions to scroll through the warnings"
-<<<<<<< HEAD
 msgstr "點擊反應以滾動查看警告"
 
 #: warnsystem/warnsystem.py:866
@@ -2113,17 +1880,6 @@ msgstr "案件 #{number} 資訊"
 #: warnsystem/warnsystem.py:870
 msgid "Level"
 msgstr "等級"
-=======
-msgstr ""
-
-#: warnsystem/warnsystem.py:866
-msgid "Case #{number} informations"
-msgstr ""
-
-#: warnsystem/warnsystem.py:870
-msgid "Level"
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:877
 msgid "{duration}\n"
@@ -2133,12 +1889,8 @@ msgstr ""
 #: warnsystem/warnsystem.py:979
 msgid "Case #{number} edition.\n\n"
 "**Please type the new reason to set**"
-<<<<<<< HEAD
 msgstr "案件 #{number} 更改\n\n"
 "**請輸入新的理由**"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:982
 msgid "You have two minutes to type your text in the chat."
@@ -2146,7 +1898,6 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:994
 msgid "Case #{number} edition."
-<<<<<<< HEAD
 msgstr "案件 #{number} 更改"
 
 #: warnsystem/warnsystem.py:995
@@ -2160,21 +1911,6 @@ msgstr "新理由"
 #: warnsystem/warnsystem.py:997
 msgid "Click on ✅ to confirm the changes."
 msgstr "點擊 ✅ 以確認更改。"
-=======
-msgstr ""
-
-#: warnsystem/warnsystem.py:995
-msgid "Old reason"
-msgstr ""
-
-#: warnsystem/warnsystem.py:996
-msgid "New reason"
-msgstr ""
-
-#: warnsystem/warnsystem.py:997
-msgid "Click on ✅ to confirm the changes."
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1005 warnsystem/warnsystem.py:1128
 msgid "Question timed out."
@@ -2182,11 +1918,7 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:1017
 msgid "The reason was successfully edited!\n"
-<<<<<<< HEAD
 msgstr "原因已成功編輯！"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1019
 msgid "*The modlog message couldn't be edited. Check your logs for details.*"
@@ -2194,11 +1926,7 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:1023
 msgid "The reason was not edited."
-<<<<<<< HEAD
 msgstr "理由沒有更改"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1094
 msgid "Member {member}'s clearance. By selecting ❌ on the user modlog summary, you can remove all warnings given to {member}. __All levels and notes are affected.__\n"
@@ -2208,13 +1936,8 @@ msgstr ""
 #: warnsystem/warnsystem.py:1111
 msgid "Case #{number} deletion.\n"
 "**Click on the reaction to confirm your action.**"
-<<<<<<< HEAD
 msgstr "案件 #{number} 刪除"
 "**點擊反應確認你的更改**"
-=======
-msgstr ""
-
->>>>>>> upstream-warnsystem/v3
 #: warnsystem/warnsystem.py:1115
 msgid "\n"
 "Note: Deleting the case will also do the following:"
@@ -2223,22 +1946,14 @@ msgstr ""
 #: warnsystem/warnsystem.py:1117
 msgid "\n"
 "- unmute the member"
-<<<<<<< HEAD
 msgstr "\n"
 "- 解除禁音成員"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1119
 msgid "\n"
 "- add all roles back to the member"
-<<<<<<< HEAD
 msgstr "\n"
 "- 將所有角色重新添加到成員身上"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1132
 msgid "Nothing was removed."
@@ -2250,11 +1965,7 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:1160
 msgid "Warning deleted by {author}"
-<<<<<<< HEAD
 msgstr "警告已被{author}刪除 "
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1166
 msgid "Adding removed roles back after unmute."
@@ -2262,11 +1973,7 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:1167 warnsystem/warnsystem.py:1170
 msgid "The case was successfully deleted!"
-<<<<<<< HEAD
 msgstr "案件已刪除！"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1169
 msgid "*The modlog message couldn't be deleted. Check your logs for details.*"
@@ -2290,16 +1997,12 @@ msgid "--- Case {number} ---\n"
 "Reason:    {reason}\n"
 "Author:    {author} (ID: {author.id})\n"
 "Date:      {time}\n"
-<<<<<<< HEAD
 msgstr "--- 案件 {number} ---\n"
 "成員:       {member} (ID: {member.id})\n"
 "等級:       {level}\n"
 "原因:       {reason}\n"
 "作者:       {author} (ID: {author.id})\n"
 "日期:       {time}\n"
-=======
-msgstr ""
->>>>>>> upstream-warnsystem/v3
 
 #: warnsystem/warnsystem.py:1196
 msgid "Duration:  {duration}\n"
@@ -2308,19 +2011,11 @@ msgstr ""
 
 #: warnsystem/warnsystem.py:1209
 msgid "{total} warnings. Page {i}/{pages}"
-<<<<<<< HEAD
 msgstr "{total} 警告 頁 {i}/{pages}"
 
 #: warnsystem/warnsystem.py:1219
 #, docstring
 msgid "\n"	
-=======
-msgstr ""
-
-#: warnsystem/warnsystem.py:1219
-#, docstring
-msgid "\n"
->>>>>>> upstream-warnsystem/v3
 "        Unmute a member muted with WarnSystem.\n\n"
 "        If the member's roles were removed, they will be granted back.\n\n"
 "        *wsunmute = WarnSystem unmute. Feel free to add an alias.*\n"

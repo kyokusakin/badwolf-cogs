@@ -187,8 +187,6 @@ class WarningEditionView(View):
             self.edit_button.disabled = True
             self.delete_button.disabled = True
 
-<<<<<<< HEAD
-=======
     async def interaction_check(self, interaction: Interaction[discord.Client]) -> bool:
         return (
             interaction.client == self.user
@@ -196,7 +194,6 @@ class WarningEditionView(View):
             or interaction.user.guild_permissions.kick_members
         )
 
->>>>>>> upstream-warnsystem/v3
     @discord.ui.button(style=discord.ButtonStyle.secondary, label=_("Edit reason"), emoji="✏")
     async def edit_button(self, interaction: discord.Interaction, button: Button):
         modal = WarningEditionModal()
@@ -265,13 +262,9 @@ class WarningsSource(menus.ListPageSource):
 
 
 class WarningsSelector(Pages[menus.ListPageSource]):
-<<<<<<< HEAD
-    def __init__(self, ctx: Context, user: Union[discord.Member, UnavailableMember], warnings: List[dict]):
-=======
     def __init__(
         self, ctx: Context, user: Union[discord.Member, UnavailableMember], warnings: List[dict]
     ):
->>>>>>> upstream-warnsystem/v3
         self.user = user
         self.ws = cast("WarnSystem", ctx.bot.get_cog("WarnSystem"))
         self.api: "API" = self.ws.api
@@ -280,8 +273,6 @@ class WarningsSelector(Pages[menus.ListPageSource]):
         self.deleted_cases: list[int] = []  # to prevent referencing deleted cases
         self.add_item(self.select_warning_menu)
 
-<<<<<<< HEAD
-=======
     async def interaction_check(self, interaction: Interaction[discord.Client]) -> bool:
         return (
             interaction.client == self.user
@@ -289,7 +280,6 @@ class WarningsSelector(Pages[menus.ListPageSource]):
             or interaction.user.guild_permissions.kick_members
         )
 
->>>>>>> upstream-warnsystem/v3
     def _get_label(self, level: int) -> Tuple[str, str]:
         if level == 1:
             return (_("Warning"), "⚠")
@@ -321,11 +311,7 @@ class WarningsSelector(Pages[menus.ListPageSource]):
         self.select_warning_menu.options = options
 
     @discord.ui.select(placeholder="Select a warning to view it.")
-<<<<<<< HEAD
-    async def select_warning_menu(self, interaction: discord.Interaction, item:discord.ui.Select):
-=======
     async def select_warning_menu(self, interaction: discord.Interaction, item: discord.ui.Select):
->>>>>>> upstream-warnsystem/v3
         warning_str = lambda level, plural: {
             1: (_("Warning"), _("Warnings")),
             2: (_("Mute"), _("Mutes")),
