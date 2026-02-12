@@ -935,8 +935,4 @@ class ExtendedModLog(EventMixin, commands.Cog):
         if setting:
             await ctx.send(_("Bots will no longer be tracked in voice update logs."))
         else:
-<<<<<<< HEAD
             await ctx.send(_("Bots will be tracked in voice update logs."))
-=======
-            await ctx.send(_("Bots will be tracked in voice update logs."))
->>>>>>> upstream-extendedmodlog/master
