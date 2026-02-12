@@ -3,7 +3,11 @@
 import random
 from abc import ABC
 from contextlib import suppress
+<<<<<<< HEAD
 from datetime import UTC, datetime, timedelta
+=======
+from datetime import UTC, datetime
+>>>>>>> upstream-autoroom/master
 from typing import Any, ClassVar
 
 import discord
@@ -46,7 +50,10 @@ class AutoRoom(
         "admin_access": True,
         "mod_access": False,
         "bot_access": [],
+<<<<<<< HEAD
         "timeout_seconds": -1,
+=======
+>>>>>>> upstream-autoroom/master
     }
     default_autoroom_source_settings: ClassVar[dict[str, int | str | None]] = {
         "dest_category_id": None,
@@ -407,6 +414,7 @@ class AutoRoom(
         )
         if not required_check or not optional_check:
             return
+<<<<<<< HEAD
         # Ignore self (the bot)
         if member.id == self.bot.user.id:
             # If the bot joins a voice channel, it should immediately leave
@@ -423,6 +431,11 @@ class AutoRoom(
         # Check that user isn't spamming
         bucket = self.bucket_autoroom_create.get_bucket(member)
         timeout_seconds = await self.config.guild(member.guild).timeout_seconds()
+=======
+
+        # Check that user isn't spamming
+        bucket = self.bucket_autoroom_create.get_bucket(member)
+>>>>>>> upstream-autoroom/master
         if bucket:
             retry_after = bucket.update_rate_limit()
             if retry_after:
@@ -435,6 +448,7 @@ class AutoRoom(
                             discord.HTTPException,
                         ):
                             await member.send(
+<<<<<<< HEAD
                                 "你好！看起來你想建立一個自動房間"
                                 "\n"
                                 f"請注意，您只被允許建立 **{bucket.rate}** 個自動房間"
@@ -445,6 +459,15 @@ class AutoRoom(
                             if timeout_seconds > 0:
                                 await member.timeout(timedelta(seconds=timeout_seconds), reason="Spam voice channel")
 
+=======
+                                "Hello there! It looks like you're trying to make an AutoRoom."
+                                "\n"
+                                f"Please note that you are only allowed to make **{bucket.rate}** AutoRooms "
+                                f"every **{humanize_timedelta(seconds=bucket.per)}**."
+                                "\n"
+                                f"You can try again in **{humanize_timedelta(seconds=max(retry_after, 1))}**."
+                            )
+>>>>>>> upstream-autoroom/master
                     return
 
         # Generate channel name
