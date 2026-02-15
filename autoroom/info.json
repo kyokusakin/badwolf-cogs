@@ -1,8 +1,12 @@
 {
     "name": "AutoRoom",
     "author": [
+<<<<<<< HEAD
         "PhasecoreX",
         "Badwolf_TW"
+=======
+        "PhasecoreX"
+>>>>>>> upstream-autoroom/master
     ],
     "short": "Automatic voice channel management.",
     "description": "This cog facilitates automatic voice channel creation. When a member joins an AutoRoom Source (voice channel), this cog will move them to a brand new AutoRoom that they have control over. Once everyone leaves the AutoRoom, it is automatically deleted.",
