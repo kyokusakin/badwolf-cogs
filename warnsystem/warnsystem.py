@@ -314,7 +314,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
     def _build_vote_embed(self, info: Dict[str, Any], snapshot: Dict[str, Any]) -> discord.Embed:
         deadline_ts = int((info['end_time'] - datetime(1970, 1, 1)).total_seconds())
         embed = discord.Embed(
-            title='警告表決（院會模式）',
+            title='警告表決',
             description=(
                 f"{info['initiator'].mention} 對 {info['target'].mention} 發起 "
                 f"**{info['level']} 級警告**表決\n"
@@ -347,7 +347,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
     ) -> discord.Embed:
         color = discord.Color.green() if passed else discord.Color.red()
         embed = discord.Embed(
-            title='表決結果（院會模式）',
+            title='表決結果',
             description=(
                 f"{info['initiator'].mention} 對 {info['target'].mention} 發起 "
                 f"**{info['level']} 級警告**表決"
