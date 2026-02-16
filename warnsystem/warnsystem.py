@@ -1,10 +1,10 @@
-# WarnSystem by retke, aka El Laggron
 import discord
 import logging
 import asyncio
+import math
 
 from io import BytesIO
-from typing import Optional, TYPE_CHECKING, List, Dict, Tuple
+from typing import Optional, TYPE_CHECKING, List, Dict, Any, Set, Tuple
 from asyncio import TimeoutError as AsyncTimeoutError
 from abc import ABC
 from datetime import datetime, timedelta
@@ -37,9 +37,29 @@ class CompositeMetaClass(type(commands.Cog), type(ABC)):
     '''Coexist discord.py metaclass'''
     pass
 
+
+class LegislativeVoteView(discord.ui.View):
+    def __init__(self, cog: "WarnSystem", *, disabled: bool = False):
+        super().__init__(timeout=None)
+        self.cog = cog
+        if disabled:
+            for item in self.children:
+                item.disabled = True
+
+    async def _submit_vote(self, interaction: discord.Interaction, vote: str):
+        await self.cog._handle_vote_button(interaction, vote)
+
+    @discord.ui.button(label="贊成", style=discord.ButtonStyle.success, emoji="🟩")
+    async def approve_button(self, interaction: discord.Interaction, _: discord.ui.Button):
+        await self._submit_vote(interaction, "approve")
+
+    @discord.ui.button(label="反對", style=discord.ButtonStyle.danger, emoji="🟥")
+    async def reject_button(self, interaction: discord.Interaction, _: discord.ui.Button):
+        await self._submit_vote(interaction, "reject")
+
 @cog_i18n(_)
 class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeMetaClass):
-    '''WarnSystem Cog with real-time admin-only voting, thresholds by level, and mod bypass.'''
+    '''WarnSystem Cog with real-time voting, thresholds by level, and mod bypass.'''
     __version__ = '1.5.10'
     __author__ = ['retke (El Laggron)']
 
@@ -96,160 +116,416 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         self.api = API(self.bot, self.data, self.cache)
         self.active_votes: Dict[int, Dict] = {}
 
-    @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
-        if payload.message_id in self.active_votes:
-            await self._update_vote_embed(payload.guild_id, payload.channel_id, payload.message_id)
+    @staticmethod
+    def _is_online_status(status: discord.Status) -> bool:
+        return status in (discord.Status.online, discord.Status.idle, discord.Status.dnd)
 
-    @commands.Cog.listener()
-    async def on_raw_reaction_remove(self, payload):
-        if payload.message_id in self.active_votes:
-            await self._update_vote_embed(payload.guild_id, payload.channel_id, payload.message_id)
+    def _vote_icon_and_label(self, member: discord.Member, votes: Dict[int, str]) -> Tuple[str, str]:
+        vote = votes.get(member.id)
+        if vote == 'approve':
+            return '🟩', '贊成'
+        if vote == 'reject':
+            return '🟥', '反對'
+        if self._is_online_status(member.status):
+            return '⬜', '未投票'
+        return '⬛', '離席'
 
-    async def _get_admins(self, guild: discord.Guild) -> List[discord.Member]:
-        # 使用 Redbot 內建函式取得 Admin 角色
-        admin_roles = await self.bot.get_admin_roles(guild)
-        admin_ids = {r.id for r in admin_roles}
-        return [m for m in guild.members if any(r.id in admin_ids for r in m.roles)]
+    @staticmethod
+    def _get_threshold_ratio(level: int) -> float:
+        if level in (3, 4):
+            return 0.5
+        if level == 5:
+            return 0.75
+        return 0.0
 
-    def _get_status_label(self, status: discord.Status) -> str:
-        return {
-            discord.Status.online: '未投票',
-            discord.Status.idle: '未投票',
-            discord.Status.dnd: '未投票',
-            discord.Status.offline: '離席'
-        }.get(status, '離席')
+    def _required_approves(self, level: int, total_online: int) -> int:
+        ratio = self._get_threshold_ratio(level)
+        if ratio <= 0:
+            return 0
+        return math.ceil(total_online * ratio)
 
     async def _threshold_passed(self, level: int, approves: int, total_online: int) -> bool:
-        if level in (3, 4):
-            return total_online > 0 and approves / total_online >= 0.5
-        if level == 5:
-            return total_online > 0 and approves / total_online >= 0.75
-        return False
+        ratio = self._get_threshold_ratio(level)
+        return total_online > 0 and ratio > 0 and approves / total_online >= ratio
 
-    async def _collect_votes(self, vote_msg: discord.Message) -> Tuple[List[str], List[str]]:
-        approves, rejects = [], []
-        for react in vote_msg.reactions:
-            if str(react.emoji) in ('✅', '❌'):
-                async for user in react.users():
-                    if user.bot:
-                        continue
-                    name = user.display_name
-                    if str(react.emoji) == '✅' and name not in approves:
-                        approves.append(name)
-                    elif str(react.emoji) == '❌' and name not in rejects:
-                        rejects.append(name)
-        return approves, rejects
+    def _truncate_lines_with_suffix(
+        self,
+        lines: List[str],
+        *,
+        suffix_template: str,
+        limit: int = 1024,
+    ) -> str:
+        if not lines:
+            return '無資料'
+        kept: List[str] = []
+        for idx, line in enumerate(lines):
+            candidate = '\n'.join(kept + [line])
+            if len(candidate) <= limit:
+                kept.append(line)
+                continue
+            remaining = len(lines) - idx
+            suffix = suffix_template.format(count=remaining)
+            while kept and len('\n'.join(kept + [suffix])) > limit:
+                kept.pop()
+            if kept:
+                kept.append(suffix)
+                return '\n'.join(kept)
+            return suffix[:limit]
+        return '\n'.join(kept)
+
+    def _build_group_matrix(
+        self,
+        name: str,
+        members: List[discord.Member],
+        votes: Dict[int, str],
+    ) -> List[str]:
+        lines = [f'{name}（{len(members)}席）']
+        if not members:
+            lines.append('無席次')
+            return lines
+        icons = [self._vote_icon_and_label(member, votes)[0] for member in members]
+        for i in range(0, len(icons), 12):
+            lines.append(''.join(icons[i : i + 12]))
+        return lines
+
+    def _build_seat_matrix(
+        self,
+        mods: List[discord.Member],
+        pure_admins: List[discord.Member],
+        votes: Dict[int, str],
+    ) -> str:
+        lines: List[str] = []
+        lines.extend(self._build_group_matrix('MOD', mods, votes))
+        lines.append('')
+        lines.extend(self._build_group_matrix('ADMIN', pure_admins, votes))
+        return self._truncate_lines_with_suffix(lines, suffix_template='…其餘 {count} 行')
+
+    def _build_roll_call(self, members: List[discord.Member], votes: Dict[int, str]) -> str:
+        if not members:
+            return '無可投票席次'
+        entries = []
+        for member in members:
+            icon, label = self._vote_icon_and_label(member, votes)
+            entries.append(f'{icon} {member.display_name}：{label}')
+        return self._truncate_lines_with_suffix(
+            entries,
+            suffix_template='…其餘 {count} 位',
+        )
+
+    async def _resolve_eligible_voters(
+        self, guild: discord.Guild
+    ) -> Tuple[List[discord.Member], List[discord.Member], Set[int], Set[int]]:
+        admin_roles = await self.bot.get_admin_roles(guild)
+        mod_roles = await self.bot.get_mod_roles(guild)
+        admin_role_ids = {role.id for role in admin_roles}
+        mod_role_ids = {role.id for role in mod_roles}
+
+        mods: List[discord.Member] = []
+        pure_admins: List[discord.Member] = []
+        for member in guild.members:
+            role_ids = {role.id for role in member.roles}
+            is_mod = bool(role_ids & mod_role_ids)
+            is_admin = bool(role_ids & admin_role_ids)
+            if not (is_mod or is_admin):
+                continue
+            if is_mod:
+                mods.append(member)
+            else:
+                pure_admins.append(member)
+
+        mods.sort(key=lambda m: m.display_name.lower())
+        pure_admins.sort(key=lambda m: m.display_name.lower())
+        eligible_ids = {member.id for member in mods + pure_admins}
+        mod_member_ids = {member.id for member in mods}
+        return mods, pure_admins, eligible_ids, mod_member_ids
+
+    async def _build_vote_snapshot(self, guild: discord.Guild, info: Dict[str, Any]) -> Dict[str, Any]:
+        mods, pure_admins, eligible_ids, mod_member_ids = await self._resolve_eligible_voters(guild)
+        all_members = mods + pure_admins
+
+        votes: Dict[int, str] = {}
+        for user_id, vote in (info.get('votes') or {}).items():
+            try:
+                parsed_user_id = int(user_id)
+            except (TypeError, ValueError):
+                continue
+            if parsed_user_id in eligible_ids and vote in {'approve', 'reject'}:
+                votes[parsed_user_id] = vote
+        info['votes'] = votes
+
+        approve_ids = {user_id for user_id, vote in votes.items() if vote == 'approve'}
+        reject_ids = {user_id for user_id, vote in votes.items() if vote == 'reject'}
+        online_ids = {member.id for member in all_members if self._is_online_status(member.status)}
+        pending_ids = online_ids - approve_ids - reject_ids
+        away_ids = eligible_ids - online_ids
+
+        approve_count = len(approve_ids)
+        online_count = len(online_ids)
+        required_approves = self._required_approves(info['level'], online_count)
+        threshold_ok = await self._threshold_passed(info['level'], approve_count, online_count)
+        mod_approve = bool(approve_ids & mod_member_ids)
+
+        return {
+            'mods': mods,
+            'pure_admins': pure_admins,
+            'all_members': all_members,
+            'eligible_ids': eligible_ids,
+            'mod_member_ids': mod_member_ids,
+            'votes': votes,
+            'approve_ids': approve_ids,
+            'reject_ids': reject_ids,
+            'pending_ids': pending_ids,
+            'away_ids': away_ids,
+            'online_ids': online_ids,
+            'approve_count': approve_count,
+            'reject_count': len(reject_ids),
+            'pending_count': len(pending_ids),
+            'away_count': len(away_ids),
+            'online_count': online_count,
+            'eligible_count': len(eligible_ids),
+            'required_approves': required_approves,
+            'threshold_passed': threshold_ok,
+            'mod_approve': mod_approve,
+        }
+
+    def _build_vote_stats(self, info: Dict[str, Any], snapshot: Dict[str, Any]) -> str:
+        ratio = self._get_threshold_ratio(info['level'])
+        ratio_text = f'{int(ratio * 100)}%' if ratio else 'N/A'
+        online_count = snapshot['online_count']
+        if online_count > 0:
+            threshold_line = (
+                f"{snapshot['approve_count']}/{online_count}"
+                f"（需 {snapshot['required_approves']} 票，{ratio_text}）"
+            )
+        else:
+            threshold_line = '目前無在線席次，門檻暫不成立'
+        return '\n'.join(
+            [
+                f"贊成：{snapshot['approve_count']}",
+                f"反對：{snapshot['reject_count']}",
+                f"未投票：{snapshot['pending_count']}",
+                f"離席：{snapshot['away_count']}",
+                f"在線席次：{snapshot['online_count']}/{snapshot['eligible_count']}",
+                f"門檻進度：{threshold_line}",
+                f"MOD 快速通過：{'已觸發' if snapshot['mod_approve'] else '未觸發'}",
+            ]
+        )
+
+    def _build_vote_embed(self, info: Dict[str, Any], snapshot: Dict[str, Any]) -> discord.Embed:
+        deadline_ts = int((info['end_time'] - datetime(1970, 1, 1)).total_seconds())
+        embed = discord.Embed(
+            title='警告表決（院會模式）',
+            description=(
+                f"{info['initiator'].mention} 對 {info['target'].mention} 發起 "
+                f"**{info['level']} 級警告**表決\n"
+                f"截止時間：<t:{deadline_ts}:F>（<t:{deadline_ts}:R>）"
+            ),
+            color=discord.Color.orange(),
+        )
+        if info.get('reason'):
+            embed.add_field(name='原因', value=info['reason'], inline=False)
+        embed.add_field(
+            name='席次燈號',
+            value=self._build_seat_matrix(snapshot['mods'], snapshot['pure_admins'], snapshot['votes']),
+            inline=False,
+        )
+        embed.add_field(name='席次統計', value=self._build_vote_stats(info, snapshot), inline=False)
+        embed.add_field(
+            name='點名名單',
+            value=self._build_roll_call(snapshot['all_members'], snapshot['votes']),
+            inline=False,
+        )
+        embed.set_footer(text='🟩贊成 🟥反對 ⬜未投票 ⬛離席')
+        return embed
+
+    def _build_result_embed(
+        self,
+        info: Dict[str, Any],
+        snapshot: Dict[str, Any],
+        *,
+        passed: bool,
+    ) -> discord.Embed:
+        color = discord.Color.green() if passed else discord.Color.red()
+        embed = discord.Embed(
+            title='表決結果（院會模式）',
+            description=(
+                f"{info['initiator'].mention} 對 {info['target'].mention} 發起 "
+                f"**{info['level']} 級警告**表決"
+            ),
+            color=color,
+        )
+        if info.get('reason'):
+            embed.add_field(name='原因', value=info['reason'], inline=False)
+        embed.add_field(
+            name='席次燈號（最終）',
+            value=self._build_seat_matrix(snapshot['mods'], snapshot['pure_admins'], snapshot['votes']),
+            inline=False,
+        )
+        embed.add_field(name='席次統計（最終）', value=self._build_vote_stats(info, snapshot), inline=False)
+        embed.add_field(
+            name='點名名單（最終）',
+            value=self._build_roll_call(snapshot['all_members'], snapshot['votes']),
+            inline=False,
+        )
+        embed.add_field(name='結果', value='通過' if passed else '未通過', inline=False)
+        embed.set_footer(text='🟩贊成 🟥反對 ⬜未投票 ⬛離席｜表決已結束')
+        return embed
+
+    async def _send_ephemeral(self, interaction: discord.Interaction, content: str):
+        if interaction.response.is_done():
+            await interaction.followup.send(content, ephemeral=True)
+        else:
+            await interaction.response.send_message(content, ephemeral=True)
+
+    async def _handle_vote_button(self, interaction: discord.Interaction, vote: str):
+        message = interaction.message
+        if message is None:
+            await self._send_ephemeral(interaction, '找不到對應的表決訊息。')
+            return
+
+        info = self.active_votes.get(message.id)
+        if info is None:
+            await self._send_ephemeral(interaction, '此表決已結束或失效。')
+            return
+
+        lock = info.setdefault('lock', asyncio.Lock())
+        end_vote = False
+        refresh = False
+        response = '投票未成功，請稍後再試。'
+        guild_id = info.get('guild_id')
+        channel_id = info.get('channel_id')
+
+        async with lock:
+            info = self.active_votes.get(message.id)
+            if info is None:
+                response = '此表決已結束或失效。'
+            elif datetime.utcnow() >= info['end_time']:
+                response = '此表決已逾時，正在結算。'
+                end_vote = True
+            else:
+                guild = interaction.guild or self.bot.get_guild(info['guild_id'])
+                if guild is None:
+                    response = '找不到伺服器，已關閉此表決。'
+                    self.active_votes.pop(message.id, None)
+                else:
+                    snapshot = await self._build_vote_snapshot(guild, info)
+                    if interaction.user.id not in snapshot['eligible_ids']:
+                        response = '你不是此表決的可投票身分（Admin/Mod）。'
+                    else:
+                        info['votes'][interaction.user.id] = vote
+                        response = '已登記為「贊成」。' if vote == 'approve' else '已登記為「反對」。'
+                        refresh = True
+                        guild_id = info.get('guild_id')
+                        channel_id = info.get('channel_id')
+
+        await self._send_ephemeral(interaction, response)
+        if end_vote:
+            await self._end_vote(message.id)
+            return
+        if refresh and guild_id and channel_id:
+            await self._update_vote_embed(guild_id, channel_id, message.id)
 
     async def _update_vote_embed(self, guild_id: int, channel_id: int, msg_id: int):
         info = self.active_votes.get(msg_id)
-        if not info or datetime.utcnow() >= info['end_time']:
+        if info is None:
+            return
+        if datetime.utcnow() >= info['end_time']:
+            await self._end_vote(msg_id)
             return
 
         guild = self.bot.get_guild(guild_id)
+        if guild is None:
+            log.warning(f'[Guild {guild_id}] Vote {msg_id} cannot be updated because guild is missing.')
+            self.active_votes.pop(msg_id, None)
+            return
+
         channel = guild.get_channel(channel_id)
-        vote_msg = await channel.fetch_message(msg_id)
+        if channel is None:
+            log.warning(f'[Guild {guild.id}] Vote {msg_id} cannot be updated because channel is missing.')
+            self.active_votes.pop(msg_id, None)
+            return
+        if not hasattr(channel, 'fetch_message'):
+            log.warning(f'[Guild {guild.id}] Vote {msg_id} channel does not support messages.')
+            self.active_votes.pop(msg_id, None)
+            return
 
-        admins = await self._get_admins(guild)
-        approves, rejects = await self._collect_votes(vote_msg)
+        try:
+            vote_msg = await channel.fetch_message(msg_id)
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            log.warning(
+                f'[Guild {guild.id}] Vote {msg_id} cannot be updated because message cannot be fetched.',
+                exc_info=e,
+            )
+            self.active_votes.pop(msg_id, None)
+            return
 
-        mod_roles = await self.bot.get_mod_roles(guild)
-        mod_ids = {r.id for r in mod_roles}
+        snapshot = await self._build_vote_snapshot(guild, info)
+        embed = self._build_vote_embed(info, snapshot)
+        try:
+            await vote_msg.edit(embed=embed, view=LegislativeVoteView(self))
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+            log.warning(f'[Guild {guild.id}] Vote {msg_id} embed update failed.', exc_info=e)
+            self.active_votes.pop(msg_id, None)
+            return
 
-        mods = [m for m in admins if any(r.id in mod_ids for r in m.roles)]
-        pure_admins = [m for m in admins if m not in mods]
-
-        lines = []
-
-        # 顯示 Mod 分區
-        if mods:
-            lines.append("==MOD==")
-            for m in sorted(mods, key=lambda m: m.display_name.lower()):
-                if m.display_name in approves:
-                    mark = '同意'
-                elif m.display_name in rejects:
-                    mark = '反對'
-                else:
-                    mark = self._get_status_label(m.status)
-                lines.append(f"{m.display_name} {mark}")
-
-        # 顯示 Admin 分區
-        if pure_admins:
-            lines.append("==管理員==")
-            for m in sorted(pure_admins, key=lambda m: m.display_name.lower()):
-                if m.display_name in approves:
-                    mark = '同意'
-                elif m.display_name in rejects:
-                    mark = '反對'
-                else:
-                    mark = self._get_status_label(m.status)
-                lines.append(f"{m.display_name} {mark}")
-
-        total_online = sum(1 for m in admins if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
-
-        embed = discord.Embed(
-            title='警告投票',
-            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票",
-            color=discord.Color.orange()
-        )
-        if info.get('reason'):
-            embed.add_field(name='原因', value=info['reason'], inline=False)
-        embed.add_field(name='投票進度', value='```\n' + '\n'.join(lines) + '\n```', inline=False)
-        embed.set_footer(text='請於 24 小時內投票，離線者不計入。')
-        await vote_msg.edit(embed=embed)
-
-        # 如果有 mod 投票通過則直接結束
-        for name in approves:
-            member = discord.utils.get(guild.members, display_name=name)
-            if member and any(r.id in mod_ids for r in member.roles):
-                await self._end_vote(msg_id)
-                return
-
-        if await self._threshold_passed(info['level'], len(approves), total_online):
+        if snapshot['mod_approve'] or snapshot['threshold_passed']:
             await self._end_vote(msg_id)
 
-
     async def _end_vote(self, msg_id: int):
-        info = self.active_votes.pop(msg_id, None)
-        if not info:
+        current = self.active_votes.get(msg_id)
+        if current is None:
             return
-        guild = info['channel'].guild
-        vote_channel = info['channel']
+
+        lock = current.setdefault('lock', asyncio.Lock())
+        async with lock:
+            info = self.active_votes.pop(msg_id, None)
+        if info is None:
+            return
+
+        guild = self.bot.get_guild(info.get('guild_id'))
+        if guild is None:
+            log.warning(f'Vote {msg_id} ended without guild context, skipped finalization.')
+            return
+
+        vote_channel = guild.get_channel(info.get('channel_id')) or info.get('channel')
+        vote_msg = None
+        if vote_channel is not None and hasattr(vote_channel, 'fetch_message'):
+            try:
+                vote_msg = await vote_channel.fetch_message(msg_id)
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+                vote_msg = None
+
+        snapshot = await self._build_vote_snapshot(guild, info)
+        passed = snapshot['mod_approve'] or snapshot['threshold_passed']
+        result_embed = self._build_result_embed(info, snapshot, passed=passed)
+
+        if vote_msg is not None:
+            try:
+                await vote_msg.edit(embed=result_embed, view=LegislativeVoteView(self, disabled=True))
+            except (discord.NotFound, discord.Forbidden, discord.HTTPException) as e:
+                log.warning(f'[Guild {guild.id}] Vote {msg_id} final message update failed.', exc_info=e)
+
+        result_channel = None
         result_ch_id = await self.data.guild(guild).result_channel()
-        result_channel = guild.get_channel(result_ch_id) if result_ch_id else None
+        if result_ch_id:
+            result_channel = guild.get_channel(result_ch_id)
 
-        vote_msg = await vote_channel.fetch_message(msg_id)
-        approves, rejects = await self._collect_votes(vote_msg)
-
-        mod_roles = await self.bot.get_mod_roles(guild)
-        mod_ids = {r.id for r in mod_roles}
-        is_mod = any(r.id in mod_ids for r in info['initiator'].roles)
-        total_online = sum(1 for m in await self._get_admins(guild) if m.status in (discord.Status.online, discord.Status.idle, discord.Status.dnd))
-        passed = is_mod or await self._threshold_passed(info['level'], len(approves), total_online)
-
-        record = [f"{n} 同意" for n in approves] + [f"{n} 反對" for n in rejects] + [
-            f"{m.display_name}: {self._get_status_label(m.status)}" for m in await self._get_admins(guild)
-            if m.display_name not in approves + rejects
-        ]
-        embed = discord.Embed(
-            title='投票結束',
-            description=f"{info['initiator'].mention} 發起對 {info['target'].mention} 的 {info['level']} 級警告投票",
-            color=discord.Color.greyple()
-        )
-        if info.get('reason'):
-            embed.add_field(name='原因', value=info['reason'], inline=False)
-        embed.add_field(name='最終投票記錄', value='```\n' + '\n'.join(record) + '\n```', inline=False)
-        embed.add_field(name='結果', value='通過' if passed else '未通過', inline=False)
-        embed.set_footer(text='投票已結束')
-
-        targets = [vote_channel]
-        if result_channel and result_channel.id != vote_channel.id:
+        targets = []
+        if vote_channel is not None and hasattr(vote_channel, 'send'):
+            targets.append(vote_channel)
+        if result_channel and (vote_channel is None or result_channel.id != vote_channel.id):
             targets.append(result_channel)
+
         for ch in targets:
-            await ch.send(embed=embed)
+            try:
+                await ch.send(embed=result_embed)
+            except (discord.Forbidden, discord.HTTPException) as e:
+                log.warning(f'[Guild {guild.id}] Vote {msg_id} result embed send failed.', exc_info=e)
 
         if passed:
             member = await self.bot.get_or_fetch_member(guild, info['member'].id)
+            if member is None:
+                member = info['member']
             try:
                 await self.api.warn(
                     guild=guild,
@@ -265,14 +541,19 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 msg = str(e)
         else:
             msg = f"{info['target'].mention} 的 {info['level']} 級警告投票未通過，已取消警告。"
+
         for ch in targets:
-            await ch.send(msg)
+            try:
+                await ch.send(msg)
+            except (discord.Forbidden, discord.HTTPException) as e:
+                log.warning(f'[Guild {guild.id}] Vote {msg_id} result text send failed.', exc_info=e)
 
     async def _vote_timeout(self, msg_id: int):
         info = self.active_votes.get(msg_id)
         if not info:
             return
-        await asyncio.sleep((info['end_time'] - datetime.utcnow()).total_seconds())
+        remaining = (info['end_time'] - datetime.utcnow()).total_seconds()
+        await asyncio.sleep(max(0, remaining))
         if msg_id in self.active_votes:
             await self._end_vote(msg_id)
 
@@ -308,7 +589,8 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
         if level >= 3:
             guild_conf = await self.data.guild(ctx.guild).all()
             forbidden = guild_conf.get('forbidden_roles', []) or []
-            if any(r.id in forbidden for r in member.roles):
+            member_roles = getattr(member, 'roles', [])
+            if any(getattr(role, 'id', None) in forbidden for role in member_roles):
                 await ctx.send(f'{member.mention} 擁有禁止3級以上警告的身分組，無法發起此級別警告。')
                 return
             vote_id = guild_conf.get('vote_channel')
@@ -316,19 +598,18 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 await ctx.send('尚未設定投票頻道。')
                 return
             vote_ch = ctx.guild.get_channel(vote_id)
-            embed = discord.Embed(
-                title='警告投票',
-                description=f"{ctx.author.mention} 發起對 {member.mention} 的 {level} 級警告投票",
-                color=discord.Color.orange()
-            )
-            if reason:
-                embed.add_field(name='原因', value=reason, inline=False)
-            embed.add_field(name='投票進度', value='```無投票記錄```', inline=False)
-            embed.set_footer(text='24 小時內，✅/❌ 投票，Admin 專屬。')
-            msg = await vote_ch.send(embed=embed)
-            await msg.add_reaction('✅')
-            await msg.add_reaction('❌')
-            self.active_votes[msg.id] = {
+            if vote_ch is None:
+                try:
+                    vote_ch = await ctx.guild.fetch_channel(vote_id)
+                except (discord.Forbidden, discord.NotFound, discord.HTTPException):
+                    await ctx.send('投票頻道不存在，請重新設定。')
+                    return
+            if not hasattr(vote_ch, 'send') or not hasattr(vote_ch, 'fetch_message'):
+                await ctx.send('投票頻道類型不支援表決訊息，請改為文字頻道。')
+                return
+
+            end_time = datetime.utcnow() + timedelta(hours=24)
+            vote_info = {
                 'initiator': ctx.author,
                 'target': member,
                 'level': level,
@@ -336,9 +617,22 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 'time': time,
                 'ban_days': ban_days,
                 'channel': vote_ch,
+                'channel_id': vote_ch.id,
+                'guild_id': ctx.guild.id,
                 'member': member,
-                'end_time': datetime.now(datetime.timezone.utc) + timedelta(hours=24)
+                'votes': {},
+                'lock': asyncio.Lock(),
+                'end_time': end_time,
             }
+            snapshot = await self._build_vote_snapshot(ctx.guild, vote_info)
+            embed = self._build_vote_embed(vote_info, snapshot)
+            try:
+                msg = await vote_ch.send(embed=embed, view=LegislativeVoteView(self))
+            except (discord.Forbidden, discord.HTTPException):
+                await ctx.send('無法在投票頻道送出表決訊息，請檢查權限。')
+                return
+
+            self.active_votes[msg.id] = vote_info
             asyncio.create_task(self._vote_timeout(msg.id))
             return
         try:
@@ -355,53 +649,39 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
                 raise fail[0]
         except errors.MissingPermissions as e:
             await ctx.send(e)
+            return
         except errors.MemberTooHigh as e:
             await ctx.send(e)
+            return
         except errors.LostPermissions as e:
             await ctx.send(e)
+            return
         except errors.SuicidePrevention as e:
             await ctx.send(e)
+            return
         except errors.MissingMuteRole:
-            await ctx.send(
-                _(
-                    "You need to set up the mute role before doing this.\n"
-                    "Use the `[p]warnset mute` command for this."
-                )
-            )
+            await ctx.send(_('You need to set up the mute role before doing this.'))
+            return
         except errors.NotFound:
-            await ctx.send(
-                _(
-                    "Please set up a modlog channel before warning a member.\n\n"
-                    "**With WarnSystem**\n"
-                    "*Use the `[p]warnset channel` command.*\n\n"
-                    "**With Red Modlog**\n"
-                    "*Load the `modlogs` cog and use the `[p]modlogset modlog` command.*"
-                )
-            )
+            await ctx.send(_('Please set up a modlog channel before warning a member.'))
+            return
         except errors.NotAllowedByHierarchy:
             is_admin = mod.is_admin_or_superior(self.bot, member)
-            await ctx.send(
-                _(
-                    "You are not allowed to do this, {member} is higher than you in the role "
-                    "hierarchy. You can only warn members which top role is lower than yours.\n\n"
-                ).format(member=str(member))
-                + (
-                    _("You can disable this check by using the `[p]warnset hierarchy` command.")
-                    if is_admin
-                    else ""
-                )
-            )
+            msg = _('You are not allowed to do this, {member} is higher than you in the role hierarchy.').format(member=str(member))
+            if is_admin:
+                msg += _(' You can disable this check by using the `[p]warnset hierarchy` command.')
+            await ctx.send(msg)
+            return
         except discord.errors.NotFound:
-            await ctx.send(_("Hackban failed: No user found."))
+            await ctx.send(_('Hackban failed: No user found.'))
+            return
+        if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
+            try:
+                await ctx.message.add_reaction('✅')
+            except discord.errors.NotFound:
+                pass
         else:
-            if ctx.channel.permissions_for(ctx.guild.me).add_reactions:
-                try:
-                    await ctx.message.add_reaction("✅")
-                except discord.errors.NotFound:
-                    # retrigger or scheduler probably executed the command
-                    pass
-            else:
-                await ctx.send(_("Done."))
+            await ctx.send(_('Done.'))
 
     async def call_masswarn(
         self,
@@ -1169,9 +1449,6 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
-        if not member.guild:
-            # bot was kicked
-            return
         await self.on_manual_action(member.guild, member, 3)
 
     async def on_manual_action(self, guild: discord.Guild, member: discord.Member, level: int):
@@ -1186,7 +1463,7 @@ class WarnSystem(SettingsMixin, AutomodMixin, commands.Cog, metaclass=CompositeM
             await self.api.get_modlog_channel(guild, level)
         except errors.NotFound:
             return
-        when = datetime.now(timezone.utc)
+        when = datetime.now(datetime.timezone.utc)
         before = when + timedelta(minutes=1)
         after = when - timedelta(minutes=1)
         await asyncio.sleep(10)  # prevent small delays from causing a 5 minute delay on entry
