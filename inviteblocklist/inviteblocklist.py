@@ -74,6 +74,10 @@ class ChannelUserRole(IDConverter):
 class InviteBlocklist(commands.Cog):
     __author__ = ["TrustyJAID"]
     __version__ = "1.1.6"
+    DEFAULT_UNAUTHORIZED_INVITE_TITLE = "邀請鏈接已被刪除"
+    DEFAULT_UNAUTHORIZED_INVITE_MESSAGE = (
+        "{user}，您發送的邀請鏈接已被刪除\n如果你已被允許請聯繫管理員\n"
+    )
 
     def __init__(self, bot):
         self.bot = bot
@@ -84,6 +88,7 @@ class InviteBlocklist(commands.Cog):
             all_invites=False,
             staff_role=None,
             immunity_list=[],
+            unauthorized_invite_message=None,
         )
         self.warnsystem = None
         self.warnsystem_available = False
@@ -238,9 +243,11 @@ class InviteBlocklist(commands.Cog):
 
     async def _handle_unauthorized_invite(self, guild, message, staff_role_mention):
         try:
+            custom_message = await self.config.guild(guild).unauthorized_invite_message()
+            message_template = custom_message or self.DEFAULT_UNAUTHORIZED_INVITE_MESSAGE
             embed = discord.Embed(
-                title="邀請鏈接已被刪除",
-                description=f"{message.author.mention}，您發送的邀請鏈接已被刪除\n如果你已被允許請聯繫管理員\n",
+                title=self.DEFAULT_UNAUTHORIZED_INVITE_TITLE,
+                description=message_template.replace("{user}", message.author.mention),
                 color=discord.Color.red()
             )
             await message.channel.send(embed=embed)
@@ -289,6 +296,14 @@ class InviteBlocklist(commands.Cog):
     async def staffrole(self, ctx: commands.Context):
         """
         Commands for tag
+        """
+        pass
+
+    @invite_block.group(name="message", aliases=["msg"])
+    @commands.guild_only()
+    async def invite_message(self, ctx: commands.Context):
+        """
+        Commands for setting unauthorized invite notice message
         """
         pass
     ##########################################################################################
@@ -564,6 +579,40 @@ class InviteBlocklist(commands.Cog):
                 msg += f"{obj.name}\n"
         for page in pagify(msg):
             await ctx.maybe_send_embed(page)
+
+    ##########################################################################################
+    #                                  Message Settings                                      #
+    ##########################################################################################
+
+    @invite_message.command(name="set")
+    async def set_unauthorized_message(self, ctx: commands.Context, *, message: str):
+        """
+        Set custom message shown when an unauthorized invite link is deleted.
+        Use {user} to mention the user who posted the invite.
+        """
+        await self.config.guild(ctx.guild).unauthorized_invite_message.set(message)
+        await ctx.send("Unauthorized invite message updated.")
+
+    @invite_message.command(name="show", aliases=["info"])
+    async def show_unauthorized_message(self, ctx: commands.Context):
+        """Show the current unauthorized invite message."""
+        message = await self.config.guild(ctx.guild).unauthorized_invite_message()
+        if message:
+            await ctx.send(
+                "Current custom unauthorized invite message:\n"
+                f"{message.replace('{user}', ctx.author.mention)}"
+            )
+            return
+        await ctx.send(
+            "No custom message is set. Default message preview:\n"
+            f"{self.DEFAULT_UNAUTHORIZED_INVITE_MESSAGE.replace('{user}', ctx.author.mention)}"
+        )
+
+    @invite_message.command(name="remove", aliases=["del", "rem", "reset", "clear"])
+    async def remove_unauthorized_message(self, ctx: commands.Context):
+        """Reset unauthorized invite message to default."""
+        await self.config.guild(ctx.guild).unauthorized_invite_message.set(None)
+        await ctx.send("Unauthorized invite message has been reset to default.")
             
     ##########################################################################################
     #                                  Staff Settings                                        #
