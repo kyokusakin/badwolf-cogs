@@ -419,6 +419,13 @@ class BaccaratRoom:
         async with self._lock:
             await self._close_room_locked(reason=reason, refund=True)
 
+    async def _delete_message_later(self, message: discord.Message, delay_seconds: int):
+        await asyncio.sleep(delay_seconds)
+        try:
+            await message.delete()
+        except discord.HTTPException:
+            pass
+
     async def _close_room_locked(self, reason: str, refund: bool):
         if self.closed:
             return
@@ -442,13 +449,16 @@ class BaccaratRoom:
         self.cog.active_baccarat_rooms.pop(self.channel_id, None)
 
         if self.message:
+            close_notice = f"{reason}\n\n此訊息將在 10 秒後刪除。"
             close_embed = discord.Embed(
                 title="🛑 百家樂房間已關閉",
-                description=reason,
+                description=close_notice,
                 color=discord.Color.dark_red(),
             )
             try:
-                await self.message.edit(embed=close_embed, view=None)
+                close_message = self.message
+                await close_message.edit(embed=close_embed, view=None)
+                self.cog.bot.loop.create_task(self._delete_message_later(close_message, 10))
             except discord.HTTPException:
                 pass
 

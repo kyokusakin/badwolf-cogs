@@ -1,6 +1,7 @@
 import discord
 import random
 import time
+from datetime import datetime
 from typing import List, Optional, Union
 from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
@@ -193,8 +194,8 @@ class CasinoCommands():
                 return
 
         # 執行工作邏輯
-        base_income = 1000
-        random_income = random.randint(100, 1000)
+        base_income = 196
+        random_income = random.randint(10, 100)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
         await ctx.reply(f"你工作賺取了 💰 {total_income:,} 狗幣！")
@@ -203,11 +204,12 @@ class CasinoCommands():
         await self.casino.stats_db.set_cooldown(user_id, command_name, 3600, commands.BucketType.user)
 
     @commands.guild_only()
-    @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥"])
+    @commands.command(name="dogmeat", aliases=["賣狗肉", "賣狗哥", "dogexe", "賣dogexe", "賣DOGEXE"])
     async def dogmeat(self, ctx: commands.Context):
-        """賣狗肉賺取籌碼，每天可執行一次。"""
+        """賣 DOGEXE 賺取籌碼，每月可執行一次。"""
         user_id = ctx.author.id
-        command_name = "dogmeat"
+        now = datetime.now()
+        command_name = f"dogmeat:{now.year}-{now.month:02d}"
         
         # 檢查冷卻
         expires_at = await self.casino.stats_db.get_cooldown(user_id, command_name)
@@ -215,20 +217,31 @@ class CasinoCommands():
             remaining = expires_at - time.time()
             if remaining > 0:
                 seconds = int(remaining)
-                minutes = seconds // 60
-                remaining_str = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
-                await ctx.reply(f"你已經工作過了，請在 {remaining_str} 後再試。")
+                if seconds >= 86400:
+                    days = seconds // 86400
+                    hours = (seconds % 86400) // 3600
+                    remaining_str = f"{days} 天 {hours} 小時"
+                else:
+                    minutes = seconds // 60
+                    remaining_str = f"{minutes} 分鐘" if minutes > 0 else f"{seconds} 秒"
+                await ctx.reply(f"你這個月已經賣過 DOGEXE 了，請在 {remaining_str} 後再試。")
                 return
 
-        # 執行賣狗肉邏輯
-        base_income = 8000
-        random_income = random.randint(500, 10000)
+        base_income = 29500
+        random_income = random.randint(1000, 10000)
         total_income = base_income + random_income
         await self.casino.update_balance(ctx.author, total_income)
-        await ctx.reply(f"賣狗哥賺取了 💰 {total_income:,} 狗幣！")
+        await ctx.reply(f"賣 DOGEXE 賺取了 💰 {total_income:,} 狗幣！")
 
-        # 設置冷卻
-        await self.casino.stats_db.set_cooldown(user_id, command_name, 86400, commands.BucketType.user)
+        # 本月用過一次後，要到次月 1 號才可再次使用
+        if now.month == 12:
+            next_month_start = datetime(year=now.year + 1, month=1, day=1)
+        else:
+            next_month_start = datetime(year=now.year, month=now.month + 1, day=1)
+        cooldown_seconds = max(1, int((next_month_start - now).total_seconds()))
+        await self.casino.stats_db.set_cooldown(
+            user_id, command_name, cooldown_seconds, commands.BucketType.user
+        )
 ##########################################################
 # 遊戲指令
 ##########################################################

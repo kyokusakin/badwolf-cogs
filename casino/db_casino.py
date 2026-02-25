@@ -151,7 +151,7 @@ class StatsDatabase:
             if row:
                 return row[0]
             else:
-                default_balance = 1000
+                default_balance = 77777
                 try:
                     await cursor.execute(
                         "INSERT INTO balances (user_id, balance) VALUES (?, ?)",
@@ -179,7 +179,7 @@ class StatsDatabase:
         async with self.connection.cursor() as cursor:
             await cursor.execute(
                "INSERT INTO balances (user_id, balance) VALUES (?, ?) ON CONFLICT(user_id) DO NOTHING",
-               (user_id, 1000)
+               (user_id, 77777)
             )
             await self.connection.commit()
 

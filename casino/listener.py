@@ -27,7 +27,7 @@ class CasinoMessageListener:
             "baccarat": ["百家樂", "百家乐", "baccarat"],
             "balance": ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"],
             "work": ["工作", "打工", "work"],
-            "dogmeat": ["賣狗肉", "賣狗哥", "dogmeat"],
+            "dogmeat": ["賣狗肉", "賣狗哥", "dogmeat", "dogexe", "賣dogexe", "賣DOGEXE"],
             "transfer": ["轉移", "轉帳", "transfer", "v", "打錢"],
         }
 
