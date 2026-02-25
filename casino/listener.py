@@ -24,6 +24,7 @@ class CasinoMessageListener:
             "blackjack": ["21點", "二十一點", "blackjack"],
             "guesssize": ["猜大小", "骰寶", "guesssize"],
             "slots": ["拉霸", "slots"],
+            "baccarat": ["百家樂", "百家乐", "baccarat"],
             "balance": ["餘額", "查詢餘額", "狗幣", "籌碼", "balance"],
             "work": ["工作", "打工", "work"],
             "dogmeat": ["賣狗肉", "賣狗哥", "dogmeat"],
@@ -65,15 +66,24 @@ class CasinoMessageListener:
 
         for command_name, keywords in self.keyword_command_map.items():
             if keyword in keywords:
-                if command_name in ["blackjack", "guesssize", "slots"]:
-                    bet = None
+                if command_name in ["blackjack", "guesssize", "slots", "baccarat"]:
+                    value = None
                     if len(content) > 1:
                         try:
-                            bet = int(content[1])
+                            value = int(content[1])
                         except ValueError:
-                            bet = None
-                    await ctx.invoke(getattr(self.cog, command_name), bet=bet)
-                    log.debug(f"Keyword '{keyword}' triggered game command '{command_name}' with bet: {bet}")
+                            value = None
+
+                    if command_name == "baccarat":
+                        await ctx.invoke(getattr(self.cog, command_name), min_bet=value)
+                        log.debug(
+                            f"Keyword '{keyword}' triggered game command '{command_name}' with min_bet: {value}"
+                        )
+                    else:
+                        await ctx.invoke(getattr(self.cog, command_name), bet=value)
+                        log.debug(
+                            f"Keyword '{keyword}' triggered game command '{command_name}' with bet: {value}"
+                        )
 
                 elif command_name == "transfer":
                     args = content[1:]

@@ -6,6 +6,7 @@ import logging
 from .blackjack import BlackjackGame
 from .guesssize import GuessGame
 from .slots import SlotGame
+from .baccarat import BaccaratRoom
 from .listener import CasinoMessageListener
 from .command_casino import CasinoCommands
 from .db_casino import StatsDatabase
@@ -22,6 +23,8 @@ class Casino(commands.Cog, CasinoCommands):
         self.active_blackjack_games: dict[int, BlackjackGame] = {}
         self.active_guesssize_games: dict[int, GuessGame] = {}
         self.active_slots_games: dict[int, SlotGame] = {}
+        self.active_baccarat_rooms: dict[int, BaccaratRoom] = {}
+        self.active_baccarat_user_rooms: dict[int, int] = {}
         self.stats_db = StatsDatabase(bot, self)
         self.listener = CasinoMessageListener(bot, self)
         self.config.register_guild(allowed_channels=[])
@@ -29,6 +32,7 @@ class Casino(commands.Cog, CasinoCommands):
         self.default_blackjack_bet = 100
         self.default_guesssize_bet = 50
         self.default_slots_bet = 50
+        self.default_baccarat_min_bet = 100
 
     # ——— 遊戲狀態管理 ————————————————————————
 
@@ -36,7 +40,8 @@ class Casino(commands.Cog, CasinoCommands):
         return (
             user_id in self.active_blackjack_games or
             user_id in self.active_guesssize_games or
-            user_id in self.active_slots_games
+            user_id in self.active_slots_games or
+            user_id in self.active_baccarat_user_rooms
         )
 
     def end_game(self, user_id: int):
@@ -84,7 +89,11 @@ class Casino(commands.Cog, CasinoCommands):
     # ——— 卸載清理 ————————————————————————
 
     def cog_unload(self):
+        for room in list(self.active_baccarat_rooms.values()):
+            self.bot.loop.create_task(room.close_room("系統正在卸載 Casino 模組，百家樂房間已關閉。"))
         self.active_blackjack_games.clear()
         self.active_guesssize_games.clear()
         self.active_slots_games.clear()
+        self.active_baccarat_rooms.clear()
+        self.active_baccarat_user_rooms.clear()
         self.bot.loop.create_task(self.stats_db.close())

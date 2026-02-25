@@ -18,6 +18,66 @@ class StatsDatabase:
         self.connection = None
         bot.loop.create_task(self.initialize_db())
 
+    @staticmethod
+    def _game_stats_create_sql(table_name: str = "game_stats") -> str:
+        return f'''
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                user_id INTEGER,
+                game_type TEXT CHECK(game_type IN ('blackjack', 'slots', 'guesssize', 'baccarat')),
+                bet INTEGER DEFAULT 0,
+                wins INTEGER DEFAULT 0,
+                losses INTEGER DEFAULT 0,
+                profit INTEGER DEFAULT 0,
+                games INTEGER DEFAULT 0,
+                PRIMARY KEY (user_id, game_type),
+                FOREIGN KEY (user_id) REFERENCES user_stats(user_id) ON DELETE CASCADE
+            )
+        '''
+
+    async def _ensure_baccarat_in_game_stats(self):
+        if self.connection is None:
+            return
+
+        async with self.connection.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='game_stats'"
+        ) as cursor:
+            row = await cursor.fetchone()
+
+        table_sql = (row[0] or "").lower() if row else ""
+        if "baccarat" in table_sql:
+            return
+
+        log.info("Detected legacy game_stats schema. Migrating to include 'baccarat'.")
+        await self._migrate_game_stats_table()
+
+    async def _migrate_game_stats_table(self):
+        if self.connection is None:
+            return
+
+        try:
+            await self.connection.execute("PRAGMA foreign_keys = OFF")
+            await self.connection.execute("BEGIN")
+
+            await self.connection.execute(self._game_stats_create_sql("game_stats_new"))
+            await self.connection.execute('''
+                INSERT INTO game_stats_new (user_id, game_type, bet, wins, losses, profit, games)
+                SELECT user_id, game_type, bet, wins, losses, profit, games
+                FROM game_stats
+            ''')
+            await self.connection.execute("DROP TABLE game_stats")
+            await self.connection.execute("ALTER TABLE game_stats_new RENAME TO game_stats")
+
+            await self.connection.commit()
+            log.info("Migration completed: game_stats now supports 'baccarat'.")
+        except Exception:
+            await self.connection.rollback()
+            log.exception("Failed migrating game_stats to include 'baccarat'. Keeping existing schema.")
+        finally:
+            try:
+                await self.connection.execute("PRAGMA foreign_keys = ON")
+            except Exception:
+                log.exception("Failed to re-enable foreign_keys pragma after migration.")
+
     async def initialize_db(self):
         """初始化統計、冷卻與餘額表結構"""
         if self.connection is not None:
@@ -40,19 +100,7 @@ class StatsDatabase:
             ''')
 
             # 各遊戲類型統計
-            await self.connection.execute('''
-                CREATE TABLE IF NOT EXISTS game_stats (
-                    user_id INTEGER,
-                    game_type TEXT CHECK(game_type IN ('blackjack', 'slots', 'guesssize')),
-                    bet INTEGER DEFAULT 0,
-                    wins INTEGER DEFAULT 0,
-                    losses INTEGER DEFAULT 0,
-                    profit INTEGER DEFAULT 0,
-                    games INTEGER DEFAULT 0,
-                    PRIMARY KEY (user_id, game_type),
-                    FOREIGN KEY (user_id) REFERENCES user_stats(user_id) ON DELETE CASCADE
-                )
-            ''')
+            await self.connection.execute(self._game_stats_create_sql())
 
             # 冷卻時間資料表
             await self.connection.execute('''
@@ -74,6 +122,7 @@ class StatsDatabase:
             ''')
 
             await self.connection.commit()
+            await self._ensure_baccarat_in_game_stats()
             log.info("Database tables checked/created successfully.")
 
         except Exception as e:

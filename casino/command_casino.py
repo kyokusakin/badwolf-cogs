@@ -1,6 +1,7 @@
 import discord
 import random
 import time
+from typing import List, Optional, Union
 from redbot.core import commands, Config, data_manager
 from redbot.core.bot import Red
 import logging
@@ -8,6 +9,7 @@ import logging
 from .blackjack import BlackjackGame
 from .guesssize import GuessGame
 from .slots import SlotGame
+from .baccarat import BaccaratRoom
 
 log = logging.getLogger("red.BadwolfCogs.casino.commands")
 
@@ -17,6 +19,18 @@ class CasinoCommands():
     def __init__(self, bot: Red, casino_cog):
         self.bot = bot
         self.casino = casino_cog
+
+    def _resolve_balance_targets(
+        self, ctx: commands.Context, user: Union[discord.Member, str]
+    ) -> Optional[List[discord.Member]]:
+        """解析餘額操作目標：可指定單一成員或 all/全部。"""
+        if isinstance(user, discord.Member):
+            return [user]
+
+        if user.strip().lower() not in {"all", "全部"}:
+            return None
+
+        return [member for member in ctx.guild.members if not member.bot]
 
     @commands.guild_only()
     @commands.command(name="balance", aliases=["餘額", "查詢餘額", "狗幣", "籌碼"])
@@ -40,53 +54,90 @@ class CasinoCommands():
     @commands.is_owner()
     @commands.guild_only()
     @commands.command(name="setbalance", aliases=["設定餘額"])
-    async def setbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
-        """設定使用者的餘額。"""
+    async def setbalance(self, ctx: commands.Context, user: Union[discord.Member, str], amount: int):
+        """設定使用者餘額，可使用 all/全部 套用到全體。"""
         if amount < 0:
             await ctx.send("餘額不能為負數。")
             return
 
-        # 更新使用者的餘額
-        await self.casino.set_balance(user, amount)
+        targets = self._resolve_balance_targets(ctx, user)
+        if targets is None:
+            await ctx.send("找不到該使用者，請指定成員。")
+            return
+        if not targets:
+            await ctx.send("目前沒有可調整餘額的成員。")
+            return
 
-        # 獲取更新後的餘額
-        new_balance = await self.casino.get_balance(user)
+        if len(targets) > 1:
+            for member in targets:
+                await self.casino.set_balance(member, amount)
+            await ctx.send(f"已將 {len(targets):,} 位使用者的餘額設置為 {amount:,} 狗幣。")
+            return
 
-        await ctx.send(f"已將 {user.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
+        target = targets[0]
+        await self.casino.set_balance(target, amount)
+
+        new_balance = await self.casino.get_balance(target)
+
+        await ctx.send(f"已將 {target.display_name} 的餘額設置為 {new_balance:,} 狗幣。")
 
     @commands.is_owner()
     @commands.guild_only()
     @commands.command(name="addbalance", aliases=["增加餘額"])
-    async def addbalance(self, ctx: commands.Context, user: discord.Member, amount: int):
-        """增加使用者的餘額。"""
+    async def addbalance(self, ctx: commands.Context, user: Union[discord.Member, str], amount: int):
+        """增加使用者餘額，可使用 all/全部 套用到全體。"""
         if amount <= 0:
             await ctx.send("增加的金額必須大於零。")
             return
 
-        # 更新使用者的餘額
-        await self.casino.update_balance(user, amount)
+        targets = self._resolve_balance_targets(ctx, user)
+        if targets is None:
+            await ctx.send("找不到該使用者，請指定成員或使用 `all`。")
+            return
+        if not targets:
+            await ctx.send("目前沒有可調整餘額的成員。")
+            return
 
-        # 獲取更新後的餘額
-        new_balance = await self.casino.get_balance(user)
+        if len(targets) > 1:
+            for member in targets:
+                await self.casino.update_balance(member, amount)
+            await ctx.send(f"已為 {len(targets):,} 位使用者增加 {amount:,} 狗幣。")
+            return
 
-        await ctx.send(f"已將 {user.display_name} 的餘額增加 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
+        target = targets[0]
+        await self.casino.update_balance(target, amount)
+        new_balance = await self.casino.get_balance(target)
+
+        await ctx.send(f"已將 {target.display_name} 的餘額增加 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
 
     @commands.is_owner()
     @commands.guild_only()
     @commands.command(name="removebalance", aliases=["減少餘額"])
-    async def removebalance(self, ctx: commands.Context, user: discord.Member, amount: int):
-        """減少使用者的餘額。"""
+    async def removebalance(self, ctx: commands.Context, user: Union[discord.Member, str], amount: int):
+        """減少使用者餘額，可使用 all/全部 套用到全體。"""
         if amount <= 0:
             await ctx.send("減少的金額必須大於零。")
             return
 
-        # 更新使用者的餘額
-        await self.casino.update_balance(user, -amount)
+        targets = self._resolve_balance_targets(ctx, user)
+        if targets is None:
+            await ctx.send("找不到該使用者，請指定成員或使用 `all`。")
+            return
+        if not targets:
+            await ctx.send("目前沒有可調整餘額的成員。")
+            return
 
-        # 獲取更新後的餘額
-        new_balance = await self.casino.get_balance(user)
+        if len(targets) > 1:
+            for member in targets:
+                await self.casino.update_balance(member, -amount)
+            await ctx.send(f"已為 {len(targets):,} 位使用者減少 {amount:,} 狗幣。")
+            return
 
-        await ctx.send(f"已將 {user.display_name} 的餘額減少 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
+        target = targets[0]
+        await self.casino.update_balance(target, -amount)
+        new_balance = await self.casino.get_balance(target)
+
+        await ctx.send(f"已將 {target.display_name} 的餘額減少 {amount:,} 狗幣，新的餘額為 {new_balance:,} 狗幣。")
 
     @commands.guild_only()
     @commands.command(name="transfer", aliases=["轉移", "轉帳"])
@@ -255,6 +306,41 @@ class CasinoCommands():
         except Exception as e:
             log.error(f"啟動 拉霸 遊戲時發生錯誤：{e}", exc_info=True)
             await ctx.send("啟動 拉霸 遊戲時發生錯誤，請稍後再試。")
+
+    @commands.guild_only()
+    @commands.command(name="baccarat", aliases=["百家樂", "百家乐"])
+    async def baccarat(self, ctx: commands.Context, min_bet: int = None):
+        """百家樂房間。指令格式：[p]baccarat [最低下注]"""
+        if not await self.is_allowed_channel(ctx.message):
+            await ctx.send(
+                "這個頻道尚未開放百家樂。請管理員使用 "
+                f"`{ctx.clean_prefix}casinochan add #{ctx.channel.name}` 設定允許頻道。"
+            )
+            return
+
+        if self.is_playing(ctx.author.id):
+            await ctx.send("你已經正在進行一個遊戲，請先完成後再開房。")
+            return
+
+        if ctx.channel.id in self.active_baccarat_rooms:
+            await ctx.send("本頻道已經有一桌百家樂正在進行中。")
+            return
+
+        if min_bet is None:
+            min_bet = self.default_baccarat_min_bet
+
+        if min_bet <= 0:
+            await ctx.send("最低下注金額必須大於 0。")
+            return
+
+        try:
+            room = BaccaratRoom(ctx=ctx, cog=self, min_bet=min_bet)
+            await room.start()
+        except Exception as e:
+            log.error(f"啟動 百家樂 遊戲時發生錯誤：{e}", exc_info=True)
+            self.active_baccarat_rooms.pop(ctx.channel.id, None)
+            self.active_baccarat_user_rooms.pop(ctx.author.id, None)
+            await ctx.send("啟動 百家樂 遊戲時發生錯誤，請稍後再試。")
 
 ########################################################
 # 賭場頻道設定
