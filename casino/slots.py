@@ -174,7 +174,7 @@ class SlotView(discord.ui.View):
         ), inline=False)
         embed.add_field(name="📈 遊戲統計", value=f"• 當前餘額: {new_bal:,} 籌碼", inline=False)
         embed.set_thumbnail(url="https://cdn.discordapp.com/attachments/1099716093741895700/1356496158037381120/6.png")
-        embed.set_footer(text=f"玩家 {interaction.user.display_name}", icon_url=interaction.user.avatar.url)
+        embed.set_footer(text=f"玩家 {interaction.user.display_name}", icon_url=interaction.user.display_avatar.url)
         await interaction.response.edit_message(embed=embed, view=self)
         self.refresh_timeout()
 
