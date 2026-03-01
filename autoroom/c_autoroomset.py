@@ -553,7 +553,11 @@ class AutoRoomSetCommands(MixinMeta, ABC):
 
         Custom format example:
         `{{username}}'s Room{% if dupenum > 1 %} ({{dupenum}}){% endif %}`
+<<<<<<< HEAD
         """  # noqa: D401
+=======
+        """
+>>>>>>> upstream-autoroom/master
         await self._save_room_name(ctx, autoroom_source, "username")
 
     @modify_name.command(name="game")
