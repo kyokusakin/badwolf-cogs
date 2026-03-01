@@ -128,6 +128,7 @@ class AutoRoomCommands(MixinMeta, ABC):
 
         await ctx.send(str(room_settings.display(access_settings)))
 
+<<<<<<< HEAD
     @autoroom.command(name="timeout")
     @commands.mod_or_can_manage_channel()
     async def autoroom_timeout(self, ctx: commands.Context, seconds: int) -> None:
@@ -142,6 +143,8 @@ class AutoRoomCommands(MixinMeta, ABC):
         else:
             await self.config.guild(ctx.guild).timeout_seconds.set(seconds)
             await ctx.send(f"Auto-room timeout has been set to {seconds} seconds.")
+=======
+>>>>>>> upstream-autoroom/master
     @autoroom.command(name="name")
     async def autoroom_name(self, ctx: commands.Context, *, name: str) -> None:
         """Change the name of your AutoRoom."""
@@ -264,7 +267,11 @@ class AutoRoomCommands(MixinMeta, ABC):
         perms.update(new_owner, asc["perms"]["owner"])
         if perms.modified:
             await autoroom_channel.edit(
+<<<<<<< HEAD
                 overwrites=perms.overwrites if perms.overwrites else {},
+=======
+                overwrites=perms.overwrites or {},
+>>>>>>> upstream-autoroom/master
                 reason="AutoRoom: Ownership claimed",
             )
         await self.config.channel(autoroom_channel).owner.set(new_owner.id)
@@ -282,11 +289,15 @@ class AutoRoomCommands(MixinMeta, ABC):
             legacy_text_perms.update(new_owner, self.perms_autoroom_owner_legacy_text)
             if legacy_text_perms.modified:
                 await legacy_text_channel.edit(
+<<<<<<< HEAD
                     overwrites=(
                         legacy_text_perms.overwrites
                         if legacy_text_perms.overwrites
                         else {}
                     ),
+=======
+                    overwrites=(legacy_text_perms.overwrites or {}),
+>>>>>>> upstream-autoroom/master
                     reason="AutoRoom: Ownership claimed (legacy text channel)",
                 )
 
@@ -463,7 +474,11 @@ class AutoRoomCommands(MixinMeta, ABC):
                         denied_users.remove(target.id)
         if perms.modified:
             await autoroom_channel.edit(
+<<<<<<< HEAD
                 overwrites=perms.overwrites if perms.overwrites else {},
+=======
+                overwrites=perms.overwrites or {},
+>>>>>>> upstream-autoroom/master
                 reason="AutoRoom: Permission change",
             )
         await ctx.tick()
