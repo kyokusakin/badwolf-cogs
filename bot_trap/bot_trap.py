@@ -146,6 +146,21 @@ class BotTrap(commands.Cog):
         image = Image.new("RGB", (width, height), (248, 250, 252))
         draw = ImageDraw.Draw(image)
 
+        # Draw digits first so they stay on the bottom layer.
+        font = self._get_captcha_font()
+        base_x = 24
+        for index, ch in enumerate(code):
+            glyph = Image.new("RGBA", (36, 56), (255, 255, 255, 0))
+            glyph_draw = ImageDraw.Draw(glyph)
+            glyph_color = (rng.randint(10, 70), rng.randint(10, 70), rng.randint(10, 70), 255)
+            glyph_draw.text((7, 8), ch, font=font, fill=glyph_color)
+            resampling = getattr(Image, "Resampling", Image)
+            rotated = glyph.rotate(rng.randint(-18, 18), resample=resampling.BICUBIC, expand=1)
+            x = base_x + (index * 36) + rng.randint(-2, 5)
+            y = rng.randint(18, 34)
+            image.paste(rotated, (x, y), rotated)
+
+        # Draw noise above digits.
         for _ in range(9):
             x1 = rng.randint(0, width)
             y1 = rng.randint(0, height)
@@ -159,19 +174,6 @@ class BotTrap(commands.Cog):
             y = rng.randint(0, height - 1)
             color = (rng.randint(120, 220), rng.randint(120, 220), rng.randint(120, 220))
             draw.point((x, y), fill=color)
-
-        font = self._get_captcha_font()
-        base_x = 24
-        for index, ch in enumerate(code):
-            glyph = Image.new("RGBA", (36, 56), (255, 255, 255, 0))
-            glyph_draw = ImageDraw.Draw(glyph)
-            glyph_color = (rng.randint(10, 70), rng.randint(10, 70), rng.randint(10, 70), 255)
-            glyph_draw.text((7, 8), ch, font=font, fill=glyph_color)
-            resampling = getattr(Image, "Resampling", Image)
-            rotated = glyph.rotate(rng.randint(-18, 18), resample=resampling.BICUBIC, expand=1)
-            x = base_x + (index * 36) + rng.randint(-2, 5)
-            y = rng.randint(18, 34)
-            image.paste(rotated, (x, y), rotated)
 
         image = image.filter(ImageFilter.SMOOTH)
         output = io.BytesIO()
