@@ -5,7 +5,7 @@ import logging
 import random
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Set, Tuple
+from typing import Optional, Set, Tuple
 
 import discord
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -60,18 +60,18 @@ class BotTrap(commands.Cog):
 
         self._active_traps.add(key)
         try:
-            passed = await self._run_captcha_challenge(message)
+            passed, captcha_prompt = await self._run_captcha_challenge(message)
             if passed:
                 return
-            await self._run_trap(message)
+            await self._run_trap(message, captcha_prompt=captcha_prompt)
         finally:
             self._active_traps.discard(key)
 
-    async def _run_captcha_challenge(self, message: discord.Message) -> bool:
+    async def _run_captcha_challenge(self, message: discord.Message) -> Tuple[bool, Optional[discord.Message]]:
         guild = message.guild
         member = message.author
         if guild is None or not isinstance(member, discord.Member):
-            return False
+            return False, None
 
         code = self._generate_captcha_code()
         image_bytes = self._build_captcha_image(code)
@@ -83,7 +83,11 @@ class BotTrap(commands.Cog):
         )
         prompt_embed.set_image(url="attachment://captcha.png")
 
-        prompt = await message.channel.send(embed=prompt_embed, file=file)
+        prompt = await message.reply(
+            embed=prompt_embed,
+            file=file,
+            mention_author=True,
+        )
 
         def check(reply: discord.Message) -> bool:
             return (
@@ -109,7 +113,9 @@ class BotTrap(commands.Cog):
                         color=discord.Color.green(),
                     ),
                 )
-                return True
+                with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
+                    await prompt.delete()
+                return True, None
 
             await self._send_notice(
                 message.channel,
@@ -119,7 +125,7 @@ class BotTrap(commands.Cog):
                     color=discord.Color.red(),
                 ),
             )
-            return False
+            return False, prompt
         except asyncio.TimeoutError:
             await self._send_notice(
                 message.channel,
@@ -129,10 +135,7 @@ class BotTrap(commands.Cog):
                     color=discord.Color.red(),
                 ),
             )
-            return False
-        finally:
-            with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
-                await prompt.delete()
+            return False, prompt
 
     def _generate_captcha_code(self) -> str:
         return "".join(str(secrets.randbelow(10)) for _ in range(6))
@@ -189,11 +192,15 @@ class BotTrap(commands.Cog):
         with contextlib.suppress(discord.Forbidden, discord.HTTPException):
             await channel.send(embed=embed, delete_after=self.NOTICE_DELETE_SECONDS)
 
-    async def _run_trap(self, message: discord.Message):
+    async def _run_trap(self, message: discord.Message, captcha_prompt: Optional[discord.Message] = None):
         guild = message.guild
         member = message.author
         if guild is None or not isinstance(member, discord.Member):
             return
+
+        if captcha_prompt is not None:
+            with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await captcha_prompt.delete()
 
         me = guild.me
         if me is None:
