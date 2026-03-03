@@ -164,8 +164,14 @@ class BotTrap(commands.Cog):
             glyph = Image.new("RGBA", (72, 94), (255, 255, 255, 0))
             glyph_draw = ImageDraw.Draw(glyph)
             font = rng.choice(fonts)
-            outline = (rng.randint(110, 190), rng.randint(110, 190), rng.randint(110, 190), 210)
-            fill = (rng.randint(15, 75), rng.randint(15, 75), rng.randint(15, 75), 255)
+            fill_rgb = self._random_digit_color(rng)
+            outline = (
+                min(255, fill_rgb[0] + rng.randint(65, 105)),
+                min(255, fill_rgb[1] + rng.randint(65, 105)),
+                min(255, fill_rgb[2] + rng.randint(65, 105)),
+                210,
+            )
+            fill = (*fill_rgb, 255)
             glyph_draw.text((16, 12), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
             glyph_draw.text((12, 8), ch, font=font, fill=fill, stroke_width=2, stroke_fill=(30, 30, 30, 180))
 
@@ -188,6 +194,9 @@ class BotTrap(commands.Cog):
             x = base_x + (index * slot_width) + rng.randint(-10, 9)
             y = rng.randint(18, 40)
             image.paste(rotated, (x, y), rotated)
+
+        # Overlay a few foreground color blocks on top of digits.
+        self._draw_digit_overlay_blocks(draw, width, height, rng)
 
         # Curved clutter to disrupt segmentation.
         for _ in range(5):
@@ -239,12 +248,59 @@ class BotTrap(commands.Cog):
             color = tuple(int(start[i] + (end[i] - start[i]) * ratio) for i in range(3))
             draw.line((0, y, width, y), fill=color)
 
+        # Random color blocks to make segmentation harder.
+        for _ in range(70):
+            block_w = rng.randint(10, 42)
+            block_h = rng.randint(8, 30)
+            x = rng.randint(-12, width - 1)
+            y = rng.randint(-12, height - 1)
+            fill = (
+                rng.randint(150, 245),
+                rng.randint(150, 245),
+                rng.randint(150, 245),
+            )
+            draw.rectangle((x, y, x + block_w, y + block_h), fill=fill)
+
         for _ in range(45):
             cx = rng.randint(-20, width + 20)
             cy = rng.randint(-20, height + 20)
             radius = rng.randint(4, 14)
             fill = (rng.randint(185, 245), rng.randint(185, 245), rng.randint(185, 245))
             draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=fill, width=1)
+
+    def _random_digit_color(self, rng: random.SystemRandom) -> Tuple[int, int, int]:
+        palette = (
+            (34, 56, 138),
+            (24, 105, 118),
+            (128, 39, 96),
+            (145, 68, 22),
+            (76, 32, 131),
+            (98, 44, 44),
+            (22, 86, 46),
+            (120, 32, 32),
+        )
+        base = rng.choice(palette)
+        return (
+            max(0, min(255, base[0] + rng.randint(-22, 22))),
+            max(0, min(255, base[1] + rng.randint(-22, 22))),
+            max(0, min(255, base[2] + rng.randint(-22, 22))),
+        )
+
+    def _draw_digit_overlay_blocks(
+        self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom
+    ) -> None:
+        # Keep blocks mostly on the text band so they partially occlude digits.
+        for _ in range(rng.randint(4, 7)):
+            block_w = rng.randint(14, 40)
+            block_h = rng.randint(10, 26)
+            x = rng.randint(8, max(8, width - block_w - 8))
+            y = rng.randint(int(height * 0.2), int(height * 0.72))
+            fill = (
+                rng.randint(115, 230),
+                rng.randint(115, 230),
+                rng.randint(115, 230),
+            )
+            draw.rectangle((x, y, x + block_w, y + block_h), fill=fill)
 
     def _get_captcha_fonts(self) -> List[ImageFont.ImageFont]:
         fonts: List[ImageFont.ImageFont] = []
