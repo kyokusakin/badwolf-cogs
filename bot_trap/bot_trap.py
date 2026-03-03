@@ -70,7 +70,9 @@ class BotTrap(commands.Cog):
         finally:
             self._active_traps.discard(key)
 
-    async def _run_captcha_challenge(self, message: discord.Message) -> Tuple[bool, Optional[discord.Message]]:
+    async def _run_captcha_challenge(
+        self, message: discord.Message, *, delete_trigger_message: bool = True
+    ) -> Tuple[bool, Optional[discord.Message]]:
         guild = message.guild
         member = message.author
         if guild is None or not isinstance(member, discord.Member):
@@ -109,8 +111,9 @@ class BotTrap(commands.Cog):
             if secrets.compare_digest(user_input, code):
                 with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
                     await reply.delete()
-                with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
-                    await message.delete()
+                if delete_trigger_message:
+                    with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
+                        await message.delete()
                 await self._send_notice(
                     message.channel,
                     self._build_notice_embed(
@@ -432,3 +435,13 @@ class BotTrap(commands.Cog):
             f"暫時 Ban 秒數: {conf['temp_ban_seconds']}\n"
             f"清理訊息範圍: {int(conf['delete_window_seconds'] / 60)} 分鐘"
         )
+
+    @bottrap.command(name="test")
+    async def bottrap_test(self, ctx: commands.Context):
+        """Run captcha challenge test without taking moderation action."""
+        passed, prompt = await self._run_captcha_challenge(ctx.message, delete_trigger_message=False)
+        if prompt is not None:
+            with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
+                await prompt.delete()
+        if not passed:
+            await ctx.send("測試完成：未通過驗證（僅測試，不會封鎖）。", delete_after=self.NOTICE_DELETE_SECONDS)
