@@ -2,10 +2,11 @@ import asyncio
 import contextlib
 import io
 import logging
+import math
 import random
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Optional, Set, Tuple
+from typing import List, Optional, Set, Tuple
 
 import discord
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -19,6 +20,8 @@ class BotTrap(commands.Cog):
     __version__ = "1.1.0"
     CAPTCHA_TIMEOUT_SECONDS = 30
     NOTICE_DELETE_SECONDS = 10
+    CAPTCHA_LENGTH = 6
+    CAPTCHA_CHARSET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz"
 
     def __init__(self, bot):
         self.bot = bot
@@ -78,7 +81,10 @@ class BotTrap(commands.Cog):
         file = discord.File(fp=image_bytes, filename="captcha.png")
         prompt_embed = self._build_notice_embed(
             title="圖片驗證",
-            description=f"{member.mention} 請在 {self.CAPTCHA_TIMEOUT_SECONDS} 秒內輸入圖片中的 6 碼數字驗證碼。",
+            description=(
+                f"{member.mention} 請在 {self.CAPTCHA_TIMEOUT_SECONDS} 秒內輸入圖片中的 "
+                f"{self.CAPTCHA_LENGTH} 碼英數驗證碼（區分大小寫）。"
+            ),
             color=discord.Color.gold(),
         )
         prompt_embed.set_image(url="attachment://captcha.png")
@@ -100,7 +106,7 @@ class BotTrap(commands.Cog):
         try:
             reply = await self.bot.wait_for("message", check=check, timeout=self.CAPTCHA_TIMEOUT_SECONDS)
             user_input = reply.content.strip()
-            if user_input == code:
+            if secrets.compare_digest(user_input, code):
                 with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
                     await reply.delete()
                 with contextlib.suppress(discord.NotFound, discord.Forbidden, discord.HTTPException):
@@ -138,54 +144,119 @@ class BotTrap(commands.Cog):
             return False, prompt
 
     def _generate_captcha_code(self) -> str:
-        return "".join(str(secrets.randbelow(10)) for _ in range(6))
+        return "".join(secrets.choice(self.CAPTCHA_CHARSET) for _ in range(self.CAPTCHA_LENGTH))
 
     def _build_captcha_image(self, code: str) -> io.BytesIO:
         rng = random.SystemRandom()
-        width, height = 260, 100
-        image = Image.new("RGB", (width, height), (248, 250, 252))
+        width, height = 320, 120
+        image = Image.new("RGB", (width, height), (240, 243, 247))
         draw = ImageDraw.Draw(image)
+        self._draw_captcha_background(draw, width, height, rng)
+        fonts = self._get_captcha_fonts()
 
-        # Draw digits first so they stay on the bottom layer.
-        font = self._get_captcha_font()
-        base_x = 24
+        # Draw captcha characters with independent affine transforms.
+        base_x = 20
+        slot_width = int((width - 44) / max(1, len(code)))
         for index, ch in enumerate(code):
-            glyph = Image.new("RGBA", (36, 56), (255, 255, 255, 0))
+            glyph = Image.new("RGBA", (72, 94), (255, 255, 255, 0))
             glyph_draw = ImageDraw.Draw(glyph)
-            glyph_color = (rng.randint(10, 70), rng.randint(10, 70), rng.randint(10, 70), 255)
-            glyph_draw.text((7, 8), ch, font=font, fill=glyph_color)
+            font = rng.choice(fonts)
+            outline = (rng.randint(110, 190), rng.randint(110, 190), rng.randint(110, 190), 210)
+            fill = (rng.randint(15, 75), rng.randint(15, 75), rng.randint(15, 75), 255)
+            glyph_draw.text((16, 12), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
+            glyph_draw.text((12, 8), ch, font=font, fill=fill, stroke_width=2, stroke_fill=(30, 30, 30, 180))
+
             resampling = getattr(Image, "Resampling", Image)
-            rotated = glyph.rotate(rng.randint(-18, 18), resample=resampling.BICUBIC, expand=1)
-            x = base_x + (index * 36) + rng.randint(-2, 5)
-            y = rng.randint(18, 34)
+            transform_mode = getattr(getattr(Image, "Transform", Image), "AFFINE", Image.AFFINE)
+            warped = glyph.transform(
+                glyph.size,
+                transform_mode,
+                (
+                    rng.uniform(0.84, 1.14),
+                    rng.uniform(-0.35, 0.35),
+                    0,
+                    rng.uniform(-0.18, 0.18),
+                    rng.uniform(0.82, 1.08),
+                    0,
+                ),
+                resample=resampling.BICUBIC,
+            )
+            rotated = warped.rotate(rng.randint(-33, 33), resample=resampling.BICUBIC, expand=1)
+            x = base_x + (index * slot_width) + rng.randint(-10, 9)
+            y = rng.randint(18, 40)
             image.paste(rotated, (x, y), rotated)
 
-        # Draw noise above digits.
-        for _ in range(9):
+        # Curved clutter to disrupt segmentation.
+        for _ in range(5):
+            amplitude = rng.randint(7, 16)
+            frequency = rng.uniform(0.018, 0.045)
+            phase = rng.uniform(0.0, math.tau)
+            offset = rng.randint(24, height - 24)
+            points = [
+                (x, int(offset + amplitude * math.sin((x * frequency) + phase)))
+                for x in range(0, width, 2)
+            ]
+            color = (rng.randint(85, 170), rng.randint(85, 170), rng.randint(85, 170))
+            draw.line(points, fill=color, width=rng.randint(1, 3))
+
+        for _ in range(20):
+            left = rng.randint(-30, width - 20)
+            top = rng.randint(-30, height - 20)
+            right = left + rng.randint(30, 115)
+            bottom = top + rng.randint(18, 75)
+            color = (rng.randint(95, 190), rng.randint(95, 190), rng.randint(95, 190))
+            draw.arc((left, top, right, bottom), rng.randint(0, 180), rng.randint(181, 360), fill=color, width=1)
+
+        for _ in range(12):
             x1 = rng.randint(0, width)
             y1 = rng.randint(0, height)
             x2 = rng.randint(0, width)
             y2 = rng.randint(0, height)
-            color = (rng.randint(90, 180), rng.randint(90, 180), rng.randint(90, 180))
-            draw.line((x1, y1, x2, y2), fill=color, width=1)
+            color = (rng.randint(65, 170), rng.randint(65, 170), rng.randint(65, 170))
+            draw.line((x1, y1, x2, y2), fill=color, width=rng.randint(1, 2))
 
-        for _ in range(280):
+        for _ in range(1200):
             x = rng.randint(0, width - 1)
             y = rng.randint(0, height - 1)
-            color = (rng.randint(120, 220), rng.randint(120, 220), rng.randint(120, 220))
+            color = (rng.randint(95, 225), rng.randint(95, 225), rng.randint(95, 225))
             draw.point((x, y), fill=color)
 
-        image = image.filter(ImageFilter.SMOOTH)
+        image = image.filter(ImageFilter.GaussianBlur(radius=0.55))
+        image = image.filter(ImageFilter.UnsharpMask(radius=1, percent=180, threshold=3))
         output = io.BytesIO()
         image.save(output, format="PNG")
         output.seek(0)
         return output
 
-    def _get_captcha_font(self) -> ImageFont.ImageFont:
-        for font_name in ("arial.ttf", "DejaVuSans-Bold.ttf"):
+    def _draw_captcha_background(self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom):
+        start = (rng.randint(228, 246), rng.randint(230, 246), rng.randint(228, 246))
+        end = (rng.randint(202, 226), rng.randint(204, 228), rng.randint(202, 226))
+        for y in range(height):
+            ratio = y / max(1, height - 1)
+            color = tuple(int(start[i] + (end[i] - start[i]) * ratio) for i in range(3))
+            draw.line((0, y, width, y), fill=color)
+
+        for _ in range(45):
+            cx = rng.randint(-20, width + 20)
+            cy = rng.randint(-20, height + 20)
+            radius = rng.randint(4, 14)
+            fill = (rng.randint(185, 245), rng.randint(185, 245), rng.randint(185, 245))
+            draw.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), outline=fill, width=1)
+
+    def _get_captcha_fonts(self) -> List[ImageFont.ImageFont]:
+        fonts: List[ImageFont.ImageFont] = []
+        for font_name, font_size in (
+            ("arial.ttf", 46),
+            ("arialbd.ttf", 46),
+            ("calibrib.ttf", 45),
+            ("bahnschrift.ttf", 44),
+            ("DejaVuSans-Bold.ttf", 45),
+        ):
             with contextlib.suppress(OSError):
-                return ImageFont.truetype(font_name, 38)
-        return ImageFont.load_default()
+                fonts.append(ImageFont.truetype(font_name, font_size))
+        if not fonts:
+            fonts.append(ImageFont.load_default())
+        return fonts
 
     def _build_notice_embed(self, title: str, description: str, color: discord.Color) -> discord.Embed:
         return discord.Embed(title=title, description=description, color=color)
