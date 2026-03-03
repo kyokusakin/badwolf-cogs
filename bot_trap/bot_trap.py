@@ -257,7 +257,7 @@ class BotTrap(commands.Cog):
     def _build_digit_glyph(
         self, ch: str, fonts: List[ImageFont.ImageFont], rng: random.SystemRandom
     ) -> Image.Image:
-        glyph = Image.new("RGBA", (72, 94), (255, 255, 255, 0))
+        glyph = Image.new("RGBA", (82, 106), (255, 255, 255, 0))
         glyph_draw = ImageDraw.Draw(glyph)
         font = rng.choice(fonts)
         fill_rgb = self._random_digit_color(rng)
@@ -268,15 +268,15 @@ class BotTrap(commands.Cog):
             210,
         )
         fill = (*fill_rgb, 255)
-        glyph_draw.text((16, 12), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
+        glyph_draw.text((18, 14), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
         glyph_draw.text((12, 8), ch, font=font, fill=fill, stroke_width=2, stroke_fill=(30, 30, 30, 180))
 
         # Cut a few thin gaps to break clean OCR strokes while keeping legibility.
         for _ in range(rng.randint(1, 2)):
-            x1 = rng.randint(8, 64)
-            y1 = rng.randint(12, 80)
-            x2 = min(70, max(2, x1 + rng.randint(-20, 20)))
-            y2 = min(92, max(2, y1 + rng.randint(-14, 14)))
+            x1 = rng.randint(8, 74)
+            y1 = rng.randint(12, 92)
+            x2 = min(80, max(2, x1 + rng.randint(-20, 20)))
+            y2 = min(104, max(2, y1 + rng.randint(-14, 14)))
             glyph_draw.line((x1, y1, x2, y2), fill=(255, 255, 255, rng.randint(120, 185)), width=rng.randint(1, 2))
 
         resampling = getattr(Image, "Resampling", Image)
@@ -294,7 +294,18 @@ class BotTrap(commands.Cog):
             ),
             resample=resampling.BICUBIC,
         )
-        return warped.rotate(rng.randint(-33, 33), resample=resampling.BICUBIC, expand=1)
+        rotated = warped.rotate(rng.randint(-33, 33), resample=resampling.BICUBIC, expand=1)
+        return self._trim_glyph_alpha(rotated, padding=2)
+
+    def _trim_glyph_alpha(self, glyph: Image.Image, padding: int = 0) -> Image.Image:
+        bbox = glyph.getbbox()
+        if bbox is None:
+            return glyph
+        left = max(0, bbox[0] - padding)
+        top = max(0, bbox[1] - padding)
+        right = min(glyph.width, bbox[2] + padding)
+        bottom = min(glyph.height, bbox[3] + padding)
+        return glyph.crop((left, top, right, bottom))
 
     def _place_glyphs_without_overlap(
         self, glyphs: List[Image.Image], width: int, height: int, rng: random.SystemRandom
@@ -311,18 +322,30 @@ class BotTrap(commands.Cog):
 
         if required_width > available_width:
             resampling = getattr(Image, "Resampling", Image)
-            # Always fit all glyphs inside canvas; allow moderate downscale to avoid clipping.
+            # Keep digits larger by default; only shrink moderately in first pass.
             target_ratio = (available_width - (min_gap * (len(glyphs) - 1))) / max(1, total_width)
-            scale = max(0.45, min(1.0, target_ratio))
+            scale = max(0.62, min(1.0, target_ratio))
             for idx, glyph in enumerate(glyphs):
-                resized_w = max(20, int(glyph.width * scale))
-                resized_h = max(28, int(glyph.height * scale))
+                resized_w = max(26, int(glyph.width * scale))
+                resized_h = max(38, int(glyph.height * scale))
                 glyphs[idx] = glyph.resize((resized_w, resized_h), resample=resampling.LANCZOS)
             total_width = sum(g.width for g in glyphs)
             required_width = total_width + (min_gap * (len(glyphs) - 1))
 
         if required_width > available_width:
             min_gap = 1
+            required_width = total_width + (min_gap * (len(glyphs) - 1))
+
+        if required_width > available_width:
+            resampling = getattr(Image, "Resampling", Image)
+            fit_ratio = (available_width - (min_gap * (len(glyphs) - 1))) / max(1, total_width)
+            scale = max(0.5, min(1.0, fit_ratio))
+            for idx, glyph in enumerate(glyphs):
+                resized_w = max(22, int(glyph.width * scale))
+                resized_h = max(32, int(glyph.height * scale))
+                glyphs[idx] = glyph.resize((resized_w, resized_h), resample=resampling.LANCZOS)
+            total_width = sum(g.width for g in glyphs)
+            required_width = total_width + (min_gap * (len(glyphs) - 1))
 
         placements: List[Tuple[int, int]] = []
         cursor = left_margin - min_gap
@@ -383,11 +406,11 @@ class BotTrap(commands.Cog):
     def _get_captcha_fonts(self) -> List[ImageFont.ImageFont]:
         fonts: List[ImageFont.ImageFont] = []
         for font_name, font_size in (
-            ("arial.ttf", 46),
-            ("arialbd.ttf", 46),
-            ("calibrib.ttf", 45),
-            ("bahnschrift.ttf", 44),
-            ("DejaVuSans-Bold.ttf", 45),
+            ("arial.ttf", 50),
+            ("arialbd.ttf", 50),
+            ("calibrib.ttf", 49),
+            ("bahnschrift.ttf", 48),
+            ("DejaVuSans-Bold.ttf", 49),
         ):
             with contextlib.suppress(OSError):
                 fonts.append(ImageFont.truetype(font_name, font_size))
