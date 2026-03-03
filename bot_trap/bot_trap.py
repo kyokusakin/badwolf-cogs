@@ -157,46 +157,14 @@ class BotTrap(commands.Cog):
         self._draw_captcha_background(draw, width, height, rng)
         fonts = self._get_captcha_fonts()
 
-        # Draw captcha characters with independent affine transforms.
-        base_x = 20
-        slot_width = int((width - 44) / max(1, len(code)))
-        for index, ch in enumerate(code):
-            glyph = Image.new("RGBA", (72, 94), (255, 255, 255, 0))
-            glyph_draw = ImageDraw.Draw(glyph)
-            font = rng.choice(fonts)
-            fill_rgb = self._random_digit_color(rng)
-            outline = (
-                min(255, fill_rgb[0] + rng.randint(65, 105)),
-                min(255, fill_rgb[1] + rng.randint(65, 105)),
-                min(255, fill_rgb[2] + rng.randint(65, 105)),
-                210,
-            )
-            fill = (*fill_rgb, 255)
-            glyph_draw.text((16, 12), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
-            glyph_draw.text((12, 8), ch, font=font, fill=fill, stroke_width=2, stroke_fill=(30, 30, 30, 180))
-
-            resampling = getattr(Image, "Resampling", Image)
-            transform_mode = getattr(getattr(Image, "Transform", Image), "AFFINE", Image.AFFINE)
-            warped = glyph.transform(
-                glyph.size,
-                transform_mode,
-                (
-                    rng.uniform(0.84, 1.14),
-                    rng.uniform(-0.35, 0.35),
-                    0,
-                    rng.uniform(-0.18, 0.18),
-                    rng.uniform(0.82, 1.08),
-                    0,
-                ),
-                resample=resampling.BICUBIC,
-            )
-            rotated = warped.rotate(rng.randint(-33, 33), resample=resampling.BICUBIC, expand=1)
-            x = base_x + (index * slot_width) + rng.randint(-10, 9)
-            y = rng.randint(18, 40)
-            image.paste(rotated, (x, y), rotated)
+        glyphs = [self._build_digit_glyph(ch, fonts, rng) for ch in code]
+        placements = self._place_glyphs_without_overlap(glyphs, width, height, rng)
+        for glyph, (x, y) in zip(glyphs, placements):
+            image.paste(glyph, (x, y), glyph)
 
         # Overlay a few foreground color blocks on top of digits.
         self._draw_digit_overlay_blocks(draw, width, height, rng)
+        self._draw_digit_cross_lines(draw, width, height, rng)
 
         # Curved clutter to disrupt segmentation.
         for _ in range(5):
@@ -286,6 +254,92 @@ class BotTrap(commands.Cog):
             max(0, min(255, base[2] + rng.randint(-22, 22))),
         )
 
+    def _build_digit_glyph(
+        self, ch: str, fonts: List[ImageFont.ImageFont], rng: random.SystemRandom
+    ) -> Image.Image:
+        glyph = Image.new("RGBA", (72, 94), (255, 255, 255, 0))
+        glyph_draw = ImageDraw.Draw(glyph)
+        font = rng.choice(fonts)
+        fill_rgb = self._random_digit_color(rng)
+        outline = (
+            min(255, fill_rgb[0] + rng.randint(65, 105)),
+            min(255, fill_rgb[1] + rng.randint(65, 105)),
+            min(255, fill_rgb[2] + rng.randint(65, 105)),
+            210,
+        )
+        fill = (*fill_rgb, 255)
+        glyph_draw.text((16, 12), ch, font=font, fill=outline, stroke_width=1, stroke_fill=(250, 250, 250, 180))
+        glyph_draw.text((12, 8), ch, font=font, fill=fill, stroke_width=2, stroke_fill=(30, 30, 30, 180))
+
+        # Cut a few thin gaps to break clean OCR strokes while keeping legibility.
+        for _ in range(rng.randint(1, 2)):
+            x1 = rng.randint(8, 64)
+            y1 = rng.randint(12, 80)
+            x2 = min(70, max(2, x1 + rng.randint(-20, 20)))
+            y2 = min(92, max(2, y1 + rng.randint(-14, 14)))
+            glyph_draw.line((x1, y1, x2, y2), fill=(255, 255, 255, rng.randint(120, 185)), width=rng.randint(1, 2))
+
+        resampling = getattr(Image, "Resampling", Image)
+        transform_mode = getattr(getattr(Image, "Transform", Image), "AFFINE", Image.AFFINE)
+        warped = glyph.transform(
+            glyph.size,
+            transform_mode,
+            (
+                rng.uniform(0.84, 1.14),
+                rng.uniform(-0.35, 0.35),
+                0,
+                rng.uniform(-0.18, 0.18),
+                rng.uniform(0.82, 1.08),
+                0,
+            ),
+            resample=resampling.BICUBIC,
+        )
+        return warped.rotate(rng.randint(-33, 33), resample=resampling.BICUBIC, expand=1)
+
+    def _place_glyphs_without_overlap(
+        self, glyphs: List[Image.Image], width: int, height: int, rng: random.SystemRandom
+    ) -> List[Tuple[int, int]]:
+        if not glyphs:
+            return []
+
+        left_margin = 16
+        right_margin = 16
+        min_gap = 4
+        available_width = max(80, width - left_margin - right_margin)
+        total_width = sum(glyph.width for glyph in glyphs)
+        required_width = total_width + (min_gap * (len(glyphs) - 1))
+
+        if required_width > available_width:
+            resampling = getattr(Image, "Resampling", Image)
+            scale = max(0.7, (available_width - (min_gap * (len(glyphs) - 1))) / max(1, total_width))
+            for idx, glyph in enumerate(glyphs):
+                resized_w = max(20, int(glyph.width * scale))
+                resized_h = max(28, int(glyph.height * scale))
+                glyphs[idx] = glyph.resize((resized_w, resized_h), resample=resampling.LANCZOS)
+
+        placements: List[Tuple[int, int]] = []
+        cursor = left_margin - min_gap
+        for idx, glyph in enumerate(glyphs):
+            remaining = glyphs[idx + 1 :]
+            remaining_width = sum(g.width for g in remaining)
+            remaining_gaps = min_gap * len(remaining)
+
+            min_x = cursor + min_gap
+            max_x = width - right_margin - glyph.width - remaining_width - remaining_gaps
+            if max_x <= min_x:
+                x = min_x
+            else:
+                x = min_x + rng.randint(0, min(10, max_x - min_x))
+
+            base_center_y = int(height * 0.46) + rng.randint(-4, 6)
+            y = base_center_y - (glyph.height // 2) + rng.randint(-3, 4)
+            y = max(6, min(height - glyph.height - 6, y))
+
+            placements.append((x, y))
+            cursor = x + glyph.width
+
+        return placements
+
     def _draw_digit_overlay_blocks(
         self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom
     ) -> None:
@@ -301,6 +355,19 @@ class BotTrap(commands.Cog):
                 rng.randint(115, 230),
             )
             draw.rectangle((x, y, x + block_w, y + block_h), fill=fill)
+
+    def _draw_digit_cross_lines(self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom) -> None:
+        for _ in range(rng.randint(2, 3)):
+            amplitude = rng.randint(5, 11)
+            frequency = rng.uniform(0.028, 0.052)
+            phase = rng.uniform(0.0, math.tau)
+            offset = rng.randint(int(height * 0.35), int(height * 0.65))
+            points = [
+                (x, int(offset + amplitude * math.sin((x * frequency) + phase)))
+                for x in range(0, width, 2)
+            ]
+            color = (rng.randint(45, 155), rng.randint(45, 155), rng.randint(45, 155))
+            draw.line(points, fill=color, width=rng.randint(2, 3))
 
     def _get_captcha_fonts(self) -> List[ImageFont.ImageFont]:
         fonts: List[ImageFont.ImageFont] = []
