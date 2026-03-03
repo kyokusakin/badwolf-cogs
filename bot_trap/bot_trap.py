@@ -163,7 +163,7 @@ class BotTrap(commands.Cog):
             image.paste(glyph, (x, y), glyph)
 
         # Overlay a few foreground color blocks on top of digits.
-        self._draw_digit_overlay_blocks(draw, width, height, rng)
+        self._draw_digit_overlay_blocks(image, width, height, rng)
         self._draw_digit_cross_lines(draw, width, height, rng)
 
         # Curved clutter to disrupt segmentation.
@@ -311,11 +311,18 @@ class BotTrap(commands.Cog):
 
         if required_width > available_width:
             resampling = getattr(Image, "Resampling", Image)
-            scale = max(0.7, (available_width - (min_gap * (len(glyphs) - 1))) / max(1, total_width))
+            # Always fit all glyphs inside canvas; allow moderate downscale to avoid clipping.
+            target_ratio = (available_width - (min_gap * (len(glyphs) - 1))) / max(1, total_width)
+            scale = max(0.45, min(1.0, target_ratio))
             for idx, glyph in enumerate(glyphs):
                 resized_w = max(20, int(glyph.width * scale))
                 resized_h = max(28, int(glyph.height * scale))
                 glyphs[idx] = glyph.resize((resized_w, resized_h), resample=resampling.LANCZOS)
+            total_width = sum(g.width for g in glyphs)
+            required_width = total_width + (min_gap * (len(glyphs) - 1))
+
+        if required_width > available_width:
+            min_gap = 1
 
         placements: List[Tuple[int, int]] = []
         cursor = left_margin - min_gap
@@ -341,20 +348,24 @@ class BotTrap(commands.Cog):
         return placements
 
     def _draw_digit_overlay_blocks(
-        self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom
+        self, image: Image.Image, width: int, height: int, rng: random.SystemRandom
     ) -> None:
         # Keep blocks mostly on the text band so they partially occlude digits.
-        for _ in range(rng.randint(4, 7)):
-            block_w = rng.randint(14, 40)
-            block_h = rng.randint(10, 26)
+        overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        for _ in range(rng.randint(4, 6)):
+            block_w = rng.randint(12, 34)
+            block_h = rng.randint(9, 22)
             x = rng.randint(8, max(8, width - block_w - 8))
             y = rng.randint(int(height * 0.2), int(height * 0.72))
             fill = (
                 rng.randint(115, 230),
                 rng.randint(115, 230),
                 rng.randint(115, 230),
+                rng.randint(70, 125),
             )
-            draw.rectangle((x, y, x + block_w, y + block_h), fill=fill)
+            overlay_draw.rectangle((x, y, x + block_w, y + block_h), fill=fill)
+        image.paste(overlay, (0, 0), overlay)
 
     def _draw_digit_cross_lines(self, draw: ImageDraw.ImageDraw, width: int, height: int, rng: random.SystemRandom) -> None:
         for _ in range(rng.randint(2, 3)):
