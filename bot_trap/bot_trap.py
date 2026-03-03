@@ -21,7 +21,7 @@ class BotTrap(commands.Cog):
     CAPTCHA_TIMEOUT_SECONDS = 30
     NOTICE_DELETE_SECONDS = 10
     CAPTCHA_LENGTH = 6
-    CAPTCHA_CHARSET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz"
+    CAPTCHA_CHARSET = "0123456789"
 
     def __init__(self, bot):
         self.bot = bot
@@ -85,7 +85,7 @@ class BotTrap(commands.Cog):
             title="圖片驗證",
             description=(
                 f"{member.mention} 請在 {self.CAPTCHA_TIMEOUT_SECONDS} 秒內輸入圖片中的 "
-                f"{self.CAPTCHA_LENGTH} 碼英數驗證碼（區分大小寫）。"
+                f"{self.CAPTCHA_LENGTH} 碼數字驗證碼。"
             ),
             color=discord.Color.gold(),
         )
