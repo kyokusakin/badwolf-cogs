@@ -3,11 +3,7 @@
 import random
 from abc import ABC
 from contextlib import suppress
-<<<<<<< HEAD
 from datetime import UTC, datetime, timedelta
-=======
-from datetime import UTC, datetime
->>>>>>> upstream-autoroom/master
 from typing import Any, ClassVar
 
 import discord
@@ -50,10 +46,7 @@ class AutoRoom(
         "admin_access": True,
         "mod_access": False,
         "bot_access": [],
-<<<<<<< HEAD
         "timeout_seconds": -1,
-=======
->>>>>>> upstream-autoroom/master
     }
     default_autoroom_source_settings: ClassVar[dict[str, int | str | None]] = {
         "dest_category_id": None,
@@ -389,11 +382,7 @@ class AutoRoom(
                 perms.update(member, asc["perms"]["deny"])
                 if perms.modified:
                     await autoroom_channel.edit(
-<<<<<<< HEAD
-                        overwrites=perms.overwrites if perms.overwrites else {},
-=======
                         overwrites=perms.overwrites or {},
->>>>>>> upstream-autoroom/master
                         reason="AutoRoom: Rejoining user, prevent deny evasion",
                     )
 
@@ -419,7 +408,6 @@ class AutoRoom(
         if not required_check or not optional_check:
             return
 
-<<<<<<< HEAD
         # Ignore self (the bot)
         if member.id == self.bot.user.id:
             # If the bot joins a voice channel, it should immediately leave
@@ -437,10 +425,6 @@ class AutoRoom(
         # Check that user isn't spamming
         bucket = self.bucket_autoroom_create.get_bucket(member)
         timeout_seconds = await self.config.guild(member.guild).timeout_seconds()
-=======
-        # Check that user isn't spamming
-        bucket = self.bucket_autoroom_create.get_bucket(member)
->>>>>>> upstream-autoroom/master
         if bucket:
             retry_after = bucket.update_rate_limit()
             if retry_after:
@@ -460,14 +444,11 @@ class AutoRoom(
                                 "\n"
                                 f"You can try again in **{humanize_timedelta(seconds=max(retry_after, 1))}**."
                             )
-<<<<<<< HEAD
                             if timeout_seconds > 0:
                                 await member.timeout(
                                     timedelta(seconds=timeout_seconds),
                                     reason="Spam voice channel",
                                 )
-=======
->>>>>>> upstream-autoroom/master
                     return
 
         # Generate channel name
@@ -481,13 +462,7 @@ class AutoRoom(
         # Generate overwrites
         perms = Perms()
         dest_perms = dest_category.permissions_for(dest_category.guild.me)
-<<<<<<< HEAD
-        source_overwrites = (
-            autoroom_source.overwrites if autoroom_source.overwrites else {}
-        )
-=======
         source_overwrites = autoroom_source.overwrites or {}
->>>>>>> upstream-autoroom/master
         member_roles = self.get_member_roles(autoroom_source)
         for target, permissions in source_overwrites.items():
             # We can't put manage_roles in overwrites, so just get rid of it
@@ -595,11 +570,7 @@ class AutoRoom(
                 category=dest_category,
                 topic=text_channel_topic,
                 reason="AutoRoom: New legacy text channel needed.",
-<<<<<<< HEAD
-                overwrites=perms.overwrites if perms.overwrites else {},
-=======
                 overwrites=perms.overwrites or {},
->>>>>>> upstream-autoroom/master
             )
 
             await self.config.channel(new_voice_channel).associated_text_channel.set(
@@ -663,11 +634,7 @@ class AutoRoom(
         # Edit channel if overwrites were modified
         if perms.modified:
             await legacy_text_channel.edit(
-<<<<<<< HEAD
-                overwrites=perms.overwrites if perms.overwrites else {},
-=======
                 overwrites=perms.overwrites or {},
->>>>>>> upstream-autoroom/master
                 reason="AutoRoom: Legacy text channel permission update",
             )
 
@@ -872,13 +839,7 @@ class AutoRoom(
     ) -> tuple[bool, SettingDisplay | None]:
         result = True
         checked_perms = {}
-<<<<<<< HEAD
-        source_overwrites = (
-            autoroom_source.overwrites if autoroom_source.overwrites else {}
-        )
-=======
         source_overwrites = autoroom_source.overwrites or {}
->>>>>>> upstream-autoroom/master
         for permissions in source_overwrites.values():
             # We can't put manage_roles in overwrites, so just get rid of it
             # Also get rid of view_channel, connect, and send_messages, as we will be controlling those
