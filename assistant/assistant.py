@@ -47,14 +47,6 @@ logging.getLogger("google_genai.models").setLevel(logging.WARNING)
 
 SEARCH_TOOL = types.Tool(google_search=types.GoogleSearch())
 
-MEMORY_SCHEMA: Dict[str, Any] = {
-    "type": "object",
-    "properties": {
-        "score": {"type": "integer", "minimum": 0, "maximum": 5},
-    },
-    "required": ["score"],
-}
-
 MEMORY_ITEM_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -74,28 +66,10 @@ MEMORY_ALL_SCHEMA: Dict[str, Any] = {
     "required": ["score", "user_memory", "guild_memory"],
 }
 
-_MEMORY_TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
-_DISCORD_MENTION_RE = re.compile(r"<@!?\\d+>|@everyone|@here")
-_DISCORD_ID_RE = re.compile(r"\\b\\d{17,20}\\b")
+_DISCORD_MENTION_RE = re.compile(r"<@!?\d+>|@everyone|@here")
+_DISCORD_ID_RE = re.compile(r"\b\d{17,20}\b")
 _JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 _SCORE_FIELD_RE = re.compile(r'(?i)"?score"?\s*[:=]\s*([0-5])\b')
-_GUILD_MEMORY_KEYWORDS = (
-    "伺服器",
-    "本群",
-    "群組",
-    "群",
-    "頻道",
-    "規則",
-    "版規",
-    "公告",
-    "置頂",
-    "機器人",
-    "bot",
-    "指令",
-    "server",
-    "role",
-    "身分組",
-)
 
 def _extract_response_text(response: Any) -> str:
     segments: List[str] = []
@@ -236,7 +210,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "memory_long_term_min_importance": 2,
             "memory_max_field_chars": 320,
             "memory_history_max_records": 5000,
-            "memory_relevance_max_tokens": 20,
             "memory_chat_retention_seconds": 600,
             "memory_retention_days": 90,
             "memory_long_term_enabled": True,
@@ -249,7 +222,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "memory_guild_embedding_top_k": 6,
             "memory_guild_auto_upgrade_enabled": True,
             "memory_guild_upgrade_min_score": 4,
-            "memory_embedding_enabled": False,
             "memory_embedding_model": "gemini-embedding-2-preview",
             "memory_embedding_top_k": 6,
             "memory_opt_out_user_ids": [],
@@ -940,7 +912,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         memory_long_term_min_importance = self._coerce_int(global_settings.get("memory_long_term_min_importance"), default=2)
         memory_max_field_chars = self._coerce_int(global_settings.get("memory_max_field_chars"), default=320)
         memory_history_max_records = self._coerce_int(global_settings.get("memory_history_max_records"), default=5000)
-        memory_relevance_max_tokens = self._coerce_int(global_settings.get("memory_relevance_max_tokens"), default=20)
         memory_chat_retention_seconds = self._coerce_int(global_settings.get("memory_chat_retention_seconds"), default=600)
         memory_long_term_enabled = bool(global_settings.get("memory_long_term_enabled", True))
         memory_long_term_fetch_limit = self._coerce_int(global_settings.get("memory_long_term_fetch_limit"), default=200)
@@ -948,7 +919,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         memory_guild_long_term_fetch_limit = self._coerce_int(
             global_settings.get("memory_guild_long_term_fetch_limit"), default=200
         )
-        memory_embedding_enabled = bool(global_settings.get("memory_embedding_enabled", False))
         memory_embedding_model = str(global_settings.get("memory_embedding_model") or "gemini-embedding-2-preview")
         memory_embedding_top_k = self._coerce_int(global_settings.get("memory_embedding_top_k"), default=6)
         memory_guild_embedding_top_k = self._coerce_int(global_settings.get("memory_guild_embedding_top_k"), default=6)
@@ -995,10 +965,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 log.error(f"Error loading guild memories: {e}")
                 guild_memories = []
 
-        if memory_embedding_enabled and any(
-            m.get("embedding") for m in (list(long_term_memories) + list(guild_memories))
-        ):
-            user_input_embedding = await self.embed_text(user_input, memory_embedding_model)
+        user_input_embedding = await self.embed_text(user_input, memory_embedding_model)
 
         combined_history = history + long_term_memories + guild_memories
 
@@ -1017,7 +984,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             long_term_max_records=max(0, memory_embedding_top_k),
             guild_long_term_max_records=max(0, memory_guild_embedding_top_k),
             max_field_chars=max(80, memory_max_field_chars),
-            relevance_max_tokens=max(0, memory_relevance_max_tokens),
         )
 
         sysprompt = (
@@ -1039,7 +1005,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         )
         formatted_user_input = f"Discord User {user_name} (ID: <@{user_id}>) said:\n{user_input}"
 
-        loop = asyncio.get_running_loop()
         last_error: Optional[Exception] = None
 
         for _ in range(len(encoded_keys)):
@@ -1233,7 +1198,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 global_settings.get("memory_guild_long_term_max_records"),
                 default=300,
             )
-            embedding_enabled = bool(global_settings.get("memory_embedding_enabled", False))
             embedding_model = str(global_settings.get("memory_embedding_model") or "gemini-embedding-2-preview")
 
             score = 0
@@ -1278,12 +1242,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
                         if summary or facts:
                             embedding: Optional[List[float]] = None
-                            if embedding_enabled:
-                                try:
-                                    embed_text = (summary + "\n" + "\n".join(facts)).strip()
-                                    embedding = await self.embed_text(embed_text, embedding_model)
-                                except Exception as e:
-                                    log.error(f"Error generating embedding for long-term memory: {e}")
+                            try:
+                                embed_text = (summary + "\n" + "\n".join(facts)).strip()
+                                embedding = await self.embed_text(embed_text, embedding_model)
+                            except Exception as e:
+                                log.error(f"Error generating embedding for long-term memory: {e}")
 
                             await self._insert_long_term_memory(
                                 guild_id=message.guild.id,
@@ -1314,12 +1277,11 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
                         if (summary or facts) and self._guild_memory_passes_safety(summary, facts):
                             embedding: Optional[List[float]] = None
-                            if embedding_enabled:
-                                try:
-                                    embed_text = (summary + "\n" + "\n".join(facts)).strip()
-                                    embedding = await self.embed_text(embed_text, embedding_model)
-                                except Exception as e:
-                                    log.error(f"Error generating embedding for guild memory: {e}")
+                            try:
+                                embed_text = (summary + "\n" + "\n".join(facts)).strip()
+                                embedding = await self.embed_text(embed_text, embedding_model)
+                            except Exception as e:
+                                log.error(f"Error generating embedding for guild memory: {e}")
 
                             await self._insert_guild_long_term_memory(
                                 guild_id=message.guild.id,
@@ -1361,237 +1323,12 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         async with self._history_lock(guild_id):
             return await self._read_chat_history_unlocked(file_path)
 
-    async def extract_long_term_memory_json(self, user_message: str, bot_response: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract durable, non-sensitive long-term memory from a single interaction.
-
-        Returns: {"summary": str, "facts": [str, ...]} or None if extraction failed.
-        """
-        encoded_keys = await self._get_encoded_api_keys()
-        if not encoded_keys:
-            return None
-
-        model = await self.config.model()
-        loop = asyncio.get_running_loop()
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._extract_long_term_memory(
-                    api_key,
-                    model,
-                    user_message,
-                    bot_response,
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-        if last_error:
-            log.error(f"Long-term memory extraction failed after trying {len(encoded_keys)} key(s): {last_error}")
-        return None
-
-    async def _extract_long_term_memory(
-        self, api_key: str, model: str, user_message: str, bot_response: str
-    ) -> Dict[str, Any]:
-        if genai is None or types is None:
-            raise RuntimeError(
-                "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
-            )
-
-        client = genai.Client(api_key=api_key, http_options=self._http_options)
-        system_instruction = """
-你是「長期記憶整理器」。請把以下一段對話整理成適合長期保存的摘要與 facts。
-
-規則：
-1) 只保留「對未來仍有用」且「相對穩定」的資訊（偏好/習慣/背景/重要計畫/過敏等）。
-2) 嚴禁保存敏感資訊：密碼、token、API key、金融資料、身分證/護照號、精準住址、電話、email 等。
-3) 若對話沒有值得長期保存的內容，請回傳：{\"summary\":\"\",\"facts\":[]}。
-4) facts 用短句、去重、每條不要太長。
-
-請嚴格輸出 JSON（不要額外文字、不要用程式碼框包起來）：
-{
-  \"summary\": \"...\",
-  \"facts\": [\"...\", \"...\"]
-}
-        """.strip()
-
-        prompt = f"用戶：{user_message}\nAI：{bot_response}"
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0,
-                response_mime_type="application/json",
-                response_json_schema=MEMORY_ITEM_SCHEMA,
-            ),
-        )
-
-        parsed_obj = getattr(response, "parsed", None)
-        parsed = _coerce_parsed_dict(parsed_obj)
-        if parsed is None and parsed_obj is not None:
-            summary_attr = getattr(parsed_obj, "summary", None)
-            facts_attr = getattr(parsed_obj, "facts", None)
-            if summary_attr is not None or facts_attr is not None:
-                parsed = {"summary": summary_attr, "facts": facts_attr}
-
-        if not isinstance(parsed, dict):
-            content = _extract_response_text(response)
-            try:
-                parsed = _safe_json_loads(content) if content else {}
-            except json.JSONDecodeError as e:
-                log.error(f"Long-term memory JSON 解析錯誤: {e}, 原始回應: {(content or '')[:400]}")
-                parsed = {}
-
-        summary = str(parsed.get("summary", "") if isinstance(parsed, dict) else "").strip()
-        raw_facts = parsed.get("facts", []) if isinstance(parsed, dict) else []
-
-        facts: List[str] = []
-        if isinstance(raw_facts, list):
-            for item in raw_facts:
-                s = str(item or "").strip()
-                if s:
-                    facts.append(s)
-
-        # Light normalization + limits to avoid prompt bloat.
-        summary = summary[:500]
-        dedup: List[str] = []
-        seen = set()
-        for fact in facts:
-            f = fact[:160]
-            key = f.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            dedup.append(f)
-            if len(dedup) >= 8:
-                break
-
-        return {"summary": summary, "facts": dedup}
-
     @staticmethod
     def _guild_memory_passes_safety(summary: str, facts: List[str]) -> bool:
         text = (summary or "").strip() + "\n" + "\n".join(str(f or "").strip() for f in (facts or []))
         if _DISCORD_MENTION_RE.search(text) or _DISCORD_ID_RE.search(text):
             return False
-        lowered = text.lower()
-        if not any(k.lower() in lowered for k in _GUILD_MEMORY_KEYWORDS):
-            return False
         return True
-
-    async def extract_guild_memory_json(self, user_message: str, bot_response: str) -> Optional[Dict[str, Any]]:
-        """
-        Extract guild-level (server-wide) long-term memory from a single interaction.
-
-        Returns: {"summary": str, "facts": [str, ...]} or None if extraction failed.
-        """
-        encoded_keys = await self._get_encoded_api_keys()
-        if not encoded_keys:
-            return None
-
-        model = await self.config.model()
-        loop = asyncio.get_running_loop()
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._extract_guild_memory(
-                    api_key,
-                    model,
-                    user_message,
-                    bot_response,
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-        if last_error:
-            log.error(f"Guild memory extraction failed after trying {len(encoded_keys)} key(s): {last_error}")
-        return None
-
-    async def _extract_guild_memory(
-        self, api_key: str, model: str, user_message: str, bot_response: str
-    ) -> Dict[str, Any]:
-        if genai is None or types is None:
-            raise RuntimeError(
-                "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
-            )
-
-        client = genai.Client(api_key=api_key, http_options=self._http_options)
-        system_instruction = """
-你是「伺服器記憶整理器」。請從以下一段對話中，萃取「整個伺服器/群組都適用」且值得長期保存的資訊（例如：版規、公告重點、指令使用規範、伺服器共識、常見 FAQ、頻道用途說明）。
-
-規則：
-1) 只保存「伺服器層級」資訊；禁止保存任何單一使用者的偏好/背景/事件。
-2) 禁止包含任何特定使用者資訊：名字、暱稱、提及（<@...>）、ID、可識別個人細節。
-3) 嚴禁敏感資訊：密碼、token、API key、金融資料、精準住址、電話、email、身分證/護照號等。
-4) 若沒有適合升級成伺服器記憶的內容，請回傳：{\"summary\":\"\",\"facts\":[]}。
-5) facts 用短句、去重、每條不要太長。
-        """.strip()
-
-        prompt = f"用戶：{user_message}\nAI：{bot_response}"
-        response = await client.aio.models.generate_content(
-            model=model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=0,
-                response_mime_type="application/json",
-                response_json_schema=MEMORY_ITEM_SCHEMA,
-            ),
-        )
-
-        parsed_obj = getattr(response, "parsed", None)
-        parsed = _coerce_parsed_dict(parsed_obj)
-        if parsed is None and parsed_obj is not None:
-            summary_attr = getattr(parsed_obj, "summary", None)
-            facts_attr = getattr(parsed_obj, "facts", None)
-            if summary_attr is not None or facts_attr is not None:
-                parsed = {"summary": summary_attr, "facts": facts_attr}
-
-        if not isinstance(parsed, dict):
-            content = _extract_response_text(response)
-            try:
-                parsed = _safe_json_loads(content) if content else {}
-            except json.JSONDecodeError as e:
-                log.error(f"Guild memory JSON 解析錯誤: {e}, 原始回應: {(content or '')[:400]}")
-                parsed = {}
-
-        summary = str(parsed.get("summary", "") if isinstance(parsed, dict) else "").strip()
-        raw_facts = parsed.get("facts", []) if isinstance(parsed, dict) else []
-
-        facts: List[str] = []
-        if isinstance(raw_facts, list):
-            for item in raw_facts:
-                s = str(item or "").strip()
-                if s:
-                    facts.append(s)
-
-        summary = summary[:500]
-        dedup: List[str] = []
-        seen = set()
-        for fact in facts:
-            f = fact[:160]
-            key = f.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            dedup.append(f)
-            if len(dedup) >= 10:
-                break
-
-        return {"summary": summary, "facts": dedup}
 
     async def embed_text(self, text: str, embed_model: str) -> Optional[List[float]]:
         """Embed a single text using the configured API key pool (best-effort)."""
@@ -1764,7 +1501,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         long_term_max_records: int = 0,
         guild_long_term_max_records: int = 0,
         max_field_chars: int = 320,
-        relevance_max_tokens: int = 20,
     ) -> str:
         """
         Build a compact, layered chat history string for the LLM prompt.
@@ -1798,28 +1534,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
 
         def is_memory(entry: Dict[str, Any]) -> bool:
             return kind(entry) == "memory"
-
-        tokens: List[str] = []
-        if user_input and relevance_max_tokens > 0:
-            raw_tokens = _MEMORY_TOKEN_RE.findall(user_input.lower())
-            tokens = list(dict.fromkeys(raw_tokens))[:relevance_max_tokens]
-
-        def entry_text(entry: Dict[str, Any]) -> str:
-            if is_memory(entry):
-                summary = str(entry.get("summary", "") or "")
-                facts = entry.get("facts", [])
-                if isinstance(facts, list):
-                    facts_text = "\n".join(str(f or "") for f in facts)
-                else:
-                    facts_text = str(facts or "")
-                return f"{summary}\n{facts_text}"
-            return f"{entry.get('user_message', '')}\n{entry.get('bot_response', '')}"
-
-        def relevance(entry: Dict[str, Any]) -> int:
-            if not tokens:
-                return 0
-            haystack = entry_text(entry).lower()
-            return sum(1 for token in tokens if token in haystack)
 
         def similarity(entry: Dict[str, Any]) -> float:
             if not user_input_embedding:
@@ -1862,16 +1576,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             ]
             guild_candidates = [r for r in memory_items if str(r.get("scope") or "").lower() == "guild"]
 
-            # Fallback: if user has no extracted long-term memories, use older messages from the same user.
-            if not user_candidates and focus_user_id is not None:
-                user_candidates = [
-                    r
-                    for r in history
-                    if is_chat(r)
-                    and r.get("user_id") == focus_user_id
-                    and (current_time - ts(r)) > short_term_seconds
-                ]
-
             user_strong = [r for r in user_candidates if importance(r) >= long_term_min_importance]
             if len(user_strong) >= max(1, min(remaining_slots, 3)):
                 user_candidates = user_strong
@@ -1880,8 +1584,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             if len(guild_strong) >= max(1, min(remaining_slots, 3)):
                 guild_candidates = guild_strong
 
-            user_candidates.sort(key=lambda x: (similarity(x), relevance(x), importance(x), ts(x)), reverse=True)
-            guild_candidates.sort(key=lambda x: (similarity(x), relevance(x), importance(x), ts(x)), reverse=True)
+            user_candidates.sort(key=lambda x: (similarity(x), importance(x), ts(x)), reverse=True)
+            guild_candidates.sort(key=lambda x: (similarity(x), importance(x), ts(x)), reverse=True)
 
             user_cap = remaining_slots
             if long_term_max_records > 0:
@@ -2069,109 +1773,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return {"score": 0, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
 
         return result
-
-    async def evaluate_memory_json(self, user_message: str, bot_response: str) -> Dict:
-        """
-        Let AI evaluate the memory importance of this conversation with JSON output
-        Returns a dictionary with score (0-5), reason
-        """
-        encoded_keys = await self._get_encoded_api_keys()
-        if not encoded_keys:
-            return {"score": 1}
-        
-        model = await self.config.model()
-        
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._evaluate_memory(
-                    api_key,
-                    model,
-                    user_message,
-                    bot_response,
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-
-        if last_error:
-            log.error(f"Memory evaluation failed after trying {len(encoded_keys)} key(s): {last_error}")
-        return {"score": 0}
-
-    async def _evaluate_memory(self, api_key: str, model: str, 
-                                     user_message: str, bot_response: str) -> Dict:
-        """AI記憶評估 - JSON 格式輸出版本 (Async)"""
-        try:
-            if genai is None or types is None:
-                raise RuntimeError(
-                    "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
-                )
-
-            client = genai.Client(api_key=api_key, http_options=self._http_options)
-            system_instruction = """
-## 角色定位
-你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並輸出結構化的 JSON 資料。
-
-## 評分標準 (0-5)
-- **0分**: 無需記憶 - 寒暄、無意義內容（如「你好」「XD」「我也覺得」）
-- **1分**: 低價值 - 單次查詢型資訊（如「現在幾點」「Python 語法」）
-- **2分**: 有用但短暫 - 實用但非個人資訊（如「推薦餐廳」「天氣查詢」）
-- **3分**: 中等價值 - 個人偏好或習慣（如「我喜歡咖啡」「我常熬夜」）
-- **4分**: 高價值 - 情感狀態或生活變化（如「我心情不好」「我換工作了」）
-- **5分**: 關鍵資訊 - 重要個人資料（如「我對花生過敏」「我下月結婚」）
-                    """.strip()
-
-            prompt = f"請評估以下對話的記憶價值：\n\n用戶：{user_message}\nAI：{bot_response}"
-            response = await client.aio.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=system_instruction,
-                    temperature=0,
-                    response_mime_type="application/json",
-                    response_json_schema=MEMORY_SCHEMA,
-                ),
-            )
-
-            parsed_obj = getattr(response, "parsed", None)
-            parsed = _coerce_parsed_dict(parsed_obj)
-            if isinstance(parsed, dict):
-                score = max(0, min(int(parsed.get("score", 1)), 5))
-                return {"score": score}
-            score_attr = getattr(parsed_obj, "score", None)
-            if score_attr is not None:
-                score = max(0, min(int(score_attr), 5))
-                return {"score": score}
-
-            content = _extract_response_text(response)
-            try:
-                result = _safe_json_loads(content) if content else {}
-            except json.JSONDecodeError:
-                fallback = _extract_score_fallback(content)
-                if fallback is not None:
-                    return {"score": fallback}
-                raise
-
-            score = max(0, min(int(result.get("score", 1)), 5)) if isinstance(result, dict) else 0
-            
-            return {
-                "score": score,
-            }
-            
-        except json.JSONDecodeError as e:
-            raw = locals().get("content", "")
-            log.error(f"JSON 解析錯誤: {e}, 原始回應: {(raw or '')[:400]}")
-            return {"score": 0}
-        except Exception as e:
-            log.error(f"記憶評估錯誤: {str(e)[:150]}")
-            return {"score": 0}
 
     async def cog_unload(self):
         """Stop background tasks when Cog is unloaded"""

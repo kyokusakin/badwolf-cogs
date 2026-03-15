@@ -172,7 +172,6 @@ class AssistantCommands():
         long_term_min_importance = await conf.memory_long_term_min_importance()
         max_field_chars = await conf.memory_max_field_chars()
         history_max_records = await conf.memory_history_max_records()
-        relevance_max_tokens = await conf.memory_relevance_max_tokens()
         chat_retention_seconds = await conf.memory_chat_retention_seconds()
         retention_days = await conf.memory_retention_days()
         long_term_enabled = await conf.memory_long_term_enabled()
@@ -184,7 +183,6 @@ class AssistantCommands():
         guild_long_term_fetch_limit = await conf.memory_guild_long_term_fetch_limit()
         guild_auto_upgrade_enabled = await conf.memory_guild_auto_upgrade_enabled()
         guild_upgrade_min_score = await conf.memory_guild_upgrade_min_score()
-        embedding_enabled = await conf.memory_embedding_enabled()
         embedding_model = await conf.memory_embedding_model()
         embedding_top_k = await conf.memory_embedding_top_k()
         guild_embedding_top_k = await conf.memory_guild_embedding_top_k()
@@ -198,7 +196,6 @@ class AssistantCommands():
             f"- long_term_min_importance: {long_term_min_importance}\n"
             f"- max_field_chars: {max_field_chars}\n"
             f"- history_max_records: {history_max_records} (0 = 不修剪)\n"
-            f"- relevance_max_tokens: {relevance_max_tokens}\n"
             f"- chat_retention_seconds: {chat_retention_seconds} (0 = 不落盤)\n"
             f"- retention_days: {retention_days} (0 = 永久保存)\n"
             f"- long_term_enabled: {long_term_enabled}\n"
@@ -210,7 +207,6 @@ class AssistantCommands():
             f"- guild_long_term_fetch_limit: {guild_long_term_fetch_limit}\n"
             f"- guild_auto_upgrade_enabled: {guild_auto_upgrade_enabled}\n"
             f"- guild_upgrade_min_score: {guild_upgrade_min_score}\n"
-            f"- embedding_enabled: {embedding_enabled}\n"
             f"- embedding_model: {embedding_model}\n"
             f"- embedding_top_k: {embedding_top_k}\n"
             f"- guild_embedding_top_k: {guild_embedding_top_k}\n"
@@ -234,7 +230,6 @@ class AssistantCommands():
             "long_term_min_importance": ("memory_long_term_min_importance", "int"),
             "max_field_chars": ("memory_max_field_chars", "int"),
             "history_max_records": ("memory_history_max_records", "int"),
-            "relevance_max_tokens": ("memory_relevance_max_tokens", "int"),
             "chat_retention_seconds": ("memory_chat_retention_seconds", "int"),
             "retention_days": ("memory_retention_days", "int"),
             "long_term_enabled": ("memory_long_term_enabled", "bool"),
@@ -246,7 +241,6 @@ class AssistantCommands():
             "guild_long_term_fetch_limit": ("memory_guild_long_term_fetch_limit", "int"),
             "guild_auto_upgrade_enabled": ("memory_guild_auto_upgrade_enabled", "bool"),
             "guild_upgrade_min_score": ("memory_guild_upgrade_min_score", "int"),
-            "embedding_enabled": ("memory_embedding_enabled", "bool"),
             "embedding_model": ("memory_embedding_model", "str"),
             "embedding_top_k": ("memory_embedding_top_k", "int"),
             "guild_embedding_top_k": ("memory_guild_embedding_top_k", "int"),
