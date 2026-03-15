@@ -160,11 +160,11 @@ class AssistantCommands():
         await ctx.send("自訂提示詞已設置。")
 
     @openai.command(name="memory")
-    @commands.guild_only()
+    @commands.is_owner()
     async def memory_settings(self, ctx: commands.Context):
-        """顯示目前伺服器的記憶系統設定。"""
+        """顯示目前的全局記憶系統設定。"""
         cog = self.bot.get_cog("OpenAIChat")
-        conf = cog.config.guild(ctx.guild)
+        conf = cog.config
 
         short_term_seconds = await conf.memory_short_term_seconds()
         context_max_records = await conf.memory_context_max_records()
@@ -220,12 +220,11 @@ class AssistantCommands():
         )
 
     @openai.command(name="setmemory")
-    @commands.guild_only()
-    @commands.has_permissions(administrator=True)
+    @commands.is_owner()
     async def setmemory(self, ctx: commands.Context, key: str, *, value: str):
-        """調整記憶系統設定（管理員）。例如：`[p]openai setmemory context_max_records 20`"""
+        """調整全局記憶系統設定（僅限機器人擁有者）。例如：`[p]openai setmemory context_max_records 20`"""
         cog = self.bot.get_cog("OpenAIChat")
-        conf = cog.config.guild(ctx.guild)
+        conf = cog.config
 
         key = (key or "").strip().lower()
         key_map = {
@@ -325,22 +324,20 @@ class AssistantCommands():
         await ctx.send(f"已更新 `{key}` = {parsed_value}")
 
     @openai.command(name="optout")
-    @commands.guild_only()
     async def optout(self, ctx: commands.Context):
         """使用者選擇退出記憶系統（不再儲存你的對話/記憶）。"""
         cog = self.bot.get_cog("OpenAIChat")
-        conf = cog.config.guild(ctx.guild)
+        conf = cog.config
         async with conf.memory_opt_out_user_ids() as ids:
             if ctx.author.id not in ids:
                 ids.append(ctx.author.id)
         await ctx.send("已將你加入 opt-out：未來不會再儲存你的對話/長期記憶。要清除既有資料請用 `[p]openai forgetme`。")
 
     @openai.command(name="optin")
-    @commands.guild_only()
     async def optin(self, ctx: commands.Context):
         """使用者重新加入記憶系統。"""
         cog = self.bot.get_cog("OpenAIChat")
-        conf = cog.config.guild(ctx.guild)
+        conf = cog.config
         async with conf.memory_opt_out_user_ids() as ids:
             if ctx.author.id in ids:
                 ids.remove(ctx.author.id)

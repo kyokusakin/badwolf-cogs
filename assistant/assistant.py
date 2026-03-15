@@ -216,12 +216,8 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         self.config = Config.get_conf(self, identifier=1234567890, force_registration=True)
         default_global = {
             "api_keys": {},
-            "model": "gemini-2.5-flash",
+            "model": "gemini-3.1-flash-lite-preview",
             "default_delay": 1,
-        }
-        default_guild = {
-            "channels": {},
-            "prompt": "",
             "memory_short_term_seconds": 600,
             "memory_context_max_records": 20,
             "memory_short_term_max_records": 10,
@@ -242,9 +238,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             "memory_guild_auto_upgrade_enabled": True,
             "memory_guild_upgrade_min_score": 4,
             "memory_embedding_enabled": False,
-            "memory_embedding_model": "text-embedding-004",
+            "memory_embedding_model": "gemini-embedding-2-preview",
             "memory_embedding_top_k": 6,
             "memory_opt_out_user_ids": [],
+        }
+        default_guild = {
+            "channels": {},
+            "prompt": "",
         }
         self.config.register_global(**default_global)
         self.config.register_guild(**default_guild)
@@ -920,26 +920,27 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         user_id = message.author.id
         bot_name = self.bot.user.display_name
         guild_settings = await self.config.guild(message.guild).all()
+        global_settings = await self.config.all()
         prompt = guild_settings.get("prompt", "")
-        memory_short_term_seconds = self._coerce_int(guild_settings.get("memory_short_term_seconds"), default=600)
-        memory_context_max_records = self._coerce_int(guild_settings.get("memory_context_max_records"), default=20)
-        memory_short_term_max_records = self._coerce_int(guild_settings.get("memory_short_term_max_records"), default=10)
-        memory_long_term_min_importance = self._coerce_int(guild_settings.get("memory_long_term_min_importance"), default=2)
-        memory_max_field_chars = self._coerce_int(guild_settings.get("memory_max_field_chars"), default=320)
-        memory_history_max_records = self._coerce_int(guild_settings.get("memory_history_max_records"), default=5000)
-        memory_relevance_max_tokens = self._coerce_int(guild_settings.get("memory_relevance_max_tokens"), default=20)
-        memory_chat_retention_seconds = self._coerce_int(guild_settings.get("memory_chat_retention_seconds"), default=600)
-        memory_long_term_enabled = bool(guild_settings.get("memory_long_term_enabled", True))
-        memory_long_term_fetch_limit = self._coerce_int(guild_settings.get("memory_long_term_fetch_limit"), default=200)
-        memory_guild_long_term_enabled = bool(guild_settings.get("memory_guild_long_term_enabled", True))
+        memory_short_term_seconds = self._coerce_int(global_settings.get("memory_short_term_seconds"), default=600)
+        memory_context_max_records = self._coerce_int(global_settings.get("memory_context_max_records"), default=20)
+        memory_short_term_max_records = self._coerce_int(global_settings.get("memory_short_term_max_records"), default=10)
+        memory_long_term_min_importance = self._coerce_int(global_settings.get("memory_long_term_min_importance"), default=2)
+        memory_max_field_chars = self._coerce_int(global_settings.get("memory_max_field_chars"), default=320)
+        memory_history_max_records = self._coerce_int(global_settings.get("memory_history_max_records"), default=5000)
+        memory_relevance_max_tokens = self._coerce_int(global_settings.get("memory_relevance_max_tokens"), default=20)
+        memory_chat_retention_seconds = self._coerce_int(global_settings.get("memory_chat_retention_seconds"), default=600)
+        memory_long_term_enabled = bool(global_settings.get("memory_long_term_enabled", True))
+        memory_long_term_fetch_limit = self._coerce_int(global_settings.get("memory_long_term_fetch_limit"), default=200)
+        memory_guild_long_term_enabled = bool(global_settings.get("memory_guild_long_term_enabled", True))
         memory_guild_long_term_fetch_limit = self._coerce_int(
-            guild_settings.get("memory_guild_long_term_fetch_limit"), default=200
+            global_settings.get("memory_guild_long_term_fetch_limit"), default=200
         )
-        memory_embedding_enabled = bool(guild_settings.get("memory_embedding_enabled", False))
-        memory_embedding_model = str(guild_settings.get("memory_embedding_model") or "text-embedding-004")
-        memory_embedding_top_k = self._coerce_int(guild_settings.get("memory_embedding_top_k"), default=6)
-        memory_guild_embedding_top_k = self._coerce_int(guild_settings.get("memory_guild_embedding_top_k"), default=6)
-        opt_out_ids = set(guild_settings.get("memory_opt_out_user_ids") or [])
+        memory_embedding_enabled = bool(global_settings.get("memory_embedding_enabled", False))
+        memory_embedding_model = str(global_settings.get("memory_embedding_model") or "gemini-embedding-2-preview")
+        memory_embedding_top_k = self._coerce_int(global_settings.get("memory_embedding_top_k"), default=6)
+        memory_guild_embedding_top_k = self._coerce_int(global_settings.get("memory_guild_embedding_top_k"), default=6)
+        opt_out_ids = set(global_settings.get("memory_opt_out_user_ids") or [])
 
         current_time = time.time()
 
@@ -1125,43 +1126,44 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         # 記憶系統處理 - 即使失敗也不影響回應
         try:
             guild_settings = await self.config.guild(message.guild).all()
-            opt_out_ids = set(guild_settings.get("memory_opt_out_user_ids") or [])
+            global_settings = await self.config.all()
+            opt_out_ids = set(global_settings.get("memory_opt_out_user_ids") or [])
             if message.author.id in opt_out_ids:
                 return
 
             chat_retention_seconds = self._coerce_int(
-                guild_settings.get("memory_chat_retention_seconds"),
+                global_settings.get("memory_chat_retention_seconds"),
                 default=600,
             )
-            long_term_enabled = bool(guild_settings.get("memory_long_term_enabled", True))
+            long_term_enabled = bool(global_settings.get("memory_long_term_enabled", True))
             long_term_min_importance = self._coerce_int(
-                guild_settings.get("memory_long_term_min_importance"),
+                global_settings.get("memory_long_term_min_importance"),
                 default=2,
             )
             retention_days = self._coerce_int(
-                guild_settings.get("memory_retention_days"),
+                global_settings.get("memory_retention_days"),
                 default=90,
             )
             long_term_max_records = self._coerce_int(
-                guild_settings.get("memory_long_term_max_records"),
+                global_settings.get("memory_long_term_max_records"),
                 default=500,
             )
-            guild_long_term_enabled = bool(guild_settings.get("memory_guild_long_term_enabled", True))
-            guild_auto_upgrade_enabled = bool(guild_settings.get("memory_guild_auto_upgrade_enabled", True))
+            guild_long_term_enabled = bool(global_settings.get("memory_guild_long_term_enabled", True))
+            guild_auto_upgrade_enabled = bool(global_settings.get("memory_guild_auto_upgrade_enabled", True))
             guild_upgrade_min_score = self._coerce_int(
-                guild_settings.get("memory_guild_upgrade_min_score"),
+                global_settings.get("memory_guild_upgrade_min_score"),
                 default=4,
             )
             guild_retention_days = self._coerce_int(
-                guild_settings.get("memory_guild_retention_days"),
+                global_settings.get("memory_guild_retention_days"),
                 default=365,
             )
             guild_long_term_max_records = self._coerce_int(
-                guild_settings.get("memory_guild_long_term_max_records"),
+                global_settings.get("memory_guild_long_term_max_records"),
                 default=300,
             )
-            embedding_enabled = bool(guild_settings.get("memory_embedding_enabled", False))
-            embedding_model = str(guild_settings.get("memory_embedding_model") or "text-embedding-004")
+            embedding_enabled = bool(global_settings.get("memory_embedding_enabled", False))
+            embedding_model = str(global_settings.get("memory_embedding_model") or "gemini-embedding-2-preview")
 
             score = 0
             if long_term_enabled or (guild_long_term_enabled and guild_auto_upgrade_enabled):
