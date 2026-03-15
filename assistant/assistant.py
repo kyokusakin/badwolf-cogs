@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import logging
-from duckduckgo_search import AsyncDDGS
+from duckduckgo_search import DDGS
 import os
 import json
 import aiofiles
@@ -1068,7 +1068,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
     async def _search_web(self, query: str) -> str:
         """Perform a web search using DuckDuckGo"""
         try:
-            results = await AsyncDDGS().text(query, max_results=3)
+            results = await DDGS().text(query, max_results=3)
             if not results:
                 return "(No search results found)"
             
@@ -1342,7 +1342,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if message.stickers:
             return
         config = await self.config.guild(message.guild).all()
-        channels = config.get("channels", {})
+        channels = config["channels"]
 
         ctx = await self.bot.get_context(message)
         if ctx.valid:
@@ -1592,17 +1592,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return {"summary": summary, "facts": dedup}
 
     async def embed_text(self, text: str, embed_model: str) -> Optional[List[float]]:
-        """Embed a single text using the configured API key pool or local Ollama."""
-        if not text.strip():
-            return None
-
-        if embed_model.startswith("ollama:"):
-            try:
-                return await self._embed_text("", embed_model, text)
-            except Exception as e:
-                log.error(f"Local Ollama embedding failed: {e}")
-                return None
-
+        """Embed a single text using the configured API key pool (best-effort)."""
         encoded_keys = await self._get_encoded_api_keys()
         if not encoded_keys:
             return None
