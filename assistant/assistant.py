@@ -1086,7 +1086,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             contents=content,
             config=types.GenerateContentConfig(
                 system_instruction=prompt,
-                tools=[SEARCH_TOOL],
+                #tools=[SEARCH_TOOL],
                 thinking_config=types.ThinkingConfig(thinking_level="medium")
             ),
         )
