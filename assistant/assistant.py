@@ -62,6 +62,16 @@ MEMORY_ITEM_SCHEMA: Dict[str, Any] = {
     "required": ["summary", "facts"],
 }
 
+MEMORY_ALL_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "score": {"type": "integer", "minimum": 0, "maximum": 5},
+        "user_memory": MEMORY_ITEM_SCHEMA,
+        "guild_memory": MEMORY_ITEM_SCHEMA,
+    },
+    "required": ["score", "user_memory", "guild_memory"],
+}
+
 _MEMORY_TOKEN_RE = re.compile(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,}")
 _DISCORD_MENTION_RE = re.compile(r"<@!?\\d+>|@everyone|@here")
 _DISCORD_ID_RE = re.compile(r"\\b\\d{17,20}\\b")
@@ -1077,6 +1087,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             config=types.GenerateContentConfig(
                 system_instruction=prompt,
                 tools=[SEARCH_TOOL],
+                thinking_config=types.ThinkingConfig(thinking_level="medium")
             ),
         )
 
@@ -1166,10 +1177,18 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             embedding_model = str(global_settings.get("memory_embedding_model") or "gemini-embedding-2-preview")
 
             score = 0
+            memory_item = None
+            guild_item = None
             if long_term_enabled or (guild_long_term_enabled and guild_auto_upgrade_enabled):
                 try:
-                    memory_eval = await self.evaluate_memory_json(message.content, response)
+                    memory_eval = await self.analyze_memory_all_json(
+                        message.content, response, 
+                        long_term_enabled=long_term_enabled, 
+                        guild_long_term_enabled=(guild_long_term_enabled and guild_auto_upgrade_enabled)
+                    )
                     score = self._coerce_int(memory_eval.get("score"), default=0)
+                    memory_item = memory_eval.get("user_memory")
+                    guild_item = memory_eval.get("guild_memory")
                 except Exception as e:
                     log.error(f"Error evaluating memory importance: {e}")
 
@@ -1191,7 +1210,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             # Long-term memory: store facts/summary (not raw conversation).
             if long_term_enabled and score >= max(0, min(long_term_min_importance, 5)):
                 try:
-                    memory_item = await self.extract_long_term_memory_json(message.content, response)
                     if memory_item:
                         summary = str(memory_item.get("summary", "")).strip()
                         facts = memory_item.get("facts", [])
@@ -1228,7 +1246,6 @@ class OpenAIChat(commands.Cog, AssistantCommands):
                 and score >= max(0, min(guild_upgrade_min_score, 5))
             ):
                 try:
-                    guild_item = await self.extract_guild_memory_json(message.content, response)
                     if guild_item:
                         summary = str(guild_item.get("summary", "")).strip()
                         facts = guild_item.get("facts", [])
@@ -1900,6 +1917,98 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             sections.append("User memory:\n" + "\n".join(lines))
 
         return "\n\n".join(sections).strip()
+
+    async def analyze_memory_all_json(self, user_message: str, bot_response: str, long_term_enabled: bool, guild_long_term_enabled: bool) -> Dict[str, Any]:
+        """
+        Let AI evaluate the memory importance of this conversation and extract memories in a single pass.
+        Returns a dictionary matching MEMORY_ALL_SCHEMA.
+        """
+        encoded_keys = await self._get_encoded_api_keys()
+        if not encoded_keys:
+            return {"score": 1, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
+
+        model = await self.config.model()
+        last_error: Optional[Exception] = None
+
+        for _ in range(len(encoded_keys)):
+            encoded_key, api_key = await self._pick_api_key(encoded_keys)
+            try:
+                result = await self._analyze_memory_all(
+                    api_key,
+                    model,
+                    user_message,
+                    bot_response,
+                    long_term_enabled,
+                    guild_long_term_enabled
+                )
+                await self._mark_key_success(encoded_key)
+                return result
+            except Exception as e:
+                await self._mark_key_failure(encoded_key, e)
+                last_error = e
+                if not self._is_retryable_error(e):
+                    break
+
+        if last_error:
+            log.error(f"Memory analysis failed after trying {len(encoded_keys)} key(s): {last_error}")
+        return {"score": 0, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
+
+    async def _analyze_memory_all(self, api_key: str, model: str,
+                                     user_message: str, bot_response: str,
+                                     long_term_enabled: bool, guild_long_term_enabled: bool) -> Dict[str, Any]:
+        if genai is None or types is None:
+            raise RuntimeError(
+                "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
+            )
+
+        client = genai.Client(api_key=api_key, http_options=self._http_options)
+        
+        system_instruction = f"""
+你是「AI 記憶總管」，負責評估使用者對話的記憶價值，並在有價值時一併萃取適合長期保存的資訊。請輸出結構化的 JSON 資料。
+
+## 第一部分：評估 (score)
+評分標準 (0-5)：
+- 0分: 無需記憶 - 寒暄、無意義內容
+- 1分: 低價值 - 單次查詢型資訊
+- 2分: 有用但短暫 - 實用但非個人資訊
+- 3分: 中等價值 - 個人偏好或習慣
+- 4分: 高價值 - 情感狀態或生活變化
+- 5分: 關鍵資訊 - 重要個人資料
+
+## 第二部分：個人長期記憶 (user_memory)
+{'（如果 score >= 2，請提取；否則 summary 留空、facts 為空列表）' if long_term_enabled else '（目前停用，請直接 summary 留空、facts 為空列表）'}
+1) 只保留「對未來仍有用」且「相對穩定」的資訊（偏好/習慣/背景等）。
+2) 嚴禁保存敏感資訊（密碼/地址/電話等）。
+3) facts 用短句、去重、每條不要太長。
+
+## 第三部分：伺服器層級記憶 (guild_memory)
+{'（如果 score >= 4，請提取整個伺服器/群組都適用的資訊，如版規/公告；否則留空。嚴禁包含單一使用者偏好或可識別細節。）' if guild_long_term_enabled else '（目前停用，請直接 summary 留空、facts 為空列表）'}
+""".strip()
+
+        prompt = f"請評估並萃取以下對話的記憶：\n\n用戶：{user_message}\nAI：{bot_response}"
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                temperature=0,
+                response_mime_type="application/json",
+                response_json_schema=MEMORY_ALL_SCHEMA,
+            ),
+        )
+
+        parsed_obj = getattr(response, "parsed", None)
+        parsed = _coerce_parsed_dict(parsed_obj)
+        if isinstance(parsed, dict) and "score" in parsed:
+            return parsed
+
+        content = _extract_response_text(response)
+        try:
+            result = _safe_json_loads(content) if content else {}
+        except json.JSONDecodeError:
+            return {"score": 0, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
+
+        return result
 
     async def evaluate_memory_json(self, user_message: str, bot_response: str) -> Dict:
         """
