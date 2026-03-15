@@ -1579,13 +1579,13 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             history = await self._read_chat_history_unlocked(file_path)
 
             now = time.time()
-            guild_conf = self._guild_config_from_id(guild_id)
+            global_conf = self.config
             chat_retention_seconds = self._coerce_int(
-                await guild_conf.memory_chat_retention_seconds(),
+                await global_conf.memory_chat_retention_seconds(),
                 default=600,
             )
             history_max_records = self._coerce_int(
-                await guild_conf.memory_history_max_records(),
+                await global_conf.memory_history_max_records(),
                 default=5000,
             )
 
