@@ -1035,7 +1035,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         """Perform a web search using DuckDuckGo"""
         try:
             # duckduckgo_search is synchronous; run it in a thread to avoid blocking the event loop.
-            results = await asyncio.to_thread(lambda: list(DDGS().text(query, max_results=3)))
+            results = await asyncio.to_thread(lambda: list(DDGS().text(query, max_results=6)))
             if not results:
                 return "(No search results found)"
             
