@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import logging
+from duckduckgo_search import AsyncDDGS
 import os
 import json
 import aiofiles
@@ -1064,11 +1065,26 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             return f"⚠️ API Error: {last_error}"
         return None
 
+    async def _search_web(self, query: str) -> str:
+        """Perform a web search using DuckDuckGo"""
+        try:
+            results = await AsyncDDGS().text(query, max_results=3)
+            if not results:
+                return "(No search results found)"
+            
+            formatted = []
+            for r in results:
+                formatted.append(f"Title: {r.get('title')}\nSnippet: {r.get('body')}\nURL: {r.get('href')}\n")
+            return "\n".join(formatted)
+        except Exception as e:
+            log.error(f"Web search error: {e}")
+            return f"(Search failed: {e})"
+
     async def _genai_request(
         self, api_key: str, model: str,
         prompt: str, guild_history: str, user_input: str
     ) -> Optional[str]:
-        """Async call to Google Gemini API using google-genai (Client.aio.models.generate_content)."""
+        """Async call to Google Gemini API using google-genai with function calling for search."""
         if genai is None or types is None:
             raise RuntimeError(
                 "google-genai is not available. Please install/enable the Google GenAI Python SDK (google-genai)."
@@ -1081,15 +1097,57 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             + "\nChat histories end.\n\n"
             + user_input
         )
-        response = await client.aio.models.generate_content(
+        
+        # Define the custom search tool
+        search_tool = types.Tool(
+            function_declarations=[
+                types.FunctionDeclaration(
+                    name="search_web",
+                    description="Search the web for real-time information or current events.",
+                    parameters=types.Schema(
+                        type=types.Type.OBJECT,
+                        properties={
+                            "query": types.Schema(
+                                type=types.Type.STRING,
+                                description="The search query."
+                            )
+                        },
+                        required=["query"]
+                    )
+                )
+            ]
+        )
+
+        chat = client.aio.chats.create(
             model=model,
-            contents=content,
             config=types.GenerateContentConfig(
                 system_instruction=prompt,
-                #tools=[SEARCH_TOOL],
-                thinking_config=types.ThinkingConfig(thinking_level="medium")
-            ),
+                tools=[search_tool],
+                temperature=0.7,
+            )
         )
+        
+        response = await chat.send_message(content)
+        
+        # Check if the model decided to call the function
+        function_calls = getattr(response, "function_calls", [])
+        if function_calls:
+            for fc in function_calls:
+                if fc.name == "search_web":
+                    query = fc.args.get("query", "")
+                    log.info(f"Executing custom web search for: {query}")
+                    search_results = await self._search_web(query)
+                    
+                    # Send the results back to the model
+                    response = await chat.send_message(
+                        types.Part.from_function_response(
+                            name="search_web",
+                            response={
+                                "result": search_results
+                            }
+                        )
+                    )
+                    break
 
         text = getattr(response, "text", None)
         if text:
@@ -1284,7 +1342,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         if message.stickers:
             return
         config = await self.config.guild(message.guild).all()
-        channels = config["channels"]
+        channels = config.get("channels", {})
 
         ctx = await self.bot.get_context(message)
         if ctx.valid:
@@ -1534,7 +1592,17 @@ class OpenAIChat(commands.Cog, AssistantCommands):
         return {"summary": summary, "facts": dedup}
 
     async def embed_text(self, text: str, embed_model: str) -> Optional[List[float]]:
-        """Embed a single text using the configured API key pool (best-effort)."""
+        """Embed a single text using the configured API key pool or local Ollama."""
+        if not text.strip():
+            return None
+
+        if embed_model.startswith("ollama:"):
+            try:
+                return await self._embed_text("", embed_model, text)
+            except Exception as e:
+                log.error(f"Local Ollama embedding failed: {e}")
+                return None
+
         encoded_keys = await self._get_encoded_api_keys()
         if not encoded_keys:
             return None
