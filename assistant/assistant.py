@@ -1,7 +1,7 @@
 import asyncio
 import base64
 import logging
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 import os
 import json
 import aiofiles
