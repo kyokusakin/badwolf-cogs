@@ -38,6 +38,7 @@ def _exc_classes(*names: str):
 
 log = logging.getLogger("red.BadwolfCogs.assistant")
 logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("primp").setLevel(logging.WARNING)
 # Suppress noisy SDK INFO logs (e.g. "AFC is enabled with max remote calls: 10.")
 logging.getLogger("genai").setLevel(logging.WARNING)
 logging.getLogger("google_genai").setLevel(logging.WARNING)
