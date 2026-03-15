@@ -1136,7 +1136,7 @@ class OpenAIChat(commands.Cog, AssistantCommands):
             for fc in function_calls:
                 if fc.name == "search_web":
                     query = fc.args.get("query", "")
-                    log.info(f"Executing custom web search for: {query}")
+                    log.debug(f"Executing custom web search for: {query}")
                     search_results = await self._search_web(query)
                     
                     # Send the results back to the model
