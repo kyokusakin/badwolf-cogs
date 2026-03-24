@@ -4,6 +4,12 @@ import os
 import time
 from redbot.core import commands, data_manager
 import pathlib
+from .agent import (
+    disable_agent_mode,
+    enable_agent_mode,
+    list_agent_guilds,
+    send_agent_status,
+)
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
 
@@ -158,6 +164,34 @@ class AssistantCommands():
         """設定自訂提示詞 (Prompt)。"""
         await self.bot.get_cog("OpenAIChat").config.guild(ctx.guild).prompt.set(prompt)
         await ctx.send("自訂提示詞已設置。")
+
+    @openai.group(name="agent")
+    @commands.guild_only()
+    @commands.is_owner()
+    async def agent_group(self, ctx: commands.Context):
+        """管理 agent 方式互動（僅限 bot owner）。"""
+        if ctx.invoked_subcommand is None:
+            await send_agent_status(self.bot, ctx)
+
+    @agent_group.command(name="enable")
+    @commands.guild_only()
+    @commands.is_owner()
+    async def agent_enable(self, ctx: commands.Context):
+        """在目前 guild 啟用 agent 方式互動（僅限 bot owner）。"""
+        await enable_agent_mode(self.bot, ctx)
+
+    @agent_group.command(name="disable")
+    @commands.guild_only()
+    @commands.is_owner()
+    async def agent_disable(self, ctx: commands.Context):
+        """在目前 guild 停用 agent 方式互動（僅限 bot owner）。"""
+        await disable_agent_mode(self.bot, ctx)
+
+    @openai.command(name="listagentguilds")
+    @commands.is_owner()
+    async def listagentguilds(self, ctx: commands.Context):
+        """列出目前已啟用 agent 模式的 guild（僅限 bot owner）。"""
+        await list_agent_guilds(self.bot, ctx)
 
     @openai.command(name="memory")
     @commands.is_owner()
