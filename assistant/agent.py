@@ -8,6 +8,7 @@ from redbot.core import commands
 
 AGENT_GUILD_DEFAULTS = {
     "agent_mode_enabled": False,
+    "agent_trigger_on_mention": True,
 }
 
 AGENT_MEMORY_SCOPE = "agent"
@@ -69,11 +70,15 @@ class AgentRuntimeMixin:
         pattern = re.compile(rf"<@!?{self.bot.user.id}>")
         return pattern.sub("", content).strip()
 
-    async def _is_agent_trigger(self, message: discord.Message) -> bool:
+    async def _is_agent_trigger(self, message: discord.Message, guild_config: Optional[Dict[str, Any]] = None) -> bool:
         if self.bot.user is None:
             return False
 
-        if self.bot.user in message.mentions:
+        mention_enabled = True
+        if isinstance(guild_config, dict):
+            mention_enabled = bool(guild_config.get("agent_trigger_on_mention", True))
+
+        if mention_enabled and self.bot.user in message.mentions:
             return True
 
         reference = message.reference
@@ -98,7 +103,7 @@ class AgentRuntimeMixin:
         if not guild_config.get("agent_mode_enabled", False):
             return None
 
-        if not await self._is_agent_trigger(message):
+        if not await self._is_agent_trigger(message, guild_config):
             return None
 
         user_input = self._strip_bot_mention(message.content)
@@ -186,12 +191,17 @@ class AgentRuntimeMixin:
 
 
 async def send_agent_status(bot, ctx: commands.Context):
-    enabled = await bot.get_cog("OpenAIChat").config.guild(ctx.guild).agent_mode_enabled()
+    conf = bot.get_cog("OpenAIChat").config.guild(ctx.guild)
+    enabled = await conf.agent_mode_enabled()
+    mention_enabled = await conf.agent_trigger_on_mention()
     status = "已啟用" if enabled else "未啟用"
+    mention_status = "已啟用" if mention_enabled else "已停用"
     await ctx.send(
         "目前 guild 的 agent 模式狀態："
         f"{status}\n"
-        "啟用後，成員在此 guild 內 mention 機器人，或回覆機器人的訊息時，會以 agent 方式互動。"
+        f"- mention 觸發：{mention_status}\n"
+        "- reply 觸發：已啟用\n"
+        "啟用後，成員在此 guild 內可依設定用 mention 機器人，或回覆機器人的訊息來觸發 agent 互動。"
     )
 
 
@@ -237,3 +247,30 @@ async def list_agent_guilds(bot, ctx: commands.Context):
             lines.append(f"- Unknown Guild ({guild_id})")
 
     await ctx.send("已啟用 agent 模式的 guild：\n" + "\n".join(lines))
+
+
+def _parse_toggle(value: str) -> Optional[bool]:
+    text = str(value or "").strip().lower()
+    if text in {"1", "true", "on", "yes", "y", "enable", "enabled"}:
+        return True
+    if text in {"0", "false", "off", "no", "n", "disable", "disabled"}:
+        return False
+    return None
+
+
+async def send_agent_mention_status(bot, ctx: commands.Context):
+    enabled = await bot.get_cog("OpenAIChat").config.guild(ctx.guild).agent_trigger_on_mention()
+    status = "已啟用" if enabled else "已停用"
+    await ctx.send(f"目前 guild 的 agent mention 觸發：{status}")
+
+
+async def set_agent_mention_trigger(bot, ctx: commands.Context, value: str):
+    parsed = _parse_toggle(value)
+    if parsed is None:
+        await ctx.send("請使用 on/off、true/false、enable/disable。")
+        return
+
+    conf = bot.get_cog("OpenAIChat").config.guild(ctx.guild)
+    await conf.agent_trigger_on_mention.set(parsed)
+    status = "已啟用" if parsed else "已停用"
+    await ctx.send(f"已將 agent mention 觸發設為：{status}")

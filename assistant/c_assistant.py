@@ -8,7 +8,9 @@ from .agent import (
     disable_agent_mode,
     enable_agent_mode,
     list_agent_guilds,
+    send_agent_mention_status,
     send_agent_status,
+    set_agent_mention_trigger,
 )
 
 log = logging.getLogger("red.BadwolfCogs.c_assistant")
@@ -186,6 +188,16 @@ class AssistantCommands():
     async def agent_disable(self, ctx: commands.Context):
         """在目前 guild 停用 agent 方式互動（僅限 bot owner）。"""
         await disable_agent_mode(self.bot, ctx)
+
+    @agent_group.command(name="mention")
+    @commands.guild_only()
+    @commands.is_owner()
+    async def agent_mention(self, ctx: commands.Context, value: str = ""):
+        """設定或查看 agent mention 觸發（僅限 bot owner）。"""
+        if not value.strip():
+            await send_agent_mention_status(self.bot, ctx)
+            return
+        await set_agent_mention_trigger(self.bot, ctx, value)
 
     @openai.command(name="listagentguilds")
     @commands.is_owner()
