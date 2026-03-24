@@ -27,7 +27,7 @@ from .agent import (
     WEB_FETCH_TOOL_NAME,
 )
 from .c_assistant import AssistantCommands
-from typing import Optional, List, Dict, Tuple, Any
+from typing import Optional, List, Dict, Tuple, Any, Callable, Awaitable
 from concurrent.futures import ThreadPoolExecutor
 from google.api_core import exceptions as api_exc
 
@@ -221,6 +221,14 @@ class _APIKeyState:
     failures: int = 0
 
 
+GENAI_REQUEST_RETRIES_PER_KEY = 3
+EMBED_RETRIES_PER_KEY = 2
+MEMORY_ANALYSIS_RETRIES_PER_KEY = 2
+TEMPORARY_ERROR_STATUSES = {429, 500, 502, 503, 504}
+USER_FACING_BUSY_MESSAGE = "目前 Gemini 服務暫時繁忙，系統已自動重試多次仍失敗，請稍後再試。"
+USER_FACING_API_ERROR_MESSAGE = "目前 Gemini API 暫時無法使用，請稍後再試。"
+
+
 class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
     """A RedBot cog for Google Gemini API integration with advanced features,
     including a layered memory system where the AI decides which memories to store."""
@@ -363,6 +371,10 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             retry_after = OpenAIChat._extract_retry_after_seconds(error)
             return float(retry_after) if retry_after is not None else 20.0
 
+        if status == 503:
+            retry_after = OpenAIChat._extract_retry_after_seconds(error)
+            return float(retry_after) if retry_after is not None else 6.0
+
         rate_limit = _exc_classes("TooManyRequests", "ResourceExhausted")
         if rate_limit and isinstance(error, rate_limit):
             return 20.0
@@ -380,6 +392,89 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             return 600.0
 
         return 5.0
+
+    @staticmethod
+    def _is_temporary_capacity_error(error: Exception) -> bool:
+        status = OpenAIChat._extract_http_status_code(error)
+        if status in TEMPORARY_ERROR_STATUSES:
+            return True
+
+        text = str(error or "").lower()
+        hints = (
+            "high demand",
+            "try again later",
+            "temporarily unavailable",
+            "currently unavailable",
+            "service unavailable",
+            "status': 'unavailable'",
+            'status": "unavailable"',
+        )
+        return any(hint in text for hint in hints)
+
+    @staticmethod
+    def _retry_delay_seconds(error: Exception, attempt_number: int) -> float:
+        retry_after = OpenAIChat._extract_retry_after_seconds(error)
+        if retry_after is not None and retry_after > 0:
+            return max(1.0, min(float(retry_after), 30.0))
+
+        status = OpenAIChat._extract_http_status_code(error)
+        if status == 429:
+            base = 3.0
+        elif status in {500, 502, 503, 504}:
+            base = 2.0
+        else:
+            base = 1.0
+
+        return min(15.0, base * (2 ** max(0, attempt_number - 1)))
+
+    async def _run_with_api_key_pool(
+        self,
+        encoded_keys: List[str],
+        *,
+        operation_name: str,
+        max_attempts_per_key: int,
+        request_factory: Callable[[str], Awaitable[Any]],
+    ) -> Tuple[Any, Optional[Exception]]:
+        if not encoded_keys:
+            return None, RuntimeError("No API keys configured")
+
+        attempts_used = 0
+        total_attempts = max(1, len(encoded_keys) * max(1, max_attempts_per_key))
+        last_error: Optional[Exception] = None
+
+        for attempt in range(total_attempts):
+            attempts_used = attempt + 1
+            encoded_key, api_key = await self._pick_api_key(encoded_keys)
+            try:
+                result = await request_factory(api_key)
+                await self._mark_key_success(encoded_key)
+                return result, None
+            except Exception as e:
+                await self._mark_key_failure(encoded_key, e)
+                last_error = e
+
+                if not self._is_retryable_error(e):
+                    break
+
+                if attempts_used >= total_attempts:
+                    break
+
+                delay = self._retry_delay_seconds(e, attempts_used)
+                status = self._extract_http_status_code(e)
+                log.warning(
+                    "%s failed (attempt %s/%s, status=%s). Retrying in %.1fs: %s",
+                    operation_name,
+                    attempts_used,
+                    total_attempts,
+                    status,
+                    delay,
+                    e,
+                )
+                await asyncio.sleep(delay)
+
+        if last_error:
+            log.error("%s failed after %s attempt(s): %s", operation_name, attempts_used, last_error)
+        return None, last_error
 
     async def _pick_api_key(self, encoded_keys: List[str]) -> Tuple[str, str]:
         """
@@ -1152,32 +1247,24 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             agent_mode=agent_mode,
         )
 
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._genai_request(
-                    api_key,
-                    model,
-                    sysprompt,
-                    guild_history,
-                    formatted_user_input,
-                    agent_mode=agent_mode,
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-
-        if last_error:
-            log.error(f"Gemini request failed after trying {len(encoded_keys)} key(s): {last_error}")
-            return f"⚠️ API Error: {last_error}"
-        return None
+        result, last_error = await self._run_with_api_key_pool(
+            encoded_keys,
+            operation_name="Gemini request",
+            max_attempts_per_key=GENAI_REQUEST_RETRIES_PER_KEY,
+            request_factory=lambda api_key: self._genai_request(
+                api_key,
+                model,
+                sysprompt,
+                guild_history,
+                formatted_user_input,
+                agent_mode=agent_mode,
+            ),
+        )
+        if last_error is None:
+            return result
+        if self._is_temporary_capacity_error(last_error):
+            return USER_FACING_BUSY_MESSAGE
+        return USER_FACING_API_ERROR_MESSAGE
 
     async def _search_web(self, query: str) -> str:
         """Perform a web search using DuckDuckGo"""
@@ -1616,27 +1703,17 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         if not encoded_keys:
             return None
 
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._embed_text(
-                    api_key,
-                    embed_model,
-                    text,
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-        if last_error:
-            log.error(f"Embedding failed after trying {len(encoded_keys)} key(s): {last_error}")
-        return None
+        result, _ = await self._run_with_api_key_pool(
+            encoded_keys,
+            operation_name="Gemini embedding",
+            max_attempts_per_key=EMBED_RETRIES_PER_KEY,
+            request_factory=lambda api_key: self._embed_text(
+                api_key,
+                embed_model,
+                text,
+            ),
+        )
+        return result
 
     async def _embed_text(self, api_key: str, model: str, text: str) -> Optional[List[float]]:
         if genai is None or types is None:
@@ -1982,29 +2059,21 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             return {"score": 1, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
 
         model = await self.config.model()
-        last_error: Optional[Exception] = None
-
-        for _ in range(len(encoded_keys)):
-            encoded_key, api_key = await self._pick_api_key(encoded_keys)
-            try:
-                result = await self._analyze_memory_all(
-                    api_key,
-                    model,
-                    user_message,
-                    bot_response,
-                    long_term_enabled,
-                    guild_long_term_enabled
-                )
-                await self._mark_key_success(encoded_key)
-                return result
-            except Exception as e:
-                await self._mark_key_failure(encoded_key, e)
-                last_error = e
-                if not self._is_retryable_error(e):
-                    break
-
-        if last_error:
-            log.error(f"Memory analysis failed after trying {len(encoded_keys)} key(s): {last_error}")
+        result, _ = await self._run_with_api_key_pool(
+            encoded_keys,
+            operation_name="Gemini memory analysis",
+            max_attempts_per_key=MEMORY_ANALYSIS_RETRIES_PER_KEY,
+            request_factory=lambda api_key: self._analyze_memory_all(
+                api_key,
+                model,
+                user_message,
+                bot_response,
+                long_term_enabled,
+                guild_long_term_enabled,
+            ),
+        )
+        if isinstance(result, dict):
+            return result
         return {"score": 0, "user_memory": {"summary": "", "facts": []}, "guild_memory": {"summary": "", "facts": []}}
 
     async def _analyze_memory_all(self, api_key: str, model: str,
