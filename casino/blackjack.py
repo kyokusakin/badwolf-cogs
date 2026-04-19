@@ -166,7 +166,6 @@ class BlackjackGame:
         lines = [
             "━━━━━━━━━━━━━━━━━━━━",
             f"🪙 本輪下注：{sum(self.hand_bets) + self.insurance_bet:,} 狗幣",
-            f"規則：{self.DECK_COUNT} 副牌｜Blackjack 3:2 四捨五入｜莊家 Soft 17 停牌｜Split 一次",
         ]
         if self.insurance_bet:
             lines.append(f"🛡️ 保險下注：{self.insurance_bet:,} 狗幣")
@@ -407,10 +406,11 @@ class BlackjackGame:
         insurance_line = ""
         if self.insurance_bet:
             insurance_line = f"🛡️ 保險盈虧：{self.insurance_profit:+,} 狗幣\n"
+        result_summary = self.result_summary(total_profit)
 
         desc = (
             f"{self.build_description(reveal_dealer=True)}\n"
-            f"📢 結果：{result}\n"
+            f"📢 結果：{result_summary}\n"
             f"{insurance_line}"
             f"💰 本輪盈虧：{total_profit:+,} 狗幣\n"
             f"💼 目前總餘額：{int(total_balance):,} 狗幣\n"
@@ -422,6 +422,28 @@ class BlackjackGame:
         else:
             await self.ctx.send(embed=embed)
         self.cleanup()
+
+    def result_summary(self, total_profit: int) -> str:
+        labels = [result_data["label"] for result_data in self.hand_results if result_data]
+        label_counts = {label: labels.count(label) for label in set(labels)}
+        hand_summary = "、".join(
+            f"{label} x{count}" if count > 1 else label
+            for label, count in sorted(label_counts.items())
+        )
+
+        if total_profit > 0:
+            outcome = "勝利"
+        elif total_profit < 0:
+            outcome = "失敗"
+        else:
+            outcome = "平手"
+
+        if len(label_counts) == 1:
+            only_label = next(iter(label_counts))
+            if (outcome, only_label) in {("勝利", "勝利"), ("失敗", "落敗"), ("平手", "平手")}:
+                return outcome
+
+        return f"{outcome}（{hand_summary}）" if hand_summary else outcome
 
     def cleanup(self):
         self.cog.end_game(self.ctx.author.id)
