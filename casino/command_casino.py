@@ -345,6 +345,9 @@ class CasinoCommands():
         if min_bet <= 0:
             await ctx.send("最低下注金額必須大於 0。")
             return
+        if min_bet % BaccaratRoom.BET_GRANULARITY != 0:
+            await ctx.send(f"最低下注金額必須為 {BaccaratRoom.BET_GRANULARITY:,} 的倍數。")
+            return
 
         try:
             room = BaccaratRoom(ctx=ctx, cog=self, min_bet=min_bet)

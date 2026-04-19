@@ -63,7 +63,6 @@ class GuessGame:
         numbers = self.player_bet.get("numbers", [])
 
         is_triple = len(unique_values) == 1
-        is_double = 2 in counts.values() and not is_triple
         is_specific_triple = is_triple and dice[0] == number
 
         win_multiplier = 0
@@ -370,7 +369,14 @@ class GuessView(discord.ui.View):
         )
         await interaction.response.send_modal(modal)
 
-    # Example "Straight" button
+    @discord.ui.button(label="指定三骰", style=discord.ButtonStyle.grey, custom_id="three_dice_specific_modal", row=2)
+    async def three_dice_specific_modal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        modal = DiceBetModal(
+            game=self.game, view=self, bet_type_base="three_dice_specific",
+            title="指定三骰", label="輸入三個不同骰子點數", placeholder="例如：1 3 5", requires_three_nums=True
+        )
+        await interaction.response.send_modal(modal)
+
     @discord.ui.button(label="順子", style=discord.ButtonStyle.blurple, custom_id="straight", row=2)
     async def straight(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.handle_bet_and_finalize(interaction, {"type": "straight"})
@@ -498,19 +504,29 @@ class DiceBetModal(discord.ui.Modal):
 
         if not self.game._finalized:
             log.warning("Finalizing game due to modal error.")
-            await self.game.finalize("因內部錯誤導致遊戲中止，已退款。", -self.game.bet)
+            await self.game.finalize("因內部錯誤導致遊戲中止，已退款。", 0)
 
 
     async def on_timeout(self):
+        if self.game._finalized:
+            return
+
+        self.game._finalized = True
+        if self.game.view_instance:
+            self.game.view_instance.stop()
+
         for item in self.children:
             item.disabled = True
         if self.game.message:
             await self.game.message.edit(view=None)
 
-        refund = self.game.bet
-        await self.game.cog.update_balance(self.game.ctx.author, refund)
-        await self.game.ctx.send(
-            f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
-            f"目前總狗幣: {int(await self.game.cog.get_balance(self.game.ctx.author)):,}"
-        )
+        active_game = self.game.cog.active_guesssize_games.pop(self.game.ctx.author.id, None)
+        if active_game:
+            refund = self.game.bet
+            await self.game.cog.update_balance(self.game.ctx.author, refund)
+            await self.game.ctx.send(
+                f"{self.game.ctx.author.mention} 遊戲超時，退回下注 {refund} 狗幣。\n"
+                f"目前總狗幣: {int(await self.game.cog.get_balance(self.game.ctx.author)):,}"
+            )
+
         self.game.cog.end_game(self.game.ctx.author.id)

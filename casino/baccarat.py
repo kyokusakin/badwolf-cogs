@@ -79,6 +79,7 @@ class BaccaratRoom:
     MAX_PLAYERS = 20
     BETTING_TIMEOUT = 60
     ROUND_END_TIMEOUT = 60
+    BET_GRANULARITY = 20
 
     def __init__(self, ctx: commands.Context, cog, min_bet: int):
         self.ctx = ctx
@@ -167,6 +168,8 @@ class BaccaratRoom:
                 return False, "目前不是下注階段。"
             if amount < self.min_bet:
                 return False, f"最低下注為 {self.min_bet:,} 狗幣。"
+            if amount % self.BET_GRANULARITY != 0:
+                return False, f"下注金額必須為 {self.BET_GRANULARITY:,} 的倍數，才能正確計算莊家 5% 佣金。"
 
             existing = self.bets.get(member.id)
             if existing is None and len(self.bets) >= self.MAX_PLAYERS:
@@ -577,7 +580,7 @@ class BaccaratBetModal(discord.ui.Modal):
         self.bet_type = bet_type
         self.amount_input = discord.ui.TextInput(
             label="下注金額",
-            placeholder=f"請輸入整數，最低 {room.min_bet}",
+            placeholder=f"請輸入整數，最低 {room.min_bet}，且為 {room.BET_GRANULARITY} 的倍數",
             required=True,
             style=discord.TextStyle.short,
             max_length=12,

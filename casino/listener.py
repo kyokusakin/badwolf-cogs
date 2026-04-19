@@ -31,16 +31,6 @@ class CasinoMessageListener:
             "transfer": ["轉移", "轉帳", "transfer", "v", "打錢"],
         }
 
-    async def _trigger_command_by_keyword(self, message: discord.Message, command_name: str):
-
-        prefix = (await self.bot.get_prefix(message))[0]
-
-        message.content = f"{prefix}{command_name}"
-
-        await self.bot.process_commands(message)
-        
-        log.debug(f"Simulated command trigger: {message.content}")
-
     async def handle_message(self, message: discord.Message):
 
         if message.author.bot or not message.guild:
@@ -106,7 +96,7 @@ class CasinoMessageListener:
                         await message.channel.send("‼️ 轉賬時發生未知錯誤")
 
                 else:
-                    await self._trigger_command_by_keyword(message, command_name)
+                    await ctx.invoke(getattr(self.cog, command_name))
                     log.debug(f"Keyword '{keyword}' triggered simple command '{command_name}'")
 
                 return

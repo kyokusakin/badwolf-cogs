@@ -24,22 +24,22 @@ class SlotGame:
         self.view = SlotView(self)
         self.payouts = {
             "three_same": {
-                ":cherries:": 2,         # 櫻桃
-                ":lemon:": 3,            # 檸檬
-                ":strawberry:": 4,       # 草莓
-                ":tangerine:": 4,        # 橘子
-                ":grapes:": 6,           # 葡萄
-                ":watermelon:": 10,      # 西瓜
-                ":seven:": 40,           # 七
+                ":cherries:": 3,         # 櫻桃
+                ":lemon:": 4,            # 檸檬
+                ":strawberry:": 6,       # 草莓
+                ":tangerine:": 6,        # 橘子
+                ":grapes:": 8,           # 葡萄
+                ":watermelon:": 14,      # 西瓜
+                ":seven:": 56,           # 七
             },
             "two_same": {
                 ":cherries:": 1,         # 櫻桃
-                ":lemon:": 2,            # 檸檬
-                ":strawberry:": 2,       # 草莓
-                ":tangerine:": 2,        # 橘子
-                ":grapes:": 3,           # 葡萄
-                ":watermelon:": 5,       # 西瓜
-                ":seven:": 10,           # 七
+                ":lemon:": 3,            # 檸檬
+                ":strawberry:": 3,       # 草莓
+                ":tangerine:": 3,        # 橘子
+                ":grapes:": 4,           # 葡萄
+                ":watermelon:": 7,       # 西瓜
+                ":seven:": 14,           # 七
             },
         }
         self.emoji_weights = {
@@ -68,7 +68,7 @@ class SlotGame:
         embed.add_field(
             name="🕹️ 遊戲規則",
             value=f"• 單次下注金額: **{self.bet:,}** 籌碼\n"
-                  "• 每次旋轉間隔: 5 秒冷卻\n"
+                  f"• 每次旋轉間隔: {self.spin_cooldown} 秒冷卻\n"
                   "• 中獎組合判定:\n"
                   "  ▸ 3個相同圖示: 獲得對應倍率\n"
                   "  ▸ 2個相同圖示: 獲得次級倍率\n"

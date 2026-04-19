@@ -19,6 +19,7 @@ class Casino(commands.Cog, CasinoCommands):
     def __init__(self, bot: Red):
         super().__init__(bot, self)
         self.bot = bot
+        self.casino = self
         self.config = Config.get_conf(self, identifier=1234567890)
         self.active_blackjack_games: dict[int, BlackjackGame] = {}
         self.active_guesssize_games: dict[int, GuessGame] = {}
