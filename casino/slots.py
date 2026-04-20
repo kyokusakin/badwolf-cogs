@@ -30,7 +30,7 @@ class SlotGame:
                 ":tangerine:": 6,        # 橘子
                 ":grapes:": 8,           # 葡萄
                 ":watermelon:": 14,      # 西瓜
-                ":seven:": 56,           # 七
+                ":seven:": 60,           # 七
             },
             "two_same": {
                 ":cherries:": 1,         # 櫻桃
@@ -39,7 +39,7 @@ class SlotGame:
                 ":tangerine:": 3,        # 橘子
                 ":grapes:": 4,           # 葡萄
                 ":watermelon:": 7,       # 西瓜
-                ":seven:": 14,           # 七
+                ":seven:": 16,           # 七
             },
         }
         self.emoji_weights = {
