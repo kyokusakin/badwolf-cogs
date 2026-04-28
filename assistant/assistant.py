@@ -88,6 +88,10 @@ _JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | 
 _SCORE_FIELD_RE = re.compile(r'(?i)"?score"?\s*[:=]\s*([0-5])\b')
 _LATEX_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
 _LATEX_INLINE_RE = re.compile(r"(?<!\\)\$(?!\$)(.+?)(?<!\\)\$", re.DOTALL)
+_LATEX_SEGMENT_RE = re.compile(
+    r"(\$\$.+?\$\$|\\\[.+?\\\]|\\\(.+?\\\)|(?<!\\)\$(?!\$).+?(?<!\\)\$)",
+    re.DOTALL,
+)
 _LATEX_COMMAND_RE = re.compile(
     r"\\(?:frac|int|sum|prod|lim|sqrt|left|right|ln|log|sin|cos|tan|alpha|beta|gamma|theta|pi)\b"
 )
@@ -1196,6 +1200,31 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         return content.strip()
 
     @staticmethod
+    def _split_latex_response_segments(text: str) -> List[Tuple[str, str]]:
+        content = str(text or "")
+        if not content:
+            return []
+
+        segments: List[Tuple[str, str]] = []
+        pos = 0
+        for match in _LATEX_SEGMENT_RE.finditer(content):
+            if match.start() > pos:
+                plain_text = content[pos:match.start()]
+                if plain_text:
+                    segments.append(("text", plain_text))
+            formula = match.group(0)
+            if formula:
+                segments.append(("latex", formula))
+            pos = match.end()
+
+        if pos < len(content):
+            plain_text = content[pos:]
+            if plain_text:
+                segments.append(("text", plain_text))
+
+        return segments
+
+    @staticmethod
     def _wrap_response_for_image(text: str, *, width: int = 92) -> List[str]:
         lines: List[str] = []
         for raw_line in str(text or "").splitlines():
@@ -1332,21 +1361,41 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self.executor, self._render_response_image_sync, response)
 
+    async def _send_text_response_chunks(self, message: discord.Message, text: str):
+        content = str(text or "")
+        if not content.strip():
+            return
+        chunk_size = 2000
+        chunks = [content[i: i + chunk_size] for i in range(0, len(content), chunk_size)]
+        for chunk in chunks:
+            if not chunk.strip():
+                continue
+            await message.reply(chunk)
+            await asyncio.sleep(1)
+
     async def _send_response(self, message: discord.Message, response: str):
         try:
-            image = await self._render_response_image(response)
-            if image is not None:
-                try:
-                    await message.reply(file=discord.File(image, filename="assistant_response.png"))
-                    return
-                except discord.DiscordException as e:
-                    log.warning("Error sending rendered response image; falling back to text: %s", e)
+            segments = self._split_latex_response_segments(response)
+            if not any(kind == "latex" for kind, _ in segments):
+                await self._send_text_response_chunks(message, response)
+                return
 
-            chunk_size = 2000
-            chunks = [response[i: i + chunk_size] for i in range(0, len(response), chunk_size)]
-            for chunk in chunks:
-                await message.reply(chunk)
-                await asyncio.sleep(1)
+            for kind, content in segments:
+                if kind == "text":
+                    await self._send_text_response_chunks(message, content)
+                    continue
+
+                image = await self._render_response_image(content)
+                if image is None:
+                    await self._send_text_response_chunks(message, content)
+                    continue
+
+                try:
+                    await message.reply(file=discord.File(image, filename="formula.png"))
+                    await asyncio.sleep(1)
+                except discord.DiscordException as e:
+                    log.warning("Error sending rendered formula image; falling back to text: %s", e)
+                    await self._send_text_response_chunks(message, content)
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
 
