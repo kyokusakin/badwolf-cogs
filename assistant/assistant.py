@@ -1213,6 +1213,62 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         return lines
 
     @staticmethod
+    def _get_response_font_properties(fm: Any) -> Any:
+        font_paths = [
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJK-Bold.ttc",
+            "/usr/share/fonts/opentype/noto/NotoSansCJKtc-Regular.otf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",
+            "/usr/share/fonts/opentype/noto/NotoSansCJKjp-Regular.otf",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+            "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+            "C:/Windows/Fonts/msjh.ttc",
+            "C:/Windows/Fonts/msyh.ttc",
+        ]
+        for path in font_paths:
+            if os.path.exists(path):
+                return fm.FontProperties(fname=path)
+
+        scan_roots = [
+            pathlib.Path("/usr/share/fonts/opentype/noto"),
+            pathlib.Path("/usr/share/fonts/truetype/noto"),
+            pathlib.Path("/usr/share/fonts/opentype"),
+            pathlib.Path("/usr/share/fonts/truetype"),
+        ]
+        filename_patterns = (
+            "NotoSansCJK*Regular*",
+            "NotoSansCJK*",
+            "SourceHanSans*",
+            "wqy-zenhei*",
+            "wqy-microhei*",
+        )
+        for root in scan_roots:
+            if not root.exists():
+                continue
+            for pattern in filename_patterns:
+                for path in root.rglob(pattern):
+                    if path.suffix.lower() in {".ttf", ".ttc", ".otf"}:
+                        return fm.FontProperties(fname=str(path))
+
+        font_candidates = [
+            "Microsoft JhengHei",
+            "Microsoft YaHei",
+            "Noto Sans CJK TC",
+            "Noto Sans CJK SC",
+            "Noto Sans CJK JP",
+            "Source Han Sans TW",
+            "Source Han Sans",
+            "WenQuanYi Zen Hei",
+            "WenQuanYi Micro Hei",
+            "Arial Unicode MS",
+            "DejaVu Sans",
+        ]
+        available_fonts = {font.name for font in fm.fontManager.ttflist}
+        font_family = next((name for name in font_candidates if name in available_fonts), "DejaVu Sans")
+        return fm.FontProperties(family=font_family)
+
+    @staticmethod
     def _render_response_image_sync(response: str) -> Optional[io.BytesIO]:
         if not OpenAIChat._contains_latex(response):
             return None
@@ -1234,18 +1290,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             if not lines:
                 return None
 
-            font_candidates = [
-                "Microsoft JhengHei",
-                "Noto Sans CJK TC",
-                "Noto Sans CJK SC",
-                "Noto Sans CJK JP",
-                "Source Han Sans TW",
-                "Source Han Sans",
-                "Arial Unicode MS",
-                "DejaVu Sans",
-            ]
-            available_fonts = {font.name for font in fm.fontManager.ttflist}
-            font_family = next((name for name in font_candidates if name in available_fonts), "DejaVu Sans")
+            font_properties = OpenAIChat._get_response_font_properties(fm)
 
             line_height = 0.36
             fig_width = 12
@@ -1267,7 +1312,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                     va="top",
                     fontsize=15 if is_math_line else 11,
                     color="#1f2328",
-                    family=font_family,
+                    fontproperties=font_properties,
                     usetex=False,
                 )
                 y -= y_step
