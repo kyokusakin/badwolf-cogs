@@ -19,6 +19,7 @@ AGENT_MODE_PROMPT = (
     "13. 你可以分多步使用工具，但每一步都要以完成任務為目標，不要無限重複相同查詢。\n"
     "14. 若你判定這一輪任務已完成，可在最後單獨一行輸出 END，系統會移除此標記但保留其餘回覆內容並正常發送給使用者。\n"
     "15. 若你判定這一輪不需要對使用者顯示任何訊息，可在最後單獨一行輸出 NO_REPLY，系統會視為隱藏結束，不發送任何訊息。\n"
+    "16. 若有 safe_exec 工具可用，它只允許白名單 action，用於檢查專案狀態或執行安全檢查；不可要求任意 shell、破壞性操作或超出專案目錄的路徑。\n"
 )
 
 AGENT_SEARCH_TOOL_NAME = "agent_search_web"
@@ -26,6 +27,7 @@ AGENT_SEARCH_MAX_CALLS = 25
 CHAT_SEARCH_TOOL_NAME = "search_web"
 CHAT_SEARCH_MAX_CALLS = 4
 WEB_FETCH_TOOL_NAME = "web_fetch"
+SAFE_EXEC_TOOL_NAME = "safe_exec"
 
 _AGENT_CONTROL_MAP = {
     "END": "end",
@@ -142,7 +144,7 @@ class AgentRuntimeMixin:
     def _mode_prompt(agent_mode: bool) -> str:
         return AGENT_MODE_PROMPT if agent_mode else ""
 
-    def _build_tools(self, *, agent_mode: bool, types_module) -> List[Any]:
+    def _build_tools(self, *, agent_mode: bool, types_module, safe_exec_enabled: bool = False) -> List[Any]:
         search_tool_name = self._search_tool_name(agent_mode)
         search_description = (
             "Search the web for real-time information, then continue the task as an autonomous agent."
@@ -154,38 +156,85 @@ class AgentRuntimeMixin:
             if agent_mode
             else "Fetch a web page by URL and extract readable text content."
         )
+        declarations = [
+            types_module.FunctionDeclaration(
+                name=search_tool_name,
+                description=search_description,
+                parameters=types_module.Schema(
+                    type=types_module.Type.OBJECT,
+                    properties={
+                        "query": types_module.Schema(
+                            type=types_module.Type.STRING,
+                            description="The search query.",
+                        )
+                    },
+                    required=["query"],
+                ),
+            ),
+            types_module.FunctionDeclaration(
+                name=WEB_FETCH_TOOL_NAME,
+                description=fetch_description,
+                parameters=types_module.Schema(
+                    type=types_module.Type.OBJECT,
+                    properties={
+                        "url": types_module.Schema(
+                            type=types_module.Type.STRING,
+                            description="The absolute http/https URL to fetch.",
+                        )
+                    },
+                    required=["url"],
+                ),
+            ),
+        ]
+
+        if safe_exec_enabled:
+            declarations.append(
+                types_module.FunctionDeclaration(
+                    name=SAFE_EXEC_TOOL_NAME,
+                    description=(
+                        "Run a small whitelist of safe project inspection/check shell commands. "
+                        "Pass either a whitelisted command string or an action. Arbitrary shell commands are not supported."
+                    ),
+                    parameters=types_module.Schema(
+                        type=types_module.Type.OBJECT,
+                        properties={
+                            "command": types_module.Schema(
+                                type=types_module.Type.STRING,
+                                description=(
+                                    "A shell-like command string. Allowed forms include: "
+                                    "date; time; datetime; timezone; timezone AREA/LOCATION; "
+                                    "math EXPRESSION; random; random MIN MAX."
+                                ),
+                            ),
+                            "action": types_module.Schema(
+                                type=types_module.Type.STRING,
+                                description="Allowed values: date, time, datetime, timezone, math, random.",
+                            ),
+                            "path": types_module.Schema(
+                                type=types_module.Type.STRING,
+                                description="Optional relative path inside the project.",
+                            ),
+                            "expression": types_module.Schema(
+                                type=types_module.Type.STRING,
+                                description="Math expression for the math action.",
+                            ),
+                            "min": types_module.Schema(
+                                type=types_module.Type.INTEGER,
+                                description="Minimum integer for the random action.",
+                            ),
+                            "max": types_module.Schema(
+                                type=types_module.Type.INTEGER,
+                                description="Maximum integer for the random action.",
+                            ),
+                        },
+                        required=["action"],
+                    ),
+                )
+            )
+
         return [
             types_module.Tool(
-                function_declarations=[
-                    types_module.FunctionDeclaration(
-                        name=search_tool_name,
-                        description=search_description,
-                        parameters=types_module.Schema(
-                            type=types_module.Type.OBJECT,
-                            properties={
-                                "query": types_module.Schema(
-                                    type=types_module.Type.STRING,
-                                    description="The search query.",
-                                )
-                            },
-                            required=["query"],
-                        ),
-                    ),
-                    types_module.FunctionDeclaration(
-                        name=WEB_FETCH_TOOL_NAME,
-                        description=fetch_description,
-                        parameters=types_module.Schema(
-                            type=types_module.Type.OBJECT,
-                            properties={
-                                "url": types_module.Schema(
-                                    type=types_module.Type.STRING,
-                                    description="The absolute http/https URL to fetch.",
-                                )
-                            },
-                            required=["url"],
-                        ),
-                    )
-                ]
+                function_declarations=declarations
             )
         ]
 
