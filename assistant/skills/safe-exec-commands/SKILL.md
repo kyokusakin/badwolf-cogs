@@ -5,7 +5,9 @@ description: Use when the Discord bot agent needs to explain or use its safe uti
 
 # Safe Exec Commands
 
-Use `safe_exec` in agent mode when a user asks for date/time, a calculation, or a random number.
+Use `safe_exec` in agent mode when a user asks for date/time, timezone conversion, a calculation, or a random number.
+
+For those requests, always call `safe_exec` before answering. Do not answer from memory, mental math, model knowledge, or inferred current time.
 
 ## Command Forms
 

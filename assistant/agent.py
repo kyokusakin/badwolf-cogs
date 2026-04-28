@@ -19,7 +19,8 @@ AGENT_MODE_PROMPT = (
     "13. 你可以分多步使用工具，但每一步都要以完成任務為目標，不要無限重複相同查詢。\n"
     "14. 若你判定這一輪任務已完成，可在最後單獨一行輸出 END，系統會移除此標記但保留其餘回覆內容並正常發送給使用者。\n"
     "15. 若你判定這一輪不需要對使用者顯示任何訊息，可在最後單獨一行輸出 NO_REPLY，系統會視為隱藏結束，不發送任何訊息。\n"
-    "16. 若有 safe_exec 工具可用，它只允許白名單 action，用於檢查專案狀態或執行安全檢查；不可要求任意 shell、破壞性操作或超出專案目錄的路徑。\n"
+    "16. 若有 safe_exec 工具可用，它只允許白名單 command/action；不可要求任意 shell、破壞性操作或超出白名單的指令。\n"
+    "17. 在 agent 模式中，凡是使用者詢問目前日期、時間、時區、數學計算或隨機數，必須呼叫 safe_exec 取得結果，不可心算、憑模型知識或自行推測。\n"
 )
 
 AGENT_SEARCH_TOOL_NAME = "agent_search_web"
@@ -227,7 +228,7 @@ class AgentRuntimeMixin:
                                 description="Maximum integer for the random action.",
                             ),
                         },
-                        required=["action"],
+                        required=["command"],
                     ),
                 )
             )
