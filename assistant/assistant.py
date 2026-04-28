@@ -1321,25 +1321,48 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
 
             font_properties = OpenAIChat._get_response_font_properties(fm)
 
-            line_height = 0.36
-            fig_width = 12
-            fig_height = max(1.4, min(24, 0.55 + len(lines) * line_height))
-            fig = plt.figure(figsize=(fig_width, fig_height), dpi=180, facecolor="#ffffff")
+            max_line_length = max((len(line.strip()) for line in lines), default=1)
+            formula_only = all(
+                (not line.strip()) or (line.strip().startswith("$") and line.strip().endswith("$"))
+                for line in lines
+            )
+            if formula_only:
+                fig_width = max(7.5, min(16.0, max_line_length * 0.18))
+                fig_height = max(2.0, min(8.0, 1.15 + len(lines) * 0.72))
+                base_formula_size = 22
+                if max_line_length > 95:
+                    base_formula_size = max(16, 22 - int((max_line_length - 95) / 22))
+                text_size = base_formula_size
+                line_height = 0.58
+                left_x = 0.5
+                first_y_padding = 0.5
+                save_pad = 0.35
+            else:
+                fig_width = max(10.0, min(16.0, max_line_length * 0.11))
+                fig_height = max(2.0, min(24.0, 0.7 + len(lines) * 0.42))
+                base_formula_size = 18
+                text_size = 12
+                line_height = 0.42
+                left_x = 0.04
+                first_y_padding = 0.35
+                save_pad = 0.3
+
+            fig = plt.figure(figsize=(fig_width, fig_height), dpi=220, facecolor="#ffffff")
             ax = fig.add_axes((0, 0, 1, 1))
             ax.axis("off")
 
-            y = 1 - (0.28 / fig_height)
+            y = 1 - (first_y_padding / fig_height)
             y_step = line_height / fig_height
             for line in lines:
                 stripped = line.strip()
                 is_math_line = stripped.startswith("$") and stripped.endswith("$")
                 ax.text(
-                    0.5 if is_math_line else 0.035,
+                    0.5 if is_math_line else left_x,
                     y,
                     stripped if is_math_line else line,
                     ha="center" if is_math_line else "left",
                     va="top",
-                    fontsize=15 if is_math_line else 11,
+                    fontsize=base_formula_size if is_math_line else text_size,
                     color="#1f2328",
                     fontproperties=font_properties,
                     usetex=False,
@@ -1347,7 +1370,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                 y -= y_step
 
             buffer = io.BytesIO()
-            fig.savefig(buffer, format="png", bbox_inches="tight", pad_inches=0.25, facecolor=fig.get_facecolor())
+            fig.savefig(buffer, format="png", bbox_inches=None, pad_inches=save_pad, facecolor=fig.get_facecolor())
             buffer.seek(0)
             return buffer
         except Exception as e:
