@@ -16,7 +16,10 @@
   "requirements": [
     "google-genai",
     "tenacity",
-    "aiosqlite"
+    "aiosqlite",
+    "aiofiles",
+    "ddgs",
+    "matplotlib"
   ],
     "short": "Advanced AI Chatbot Integration",
     "tags": [

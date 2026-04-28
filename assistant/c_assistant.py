@@ -475,7 +475,7 @@ class AssistantCommands():
         cog = self.bot.get_cog("OpenAIChat")
         response = await cog.query_genai(ctx.message)
         if response:
-            await ctx.send(response)
+            await cog._send_response(ctx.message, response)
         else:
             await ctx.send("無法獲得回應。")
 

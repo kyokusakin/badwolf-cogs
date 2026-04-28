@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import io
 import logging
 from ddgs import DDGS
 import os
@@ -21,6 +22,7 @@ import zoneinfo
 import operator
 import ast
 import random
+import textwrap
 from google import genai
 from google.genai import types
 from dataclasses import dataclass
@@ -84,6 +86,11 @@ _DISCORD_MENTION_RE = re.compile(r"<@!?\d+>|@everyone|@here")
 _DISCORD_ID_RE = re.compile(r"\b\d{17,20}\b")
 _JSON_CODE_BLOCK_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.IGNORECASE | re.DOTALL)
 _SCORE_FIELD_RE = re.compile(r'(?i)"?score"?\s*[:=]\s*([0-5])\b')
+_LATEX_BLOCK_RE = re.compile(r"\$\$(.+?)\$\$", re.DOTALL)
+_LATEX_INLINE_RE = re.compile(r"(?<!\\)\$(?!\$)(.+?)(?<!\\)\$", re.DOTALL)
+_LATEX_COMMAND_RE = re.compile(
+    r"\\(?:frac|int|sum|prod|lim|sqrt|left|right|ln|log|sin|cos|tan|alpha|beta|gamma|theta|pi)\b"
+)
 _PROMPT_INJECTION_PATTERNS: Tuple[Tuple[str, re.Pattern], ...] = (
     (
         "ignore_previous_instructions",
@@ -1147,8 +1154,135 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             cleaned = cleaned[-max_records:]
         return cleaned
 
+    @staticmethod
+    def _contains_latex(text: str) -> bool:
+        content = str(text or "")
+        if not content:
+            return False
+        return bool(
+            _LATEX_BLOCK_RE.search(content)
+            or _LATEX_INLINE_RE.search(content)
+            or _LATEX_COMMAND_RE.search(content)
+        )
+
+    @staticmethod
+    def _normalize_latex_response_for_image(text: str) -> str:
+        content = str(text or "").strip()
+        if not content:
+            return ""
+
+        content = _LATEX_BLOCK_RE.sub(
+            lambda m: "\n$" + " ".join(m.group(1).strip().splitlines()) + "$\n",
+            content,
+        )
+        content = content.replace(r"\(", "$").replace(r"\)", "$")
+        content = content.replace(r"\[", "\n$").replace(r"\]", "$\n")
+        content = content.replace("```latex", "```").replace("```tex", "```")
+        content = content.replace("**", "")
+        return content.strip()
+
+    @staticmethod
+    def _wrap_response_for_image(text: str, *, width: int = 92) -> List[str]:
+        lines: List[str] = []
+        for raw_line in str(text or "").splitlines():
+            line = raw_line.rstrip()
+            if not line:
+                lines.append("")
+                continue
+            stripped = line.strip()
+            is_math_line = stripped.startswith("$") and stripped.endswith("$")
+            is_code_fence = stripped.startswith("```")
+            if is_math_line or is_code_fence or len(line) <= width:
+                lines.append(line)
+                continue
+            lines.extend(textwrap.wrap(line, width=width, replace_whitespace=False) or [""])
+        return lines
+
+    @staticmethod
+    def _render_response_image_sync(response: str) -> Optional[io.BytesIO]:
+        if not OpenAIChat._contains_latex(response):
+            return None
+
+        try:
+            import matplotlib
+
+            matplotlib.use("Agg")
+            import matplotlib.font_manager as fm
+            import matplotlib.pyplot as plt
+        except Exception as e:
+            log.warning("LaTeX image rendering skipped; matplotlib is unavailable: %s", e)
+            return None
+
+        fig = None
+        try:
+            content = OpenAIChat._normalize_latex_response_for_image(response)
+            lines = OpenAIChat._wrap_response_for_image(content)
+            if not lines:
+                return None
+
+            font_candidates = [
+                "Microsoft JhengHei",
+                "Noto Sans CJK TC",
+                "Noto Sans CJK SC",
+                "Noto Sans CJK JP",
+                "Source Han Sans TW",
+                "Source Han Sans",
+                "Arial Unicode MS",
+                "DejaVu Sans",
+            ]
+            available_fonts = {font.name for font in fm.fontManager.ttflist}
+            font_family = next((name for name in font_candidates if name in available_fonts), "DejaVu Sans")
+
+            line_height = 0.36
+            fig_width = 12
+            fig_height = max(1.4, min(24, 0.55 + len(lines) * line_height))
+            fig = plt.figure(figsize=(fig_width, fig_height), dpi=180, facecolor="#ffffff")
+            ax = fig.add_axes((0, 0, 1, 1))
+            ax.axis("off")
+
+            y = 1 - (0.28 / fig_height)
+            y_step = line_height / fig_height
+            for line in lines:
+                stripped = line.strip()
+                is_math_line = stripped.startswith("$") and stripped.endswith("$")
+                ax.text(
+                    0.5 if is_math_line else 0.035,
+                    y,
+                    stripped if is_math_line else line,
+                    ha="center" if is_math_line else "left",
+                    va="top",
+                    fontsize=15 if is_math_line else 11,
+                    color="#1f2328",
+                    family=font_family,
+                    usetex=False,
+                )
+                y -= y_step
+
+            buffer = io.BytesIO()
+            fig.savefig(buffer, format="png", bbox_inches="tight", pad_inches=0.25, facecolor=fig.get_facecolor())
+            buffer.seek(0)
+            return buffer
+        except Exception as e:
+            log.warning("LaTeX image rendering failed; falling back to text: %s", e)
+            return None
+        finally:
+            if fig is not None:
+                plt.close(fig)
+
+    async def _render_response_image(self, response: str) -> Optional[io.BytesIO]:
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self.executor, self._render_response_image_sync, response)
+
     async def _send_response(self, message: discord.Message, response: str):
         try:
+            image = await self._render_response_image(response)
+            if image is not None:
+                try:
+                    await message.reply(file=discord.File(image, filename="assistant_response.png"))
+                    return
+                except discord.DiscordException as e:
+                    log.warning("Error sending rendered response image; falling back to text: %s", e)
+
             chunk_size = 2000
             chunks = [response[i: i + chunk_size] for i in range(0, len(response), chunk_size)]
             for chunk in chunks:
