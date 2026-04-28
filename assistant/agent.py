@@ -204,7 +204,9 @@ class AgentRuntimeMixin:
                                 description=(
                                     "A shell-like command string. Allowed forms include: "
                                     "date; time; datetime; timezone; timezone AREA/LOCATION; "
-                                    "math EXPRESSION; random; random MIN MAX."
+                                    "math EXPRESSION; random; random MIN MAX. "
+                                    "math accepts Python-style arithmetic and common LaTeX such as "
+                                    r"\frac{2\ln 2}{3}-\frac{5}{18}."
                                 ),
                             ),
                             "action": types_module.Schema(
@@ -217,7 +219,10 @@ class AgentRuntimeMixin:
                             ),
                             "expression": types_module.Schema(
                                 type=types_module.Type.STRING,
-                                description="Math expression for the math action.",
+                                description=(
+                                    "Math expression for the math action. Accepts Python-style arithmetic "
+                                    r"and common LaTeX such as \frac{2\ln 2}{3}-\frac{5}{18}."
+                                ),
                             ),
                             "min": types_module.Schema(
                                 type=types_module.Type.INTEGER,

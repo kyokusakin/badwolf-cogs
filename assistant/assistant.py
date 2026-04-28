@@ -300,6 +300,20 @@ SAFE_MATH_CONSTANTS = {
     "e": math.e,
     "tau": math.tau,
 }
+LATEX_MATH_FUNCTIONS = {
+    "ln",
+    "log",
+    "log10",
+    "log2",
+    "sqrt",
+    "sin",
+    "cos",
+    "tan",
+    "asin",
+    "acos",
+    "atan",
+    "exp",
+}
 SAFE_RANDOM_MIN = -1_000_000
 SAFE_RANDOM_MAX = 1_000_000
 AGENT_SKILL_PATHS = (
@@ -1690,8 +1704,99 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             raise ValueError(f"random range must stay within {SAFE_RANDOM_MIN}..{SAFE_RANDOM_MAX}")
         return str(random.randint(min_value, max_value))
 
+    @staticmethod
+    def _extract_latex_group(expression: str, start: int) -> Tuple[str, int]:
+        if start >= len(expression) or expression[start] != "{":
+            raise ValueError("Expected LaTeX group")
+
+        depth = 0
+        for idx in range(start, len(expression)):
+            ch = expression[idx]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return expression[start + 1:idx], idx + 1
+
+        raise ValueError("Unclosed LaTeX group")
+
+    @classmethod
+    def _replace_latex_frac(cls, expression: str) -> str:
+        token = r"\frac"
+        result: List[str] = []
+        idx = 0
+        while idx < len(expression):
+            frac_pos = expression.find(token, idx)
+            if frac_pos == -1:
+                result.append(expression[idx:])
+                break
+
+            result.append(expression[idx:frac_pos])
+            cursor = frac_pos + len(token)
+            while cursor < len(expression) and expression[cursor].isspace():
+                cursor += 1
+
+            numerator, cursor = cls._extract_latex_group(expression, cursor)
+            while cursor < len(expression) and expression[cursor].isspace():
+                cursor += 1
+            denominator, cursor = cls._extract_latex_group(expression, cursor)
+
+            numerator = cls._normalize_latex_math_expression(numerator)
+            denominator = cls._normalize_latex_math_expression(denominator)
+            result.append(f"(({numerator})/({denominator}))")
+            idx = cursor
+
+        return "".join(result)
+
+    @classmethod
+    def _normalize_latex_math_expression(cls, raw_expression: Any) -> str:
+        expression = " ".join(str(raw_expression or "").strip().split())
+        if not expression:
+            return ""
+
+        expression = expression.strip("$")
+        expression = expression.replace(r"\left", "").replace(r"\right", "")
+        expression = expression.replace(r"\,", "").replace(r"\;", "").replace(r"\:", "")
+        expression = expression.replace(r"\cdot", "*").replace(r"\times", "*")
+        expression = expression.replace("×", "*").replace("÷", "/")
+        expression = cls._replace_latex_frac(expression)
+
+        expression = re.sub(
+            r"\\sqrt\s*\{([^{}]+)\}",
+            lambda m: f"sqrt({cls._normalize_latex_math_expression(m.group(1))})",
+            expression,
+        )
+        expression = re.sub(
+            r"\\(ln|log|log10|log2|sin|cos|tan|asin|acos|atan|exp)\s*\{([^{}]+)\}",
+            lambda m: f"{m.group(1)}({cls._normalize_latex_math_expression(m.group(2))})",
+            expression,
+        )
+        expression = re.sub(r"\\(pi|tau|e)\b", lambda m: m.group(1), expression)
+        expression = re.sub(
+            r"\\(ln|log|log10|log2|sqrt|sin|cos|tan|asin|acos|atan|exp)\b",
+            lambda m: m.group(1),
+            expression,
+        )
+        expression = expression.replace("{", "(").replace("}", ")")
+
+        for func in sorted(LATEX_MATH_FUNCTIONS, key=len, reverse=True):
+            expression = re.sub(
+                rf"(?<![A-Za-z]){func}\s+([A-Za-z0-9_.]+|\([^()]+\))",
+                rf"{func}(\1)",
+                expression,
+            )
+
+        expression = re.sub(r"(\d|\))\s+(?=[A-Za-z(])", r"\1*", expression)
+        expression = re.sub(r"(?<=[A-Za-z])\s+(?=\d|\()", "*", expression)
+        expression = re.sub(r"(\d|\))(?=(?:ln|log10|log2|log|sqrt|sin|cos|tan|asin|acos|atan|exp)\()", r"\1*", expression)
+        expression = re.sub(r"(\d|\))(?=\()", r"\1*", expression)
+        expression = re.sub(r"(?<=\))(?=\d|[A-Za-z])", "*", expression)
+        expression = re.sub(r"\s+", "", expression)
+        return expression
+
     def _safe_math(self, raw_expression: Any) -> str:
-        expression = str(raw_expression or "").strip()
+        expression = self._normalize_latex_math_expression(raw_expression)
         if not expression:
             raise ValueError("Math expression is required")
         if len(expression) > SAFE_MATH_EXPRESSION_LIMIT:
