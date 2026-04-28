@@ -2011,7 +2011,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             if user_input:
                 await self._mark_message_received(message)
                 await self.queue.put(
-                    AgentChatRequest(message=message, user_input=user_input, agent_mode=False)
+                    AgentChatRequest(message=message, user_input=user_input, agent_mode=True)
                 )
             return
 
