@@ -1,27 +1,16 @@
-import re
 import discord
 from redbot.core import Config, commands
 
+from .c_fxembed import FxEmbedCommands
+from .url_converter import build_reply_content, has_twitter_status_url, replace_twitter_urls
 
-class FxEmbed(commands.Cog):
+
+class FxEmbed(FxEmbedCommands, commands.Cog):
     """指定頻道內將 Twitter/X 狀態網址轉成 fxtwitter."""
-
-    TWITTER_STATUS_URL = re.compile(
-        r"https?://(?:www\.|mobile\.)?(?:twitter\.com|x\.com)"
-        r"/[A-Za-z0-9_]{1,15}/status(?:es)?/\d+"
-        r"(?:[/?#][^\s<]*)?",
-        re.IGNORECASE,
-    )
-
-    TWITTER_HOST = re.compile(
-        r"^https?://(?:www\.|mobile\.)?(?:twitter\.com|x\.com)",
-        re.IGNORECASE,
-    )
-
-    TRAILING_PUNCTUATION = ".,!?;:)]}"
 
     def __init__(self, bot):
         self.bot = bot
+        self._enabled_channel_ids = {}
         self.config = Config.get_conf(
             self,
             identifier=1654894156,
@@ -29,101 +18,89 @@ class FxEmbed(commands.Cog):
         )
         self.config.register_guild(channels=[])
 
-    def replace_twitter_urls(self, content: str) -> str:
-        def replace(match: re.Match) -> str:
-            url = match.group(0)
-            trailing = ""
+    async def get_enabled_channel_ids(self, guild: discord.Guild):
+        guild_id = guild.id
+        if guild_id not in self._enabled_channel_ids:
+            channels = await self.config.guild(guild).channels()
+            self.cache_guild_channels(guild_id, channels)
 
-            while url and url[-1] in self.TRAILING_PUNCTUATION:
-                trailing = url[-1] + trailing
-                url = url[:-1]
+        return self._enabled_channel_ids[guild_id]
 
-            return self.TWITTER_HOST.sub("https://fxtwitter.com", url) + trailing
+    def cache_guild_channels(self, guild_id: int, channel_ids):
+        self._enabled_channel_ids[guild_id] = set(channel_ids)
 
-        return self.TWITTER_STATUS_URL.sub(replace, content)
+    def is_enabled_message_channel(self, channel_ids, channel) -> bool:
+        channel_id = getattr(channel, "id", None)
+        parent_id = getattr(getattr(channel, "parent", None), "id", None)
+        return channel_id in channel_ids or parent_id in channel_ids
+
+    def can_delete_original_message(self, message: discord.Message) -> bool:
+        me = message.guild.me
+        permissions_for = getattr(message.channel, "permissions_for", None)
+        return me is not None and permissions_for is not None and permissions_for(me).manage_messages
+
+    def build_author_embed(self, message: discord.Message) -> discord.Embed:
+        author = message.author
+        color = getattr(author, "color", discord.Color.blurple())
+        if color == discord.Color.default():
+            color = discord.Color.blurple()
+
+        embed = discord.Embed(color=color, timestamp=message.created_at)
+        display_name = getattr(author, "display_name", str(author))
+        username = str(author)
+        author_name = f"原發送人：{display_name} ({username})" if display_name != username else f"原發送人：{username}"
+        author_url = f"https://discord.com/users/{author.id}"
+        avatar = getattr(author, "display_avatar", None)
+        icon_url = getattr(avatar, "url", None)
+
+        if icon_url:
+            embed.set_author(name=author_name[:256], url=author_url, icon_url=icon_url)
+        else:
+            embed.set_author(name=author_name[:256], url=author_url)
+
+        embed.set_footer(text=f"User ID: {author.id}")
+        return embed
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.author.bot or message.guild is None:
             return
 
-        channel_ids = set(await self.config.guild(message.guild).channels())
-        channel_id = message.channel.id
-        parent_id = getattr(getattr(message.channel, "parent", None), "id", None)
-
-        if channel_id not in channel_ids and parent_id not in channel_ids:
+        if not has_twitter_status_url(message.content):
             return
 
-        converted = self.replace_twitter_urls(message.content)
+        channel_ids = await self.get_enabled_channel_ids(message.guild)
+        if not self.is_enabled_message_channel(channel_ids, message.channel):
+            return
+
+        if not self.can_delete_original_message(message):
+            return
+
+        converted = replace_twitter_urls(message.content)
 
         if converted == message.content:
             return
 
-        await message.reply(
-            converted,
-            mention_author=False,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
+        reply_content = build_reply_content(message.content, converted)
+        if not reply_content:
+            return
 
-        permissions = message.channel.permissions_for(message.guild.me)
-        if permissions.manage_messages:
+        try:
+            sent_message = await message.channel.send(
+                reply_content,
+                embed=self.build_author_embed(message),
+                allowed_mentions=discord.AllowedMentions.none(),
+            )
+        except discord.HTTPException:
+            return
+
+        try:
+            await message.delete()
+        except discord.NotFound:
+            pass
+        except discord.HTTPException:
             try:
-                await message.edit(suppress=True)
+                await sent_message.delete()
             except discord.HTTPException:
                 pass
 
-    @commands.group(name="fxembed")
-    @commands.guild_only()
-    @commands.admin_or_permissions(manage_guild=True)
-    async def fxembed(self, ctx):
-        """設定 fxtwitter 轉址頻道。"""
-
-    @fxembed.command(name="add")
-    async def fxembed_add(self, ctx, channel: discord.TextChannel = None):
-        """加入指定頻道。"""
-        channel = channel or ctx.channel
-
-        async with self.config.guild(ctx.guild).channels() as channels:
-            if channel.id in channels:
-                await ctx.send("這個頻道已經在清單中。")
-                return
-
-            channels.append(channel.id)
-
-        await ctx.tick()
-
-    @fxembed.command(name="remove")
-    async def fxembed_remove(self, ctx, channel: discord.TextChannel = None):
-        """移除指定頻道。"""
-        channel = channel or ctx.channel
-
-        async with self.config.guild(ctx.guild).channels() as channels:
-            if channel.id not in channels:
-                await ctx.send("這個頻道不在清單中。")
-                return
-
-            channels.remove(channel.id)
-
-        await ctx.tick()
-
-    @fxembed.command(name="list")
-    async def fxembed_list(self, ctx):
-        """列出目前啟用頻道。"""
-        channels = await self.config.guild(ctx.guild).channels()
-
-        if not channels:
-            await ctx.send("目前沒有指定頻道。")
-            return
-
-        names = []
-        for channel_id in channels:
-            channel = ctx.guild.get_channel(channel_id)
-            names.append(channel.mention if channel else f"`{channel_id}`")
-
-        await ctx.send("啟用頻道：" + ", ".join(names))
-
-    @fxembed.command(name="clear")
-    async def fxembed_clear(self, ctx):
-        """清空啟用頻道。"""
-        await self.config.guild(ctx.guild).channels.set([])
-        await ctx.tick()
