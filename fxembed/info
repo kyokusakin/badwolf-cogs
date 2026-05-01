@@ -1,0 +1,22 @@
+{
+    "author": [
+        "Badwolf_TW"
+    ],
+    "description": "在指定頻道中自動將 Twitter/X 連結轉換為 fxtwitter 以修正預覽。",
+    "install_msg": "感謝安裝 fxembed cog。`[p]help fxembed`獲取更多信息。",
+    "short": "Twitter 連結預覽修正",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "requirements": [
+        "discord.py"
+    ],
+    "tags": [
+        "twitter-fix",
+        "automation"
+    ],
+    "type": "COG",
+    "end_user_data_statement": "本插件僅儲存伺服器設定的頻道 ，不會蒐集或儲存任何使用者訊息或個人資料。"
+}
