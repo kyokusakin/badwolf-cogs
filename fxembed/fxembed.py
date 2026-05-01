@@ -2,7 +2,7 @@ import discord
 from redbot.core import Config, commands
 
 from .c_fxembed import FxEmbedCommands
-from .url_converter import build_reply_content, has_twitter_status_url, replace_twitter_urls
+from .url_converter import DISCORD_MESSAGE_LIMIT, build_reply_content, has_twitter_status_url, replace_twitter_urls
 
 
 class FxEmbed(FxEmbedCommands, commands.Cog):
@@ -39,27 +39,12 @@ class FxEmbed(FxEmbedCommands, commands.Cog):
         permissions_for = getattr(message.channel, "permissions_for", None)
         return me is not None and permissions_for is not None and permissions_for(me).manage_messages
 
-    def build_author_embed(self, message: discord.Message) -> discord.Embed:
-        author = message.author
-        color = getattr(author, "color", discord.Color.blurple())
-        if color == discord.Color.default():
-            color = discord.Color.blurple()
+    def add_author_attribution(self, content: str, message: discord.Message) -> str:
+        attribution = f"\n\n原發送人：{message.author.mention}"
+        if len(content) + len(attribution) <= DISCORD_MESSAGE_LIMIT:
+            return content + attribution
 
-        embed = discord.Embed(color=color, timestamp=message.created_at)
-        display_name = getattr(author, "display_name", str(author))
-        username = str(author)
-        author_name = f"原發送人：{display_name} ({username})" if display_name != username else f"原發送人：{username}"
-        author_url = f"https://discord.com/users/{author.id}"
-        avatar = getattr(author, "display_avatar", None)
-        icon_url = getattr(avatar, "url", None)
-
-        if icon_url:
-            embed.set_author(name=author_name[:256], url=author_url, icon_url=icon_url)
-        else:
-            embed.set_author(name=author_name[:256], url=author_url)
-
-        embed.set_footer(text=f"User ID: {author.id}")
-        return embed
+        return content
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -84,11 +69,11 @@ class FxEmbed(FxEmbedCommands, commands.Cog):
         reply_content = build_reply_content(message.content, converted)
         if not reply_content:
             return
+        reply_content = self.add_author_attribution(reply_content, message)
 
         try:
             sent_message = await message.channel.send(
                 reply_content,
-                embed=self.build_author_embed(message),
                 allowed_mentions=discord.AllowedMentions.none(),
             )
         except discord.HTTPException:
@@ -103,4 +88,3 @@ class FxEmbed(FxEmbedCommands, commands.Cog):
                 await sent_message.delete()
             except discord.HTTPException:
                 pass
-

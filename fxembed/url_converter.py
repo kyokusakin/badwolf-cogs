@@ -6,9 +6,11 @@ DISCORD_MESSAGE_LIMIT = 2000
 TRAILING_PUNCTUATION = ".,!?;:)]}"
 
 TWITTER_STATUS_URL = re.compile(
-    r"https?://(?:www\.|mobile\.)?(?:twitter\.com|x\.com)"
+    r"(?P<bracket><)?"
+    r"(?P<url>https?://(?:www\.|mobile\.)?(?:twitter\.com|x\.com)"
     r"/[A-Za-z0-9_]{1,15}/status(?:es)?/\d+"
-    r"(?:[/?#][^\s<]*)?",
+    r"(?:[/?#][^\s<>]*)?)"
+    r"(?(bracket)>)",
     re.IGNORECASE,
 )
 
@@ -32,12 +34,16 @@ def convert_twitter_url(url: str) -> str:
     return TWITTER_HOST.sub("https://fxtwitter.com", url) + trailing
 
 
+def convert_twitter_match(match: re.Match) -> str:
+    return convert_twitter_url(match.group("url"))
+
+
 def replace_twitter_urls(content: str) -> str:
-    return TWITTER_STATUS_URL.sub(lambda match: convert_twitter_url(match.group(0)), content)
+    return TWITTER_STATUS_URL.sub(convert_twitter_match, content)
 
 
 def extract_converted_twitter_urls(content: str) -> List[str]:
-    return [convert_twitter_url(match.group(0)) for match in TWITTER_STATUS_URL.finditer(content)]
+    return [convert_twitter_match(match) for match in TWITTER_STATUS_URL.finditer(content)]
 
 
 def build_reply_content(original: str, converted: str) -> Optional[str]:
