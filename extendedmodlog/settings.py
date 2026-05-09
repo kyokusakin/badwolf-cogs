@@ -32,6 +32,10 @@ inv_settings = {
         "flags": True,
         "emoji": "\N{MAN}\N{ZERO WIDTH JOINER}\N{WRENCH}",
         "embed": True,
+<<<<<<< HEAD
+=======
+        "premium_since": True,
+>>>>>>> upstream-extendedmodlog/master
     },
     "role_change": {
         "enabled": False,
