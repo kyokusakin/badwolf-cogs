@@ -32,6 +32,7 @@ inv_settings = {
         "flags": True,
         "emoji": "\N{MAN}\N{ZERO WIDTH JOINER}\N{WRENCH}",
         "embed": True,
+        "premium_since": True,
     },
     "role_change": {
         "enabled": False,
