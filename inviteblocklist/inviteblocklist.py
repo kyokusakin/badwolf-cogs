@@ -1,6 +1,6 @@
+import asyncio
 import re
 from typing import Pattern, Union
-import asyncio
 
 import discord
 from discord.ext.commands.converter import IDConverter
@@ -10,6 +10,8 @@ from red_commons.logging import getLogger
 from redbot.core import Config, VersionInfo, commands, version_info
 from redbot.core.i18n import Translator
 from redbot.core.utils.chat_formatting import humanize_list, pagify
+
+from .domain import is_invite_blocked
 
 log = getLogger("red.trusty-cogs.inviteblocklist")
 
@@ -73,7 +75,7 @@ class ChannelUserRole(IDConverter):
 
 class InviteBlocklist(commands.Cog):
     __author__ = ["TrustyJAID"]
-    __version__ = "1.1.6"
+    __version__ = "1.1.7"
     DEFAULT_UNAUTHORIZED_INVITE_TITLE = "邀請鏈接已被刪除"
     DEFAULT_UNAUTHORIZED_INVITE_MESSAGE = (
         "{user}，您發送的邀請鏈接已被刪除\n如果你已被允許請聯繫管理員\n"
@@ -203,43 +205,39 @@ class InviteBlocklist(commands.Cog):
             f"The server ID could not be obtained so message ID {repr(message)} "
             "may not have been properly deleted."
         )
-        if invites and await self.config.guild(guild).all_invites():
+        block_all = await self.config.guild(guild).all_invites()
+        allowlist = await self.config.guild(guild).whitelist()
+        blocklist = await self.config.guild(guild).blacklist()
+        if invites and block_all and not allowlist:
             await self._handle_unauthorized_invite(guild, message, staff_role_mention)
             return
-        if whitelist := await self.config.guild(guild).whitelist():
-            for i in invites:
-                inv = resolve_invite(i)
-                try:
-                    invite = await self.bot.fetch_invite(inv.code)
-                except discord.errors.NotFound:
-                    log.error(error_message)
-                    continue
-                except Exception:
-                    log.exception(error_message)
-                    continue
-                if invite.guild.id == guild.id:
-                    continue
-                if invite.guild.id not in whitelist:
-                    await self._handle_unauthorized_invite(guild, message, staff_role_mention)
-                    return
+        if not (block_all or allowlist or blocklist):
             return
-        if blacklist := await self.config.guild(guild).blacklist():
-            for i in invites:
-                inv = resolve_invite(i)
-                try:
-                    invite = await self.bot.fetch_invite(inv.code)
-                except discord.errors.NotFound:
-                    log.error(error_message)
-                    continue
-                except Exception:
-                    log.exception(error_message)
-                    continue
-                if invite.guild.id == guild.id:
-                    continue
-                if invite.guild.id in blacklist:
-                    await self._handle_unauthorized_invite(guild, message, staff_role_mention)
-                    return
-            return
+        for invite_url in invites:
+            resolved_invite = resolve_invite(invite_url)
+            try:
+                invite = await self.bot.fetch_invite(resolved_invite.code)
+            except discord.errors.NotFound:
+                log.error(error_message)
+                continue
+            except Exception:
+                log.exception(error_message)
+                continue
+            destination_guild_id = getattr(invite.guild, "id", None)
+            if destination_guild_id is None:
+                log.error(error_message)
+                continue
+            if is_invite_blocked(
+                destination_guild_id=destination_guild_id,
+                current_guild_id=guild.id,
+                allowlist=allowlist,
+                blocklist=blocklist,
+                block_all=block_all,
+            ):
+                await self._handle_unauthorized_invite(
+                    guild, message, staff_role_mention
+                )
+                return
 
     async def _handle_unauthorized_invite(self, guild, message, staff_role_mention):
         try:
@@ -314,11 +312,13 @@ class InviteBlocklist(commands.Cog):
     @commands.mod_or_permissions(manage_messages=True)
     async def blockall(self, ctx: commands.Context, set_to: bool):
         """
-        Automatically remove all invites regardless of their destination
+        Automatically remove all invites except destinations in the allowlist
         """
         await self.config.guild(ctx.guild).all_invites.set(set_to)
         if set_to:
-            await ctx.send(_("Okay, I will delete all invite links posted."))
+            await ctx.send(
+                _("Okay, I will delete all invite links except allowlisted destinations.")
+            )
         else:
             await ctx.send(
                 _(
