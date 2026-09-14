@@ -1188,13 +1188,8 @@ class EventMixin:
         action: discord.AuditLogAction,
         *,
         extra: Optional[str] = None,
-<<<<<<< HEAD
-        before_roles: Optional[List[discord.Role]] = None,
-        after_roles: Optional[List[discord.Role]] = None,
-=======
         removed_roles: Optional[List[discord.Role]] = None,
         added_roles: Optional[List[discord.Role]] = None,
->>>>>>> upstream-extendedmodlog/master
         channel_id: Optional[int] = None,
     ) -> Optional[discord.AuditLogEntry]:
         entry = None
@@ -1219,27 +1214,6 @@ class EventMixin:
                         # to reduce instances of false positives
                         continue
                     if channel_id is not None and action is discord.AuditLogAction.message_delete:
-<<<<<<< HEAD
-                        if ex := getattr(log, "extra", None):
-                            if ex.channel is not None and ex.channel.id == channel_id:
-                                entry = log
-                    if extra is not None:
-                        if getattr(log.after, extra, None) is None:
-                            continue
-                    if log.action is discord.AuditLogAction.member_role_update and before_roles:
-                        if log_before := getattr(log.before, "roles", []):
-                            for role in log_before:
-                                if role in before_roles:
-                                    entry = log
-                            continue
-                    if log.action is discord.AuditLogAction.member_role_update and after_roles:
-                        if log_after := getattr(log.after, "roles", []):
-                            for role in log_after:
-                                if role in after_roles:
-                                    entry = log
-                            continue
-                    if target_id == getattr(log.target, "id", None):
-=======
                         ex = getattr(log, "extra", None)
                         if (
                             ex is not None
@@ -1274,12 +1248,11 @@ class EventMixin:
                                 continue
                             else:
                                 for role in removed_roles:
-                                    if role.id in log_added:
+                                    if role.id in log_removed:
                                         entry = log
                                         # this may be the correct log entry
 
                     if target_id == getattr(log.target, "id", None) and entry is None:
->>>>>>> upstream-extendedmodlog/master
                         logger.trace("Found entry through cache")
                         entry = log
                     if target_id == getattr(log.target, "code", None):
@@ -1294,29 +1267,6 @@ class EventMixin:
                         # ignore audit log actions older than 10 minutes
                         # to reduce instances of false positives
                         continue
-<<<<<<< HEAD
-                    if extra is not None:
-                        if getattr(log.after, extra, None) is None:
-                            continue
-                    if channel_id is not None and action is discord.AuditLogAction.message_delete:
-                        if ex := getattr(log, "extra", None):
-                            if ex.channel is not None and ex.channel.id == channel_id:
-                                entry = log
-                    if log.action is discord.AuditLogAction.member_role_update and before_roles:
-                        if log_before := getattr(log.before, "roles", []):
-                            for role in log_before:
-                                if role in before_roles:
-                                    entry = log
-                            continue
-                    if log.action is discord.AuditLogAction.member_role_update and after_roles:
-                        if log_after := getattr(log.after, "roles", []):
-                            for role in log_after:
-                                if role in after_roles:
-                                    entry = log
-                            continue
-                    if target_id == getattr(log.target, "id", None):
-                        logger.trace("Found perp through fetch")
-=======
                     if channel_id is not None and action is discord.AuditLogAction.message_delete:
                         ex = getattr(log, "extra", None)
                         if (
@@ -1350,21 +1300,17 @@ class EventMixin:
                                 # This entry matches identically
                             else:
                                 for role in removed_roles:
-                                    if role.id in log_added:
+                                    if role.id in log_removed:
                                         entry = log
                                         # this may be the correct log entry
                     if target_id == getattr(log.target, "id", None) and entry is None:
                         logger.trace("Found entry through fetch")
->>>>>>> upstream-extendedmodlog/master
                         entry = log
                         break
                     if target_id == getattr(log.target, "code", None):
                         logger.trace("Found invite code entry through fetch")
                         entry = log
-<<<<<<< HEAD
-=======
         logger.debug("Returning %s reason", entry.reason if entry is not None else None)
->>>>>>> upstream-extendedmodlog/master
         return entry
 
     @commands.Cog.listener()
@@ -2196,15 +2142,6 @@ class EventMixin:
                 if attr == "roles":
                     b = set(before.roles)
                     a = set(after.roles)
-<<<<<<< HEAD
-                    before_roles = list(b - a)
-                    after_roles = list(a - b)
-                    logger.debug("on_member_update after_roles: %s", after_roles)
-                    perps = set()
-                    reasons = set()
-                    if before_roles:
-                        for role in before_roles:
-=======
                     removed_roles = list(b - a)
                     added_roles = list(a - b)
                     logger.debug("on_member_update added_roles: %s", added_roles)
@@ -2212,16 +2149,11 @@ class EventMixin:
                     reasons = set()
                     if removed_roles:
                         for role in removed_roles:
->>>>>>> upstream-extendedmodlog/master
                             entry = await self.get_audit_log_entry(
                                 guild,
                                 before,
                                 discord.AuditLogAction.member_role_update,
-<<<<<<< HEAD
-                                before_roles=[role],
-=======
                                 removed_roles=[role],
->>>>>>> upstream-extendedmodlog/master
                             )
                             perp = getattr(entry, "user", None)
                             reason = getattr(entry, "reason", None)
@@ -2237,22 +2169,13 @@ class EventMixin:
                                 reasons.add(reason)
                             worth_sending = True
 
-<<<<<<< HEAD
-                    if after_roles:
-                        for role in after_roles:
-=======
                     if added_roles:
                         for role in added_roles:
->>>>>>> upstream-extendedmodlog/master
                             entry = await self.get_audit_log_entry(
                                 guild,
                                 before,
                                 discord.AuditLogAction.member_role_update,
-<<<<<<< HEAD
-                                after_roles=[role],
-=======
                                 added_roles=[role],
->>>>>>> upstream-extendedmodlog/master
                             )
                             perp = getattr(entry, "user", None)
                             reason = getattr(entry, "reason", None)
@@ -2307,11 +2230,7 @@ class EventMixin:
                         relative = discord.utils.format_dt(after_attr, "R")
                         embed.description += _(
                             "- {author} has subscribed to the guild since {since} ({relative})."
-<<<<<<< HEAD
                         ).format(author=after.mention, since=since, relative=relative)
-=======
-                        ).format(author=after.mention, since=since)
->>>>>>> upstream-extendedmodlog/master
                     elif before_attr:
                         since = discord.utils.format_dt(before_attr, "F")
                         relative = discord.utils.format_dt(before_attr, "R")
