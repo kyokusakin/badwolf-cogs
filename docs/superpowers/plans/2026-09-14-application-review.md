@@ -239,13 +239,13 @@ git commit -m "feat: add application review cog"
 - Consumes: completed cog metadata and command names
 - Produces: repository catalog entry for `applicationreview`
 
-- [ ] **Step 1: Add README catalog entry**
+- [x] **Step 1: Add README catalog entry**
 
 ```markdown
 | applicationreview | Add review reactions to applications in a configured channel and let channel managers reject them. | Badwolf_TW |
 ```
 
-- [ ] **Step 2: Run complete verification**
+- [x] **Step 2: Run complete verification**
 
 Run: `python -m unittest tests.test_applicationreview_rules -v`
 
@@ -259,7 +259,7 @@ Run: `python -m json.tool applicationreview/info.json > $null`
 
 Expected: exit code 0.
 
-- [ ] **Step 3: Review scope and commit**
+- [x] **Step 3: Review scope and commit**
 
 Run: `git diff --check`
 
