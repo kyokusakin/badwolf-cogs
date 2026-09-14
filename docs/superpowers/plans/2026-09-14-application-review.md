@@ -4,7 +4,7 @@
 
 **Goal:** Build a Redbot cog that reacts to application messages in one configured channel and lets authorized reviewers clear all thumbs-up reactions by adding `🚫`.
 
-**Architecture:** Keep format and permission decisions in a dependency-free rules module. Connect those rules to Red listeners backed by guild-scoped `Config`, plus two administrator commands for setting or disabling the watched channel.
+**Architecture:** Keep format and permission decisions in a dependency-free rules module. Keep configuration commands in `c_applicationreview.py`, then compose them with Red listeners and guild-scoped `Config` in the main cog.
 
 **Tech Stack:** Python 3.9+, Red-DiscordBot 3.5+, discord.py, stdlib `unittest`
 
@@ -269,3 +269,75 @@ Expected: exit code 0.
 git add README.md
 git commit -m "docs: list application review cog"
 ```
+
+### Task 4: Split Configuration Commands
+
+**Files:**
+- Create: `applicationreview/c_applicationreview.py`
+- Modify: `applicationreview/applicationreview.py`
+- Create: `tests/test_applicationreview_commands.py`
+
+**Interfaces:**
+- Consumes: `self.config` supplied by `ApplicationReview`
+- Produces: `ApplicationReviewCommands` mixin with `applicationreview`, `applicationreview channel`, and `applicationreview disable` commands
+
+- [x] **Step 1: Write failing command tests**
+
+Create dependency stubs for Red decorators, then call both real command methods with controlled context and configuration objects. Assert selected channel ID and disable state are stored with expected confirmation messages.
+
+- [x] **Step 2: Run test to verify it fails**
+
+Run: `python -m unittest tests.test_applicationreview_commands -v`
+
+Expected: FAIL with `ModuleNotFoundError: No module named 'applicationreview.c_applicationreview'`.
+
+- [x] **Step 3: Move commands into mixin**
+
+```python
+import discord
+from redbot.core import commands
+
+
+class ApplicationReviewCommands:
+    @commands.group(name="applicationreview")
+    @commands.guild_only()
+    @commands.admin_or_permissions(manage_channels=True)
+    async def applicationreview(self, ctx: commands.Context):
+        """Configure application review reactions."""
+
+    @applicationreview.command(name="channel")
+    async def applicationreview_channel(
+        self, ctx: commands.Context, channel: discord.TextChannel
+    ):
+        """Set the application channel."""
+        await self.config.guild(ctx.guild).channel_id.set(channel.id)
+        await ctx.send(f"已設定申請頻道為 {channel.mention}")
+
+    @applicationreview.command(name="disable")
+    async def applicationreview_disable(self, ctx: commands.Context):
+        """Disable application review reactions."""
+        await self.config.guild(ctx.guild).channel_id.set(None)
+        await ctx.send("已停用申請頻道監聽")
+```
+
+Import `ApplicationReviewCommands` in `applicationreview.py` and compose the cog as:
+
+```python
+class ApplicationReview(ApplicationReviewCommands, commands.Cog):
+```
+
+- [x] **Step 4: Run command and regression tests**
+
+Run: `python -m unittest discover -s tests -v`
+
+Expected: 5 tests pass.
+
+- [x] **Step 5: Compile, lint, review, and commit**
+
+Run: `python -m compileall -q applicationreview tests`
+
+Run: `ruff check applicationreview tests/test_applicationreview_commands.py tests/test_applicationreview_rules.py`
+
+Run: `git diff --check`
+
+Expected: all commands exit with code 0.

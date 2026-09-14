@@ -7,6 +7,7 @@ Add a Redbot cog that watches one configured application channel per guild, mark
 ## Configuration
 
 The cog stores one `channel_id` per guild with Red `Config`.
+Configuration commands live in `c_applicationreview.py`; the main cog owns configuration state and event listeners.
 
 - `[p]applicationreview channel #channel` sets the watched text channel.
 - `[p]applicationreview disable` clears the setting.
