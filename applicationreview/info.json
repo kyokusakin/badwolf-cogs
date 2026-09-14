@@ -1,0 +1,29 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Cog-Creators/Red-DiscordBot/V3/develop/schema/red_cog.schema.json",
+    "author": [
+        "Badwolf_TW"
+    ],
+    "description": "Add review reactions to application messages in a configured channel and let channel managers reject them.",
+    "end_user_data_statement": "This cog does not persistently store data or metadata about users.",
+    "install_msg": "Thanks for installing. Use `[p]applicationreview channel #channel` to set the application channel.",
+    "min_bot_version": "3.5.0",
+    "min_python_version": [
+        3,
+        9,
+        0
+    ],
+    "name": "ApplicationReview",
+    "permissions": [
+        "add_reactions",
+        "read_message_history",
+        "manage_messages"
+    ],
+    "requirements": [],
+    "short": "Add reactions to application messages and support moderator rejection.",
+    "tags": [
+        "applications",
+        "moderation",
+        "reactions"
+    ],
+    "type": "COG"
+}

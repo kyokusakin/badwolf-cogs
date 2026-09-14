@@ -114,7 +114,7 @@ git commit -m "feat: add application review rules"
 - Consumes: `is_application_message` and `can_reject` from Task 1; Red message and raw reaction events
 - Produces: loadable `ApplicationReview` cog, `[p]applicationreview channel`, and `[p]applicationreview disable`
 
-- [ ] **Step 1: Implement lazy package setup**
+- [x] **Step 1: Implement lazy package setup**
 
 ```python
 async def setup(bot):
@@ -123,7 +123,7 @@ async def setup(bot):
     await bot.add_cog(ApplicationReview(bot))
 ```
 
-- [ ] **Step 2: Implement configuration commands and listeners**
+- [x] **Step 2: Implement configuration commands and listeners**
 
 ```python
 import discord
@@ -203,11 +203,11 @@ class ApplicationReview(commands.Cog):
         await message.clear_reaction(THUMBS_UP)
 ```
 
-- [ ] **Step 3: Add cog metadata**
+- [x] **Step 3: Add cog metadata**
 
 Set Redbot minimum version `3.5.0`, Python minimum `3.9.0`, no external requirements, and required permissions `add_reactions`, `read_message_history`, and `manage_messages`.
 
-- [ ] **Step 4: Verify cog files**
+- [x] **Step 4: Verify cog files**
 
 Run: `python -m compileall -q applicationreview`
 
@@ -217,13 +217,13 @@ Run: `python -m json.tool applicationreview/info.json > $null`
 
 Expected: exit code 0.
 
-- [ ] **Step 5: Run rules regression tests**
+- [x] **Step 5: Run rules regression tests**
 
 Run: `python -m unittest tests.test_applicationreview_rules -v`
 
 Expected: 3 tests pass.
 
-- [ ] **Step 6: Commit cog**
+- [x] **Step 6: Commit cog**
 
 ```bash
 git add applicationreview
