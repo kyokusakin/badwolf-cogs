@@ -31,7 +31,7 @@
 - Consumes: message content strings and two Discord permission booleans
 - Produces: `is_application_message(content: str) -> bool` and `can_reject(administrator: bool, manage_channels: bool) -> bool`
 
-- [ ] **Step 1: Write failing rules tests**
+- [x] **Step 1: Write failing rules tests**
 
 ```python
 import unittest
@@ -62,13 +62,13 @@ class ReviewerPermissionTests(unittest.TestCase):
         self.assertFalse(can_reject(administrator=False, manage_channels=False))
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `python -m unittest tests.test_applicationreview_rules -v`
 
 Expected: FAIL because `applicationreview.rules` does not exist.
 
-- [ ] **Step 3: Implement minimal rules**
+- [x] **Step 3: Implement minimal rules**
 
 ```python
 APPLICATION_PREFIX = "申請："
@@ -90,13 +90,13 @@ def can_reject(administrator: bool, manage_channels: bool) -> bool:
     return administrator or manage_channels
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `python -m unittest tests.test_applicationreview_rules -v`
 
 Expected: 3 tests pass.
 
-- [ ] **Step 5: Commit rules**
+- [x] **Step 5: Commit rules**
 
 ```bash
 git add applicationreview/rules.py tests/test_applicationreview_rules.py
