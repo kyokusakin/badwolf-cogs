@@ -15,3 +15,7 @@ def is_application_message(content: str) -> bool:
 
 def can_reject(administrator: bool, manage_channels: bool) -> bool:
     return administrator or manage_channels
+
+
+def is_approved(approvals: int, oppositions: int) -> bool:
+    return approvals > oppositions

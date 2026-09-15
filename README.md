@@ -16,7 +16,7 @@ There's a list of cogs below, or you can use `[p]cog list badwolf-cogs` if you'v
 | Cog name | Description | Author |
 | --- | --- | --- |
 | anotherpingcog | Replace the ping command with a rich embed that shows ping time and message time. It is colour coded: red, orange and green, and the bot owner can customise the colours and emojis for different latency levels, as well as force an embed. | Vexed, Badwolf_TW |
-| applicationreview | Add review reactions to applications in a configured channel and let channel managers reject them. | Badwolf_TW |
+| applicationreview | Add 👍/👎 vote reactions to applications in a configured channel, mark them ✅ while approvals outnumber oppositions, and let channel managers reject them. | Badwolf_TW |
 | autoroom | Automatic voice channel management. | PhasecoreX, Badwolf_TW |
 | counting | Counting is a configurable counting game. | fakesmile, BadwolfTW |
 | extendedmodlog | Log changes within the server using extended modlogs, an extension of RedBot cores modlog. | RePulsR, TrustyJAID, Badwolf_TW |

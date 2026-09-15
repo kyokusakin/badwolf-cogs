@@ -1,6 +1,6 @@
 import unittest
 
-from applicationreview.rules import can_reject, is_application_message
+from applicationreview.rules import can_reject, is_application_message, is_approved
 
 
 class ApplicationMessageTests(unittest.TestCase):
@@ -25,6 +25,15 @@ class ReviewerPermissionTests(unittest.TestCase):
         self.assertTrue(can_reject(administrator=True, manage_channels=False))
         self.assertTrue(can_reject(administrator=False, manage_channels=True))
         self.assertFalse(can_reject(administrator=False, manage_channels=False))
+
+
+class ApprovalRuleTests(unittest.TestCase):
+    def test_requires_strictly_more_approvals_than_oppositions(self):
+        self.assertTrue(is_approved(approvals=1, oppositions=0))
+        self.assertTrue(is_approved(approvals=3, oppositions=2))
+        self.assertFalse(is_approved(approvals=0, oppositions=0))
+        self.assertFalse(is_approved(approvals=2, oppositions=2))
+        self.assertFalse(is_approved(approvals=1, oppositions=2))
 
 
 if __name__ == "__main__":
