@@ -229,3 +229,7 @@ uptimeresponder/static/zh-TW/terms-of-service.html
 
 # CodeGraph index
 .codegraph/
+
+# Local-only docs and tests
+/docs/
+/tests/
