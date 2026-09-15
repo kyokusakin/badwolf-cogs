@@ -226,3 +226,6 @@ uptimeresponder/static/zh-CN/terms-of-service.html
 uptimeresponder/static/zh-TW/privacy-policy.html
 uptimeresponder/static/zh-TW/shared-license-styles.css
 uptimeresponder/static/zh-TW/terms-of-service.html
+
+# CodeGraph index
+.codegraph/
