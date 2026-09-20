@@ -4,7 +4,7 @@
         "Badwolf_TW"
     ],
     "description": "Add application vote reactions, require at least 16 leading approvals, let channel managers confirm approved applications, and expire reviews after one calendar month.",
-    "end_user_data_statement": "This cog stores application message IDs, channel IDs, and creation and expiration timestamps for up to one calendar month. It does not store message content or user data.",
+    "end_user_data_statement": "This cog stores application message IDs, channel IDs, and creation and expiration timestamps until expiration cleanup succeeds. It does not store message content or user data.",
     "install_msg": "Thanks for installing. Use `[p]applicationreview channel #channel` to set the application channel.",
     "min_bot_version": "3.5.0",
     "min_python_version": [
