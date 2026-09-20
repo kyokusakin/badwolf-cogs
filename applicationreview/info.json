@@ -3,8 +3,8 @@
     "author": [
         "Badwolf_TW"
     ],
-    "description": "Add 👍/👎 vote reactions to application messages in a configured channel, mark them ✅ while approvals outnumber oppositions, and let channel managers reject them.",
-    "end_user_data_statement": "This cog does not persistently store data or metadata about users.",
+    "description": "Add application vote reactions, require at least 16 leading approvals, let channel managers confirm approved applications, and expire reviews after one calendar month.",
+    "end_user_data_statement": "This cog stores application message IDs, channel IDs, and creation and expiration timestamps for up to one calendar month. It does not store message content or user data.",
     "install_msg": "Thanks for installing. Use `[p]applicationreview channel #channel` to set the application channel.",
     "min_bot_version": "3.5.0",
     "min_python_version": [
@@ -19,7 +19,7 @@
         "manage_messages"
     ],
     "requirements": [],
-    "short": "Vote on application messages with 👍/👎 and support moderator rejection.",
+    "short": "Vote on applications, confirm approval, and expire reviews after one month.",
     "tags": [
         "applications",
         "moderation",

@@ -1,7 +1,9 @@
-from datetime import timezone
+import logging
+from datetime import datetime, timezone
 from typing import Optional, Tuple
 
 import discord
+from discord.ext import tasks
 from redbot.core import Config, commands
 
 from .c_applicationreview import ApplicationReviewCommands
@@ -17,7 +19,9 @@ THUMBS_UP = "👍"
 THUMBS_DOWN = "👎"
 REJECT = "🚫"
 APPROVED = "✅"
+TIMER = "⏲️"
 VOTES = (THUMBS_UP, THUMBS_DOWN)
+log = logging.getLogger("red.badwolf.applicationreview")
 
 
 class ApplicationReview(ApplicationReviewCommands, commands.Cog):
@@ -27,6 +31,10 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
             self, identifier=421765611811838116, force_registration=True
         )
         self.config.register_guild(channel_id=None, applications={})
+        self.expire_applications.start()
+
+    def cog_unload(self):
+        self.expire_applications.cancel()
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -66,6 +74,47 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         if str(payload.emoji) in VOTES:
             await self._sync_approval(payload)
+
+    @tasks.loop(hours=1)
+    async def expire_applications(self):
+        await self._expire_due_applications(datetime.now(timezone.utc).timestamp())
+
+    @expire_applications.before_loop
+    async def before_expire_applications(self):
+        await self.bot.wait_until_red_ready()
+
+    async def _expire_due_applications(self, now: float):
+        for guild_id, guild_data in (await self.config.all_guilds()).items():
+            guild = self.bot.get_guild(int(guild_id))
+            if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
+                continue
+            for message_id, record in list(
+                guild_data.get("applications", {}).items()
+            ):
+                if record["expires_at"] <= now:
+                    await self._expire_application(guild, message_id, record)
+
+    async def _expire_application(self, guild, message_id: str, record: dict):
+        channel = guild.get_channel(record["channel_id"])
+        if not isinstance(channel, discord.TextChannel):
+            await self.config.guild(guild).clear_raw("applications", message_id)
+            return
+        try:
+            message = await channel.fetch_message(int(message_id))
+            await message.clear_reactions()
+            await message.add_reaction(TIMER)
+        except discord.NotFound:
+            await self.config.guild(guild).clear_raw("applications", message_id)
+            return
+        except (discord.Forbidden, discord.HTTPException) as error:
+            log.warning(
+                "Could not expire application %s in guild %s; retrying next hour",
+                message_id,
+                guild.id,
+                exc_info=error,
+            )
+            return
+        await self.config.guild(guild).clear_raw("applications", message_id)
 
     async def _fetch_application(
         self, payload: discord.RawReactionActionEvent
