@@ -1,3 +1,7 @@
+import calendar
+from datetime import datetime
+
+
 APPLICATION_PREFIX = "申請："
 REASON_PREFIX = "理由："
 
@@ -17,5 +21,16 @@ def can_reject(administrator: bool, manage_channels: bool) -> bool:
     return administrator or manage_channels
 
 
+def human_reaction_count(total: int, bot_reacted: bool) -> int:
+    return max(0, total - int(bot_reacted))
+
+
 def is_approved(approvals: int, oppositions: int) -> bool:
-    return approvals > oppositions
+    return approvals > oppositions and approvals > 15
+
+
+def add_calendar_month(value: datetime) -> datetime:
+    year = value.year + value.month // 12
+    month = value.month % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
