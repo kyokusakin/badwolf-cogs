@@ -1,10 +1,17 @@
+from datetime import timezone
 from typing import Optional, Tuple
 
 import discord
 from redbot.core import Config, commands
 
 from .c_applicationreview import ApplicationReviewCommands
-from .rules import can_reject, is_application_message, is_approved
+from .rules import (
+    add_calendar_month,
+    can_reject,
+    human_reaction_count,
+    is_application_message,
+    is_approved,
+)
 
 THUMBS_UP = "👍"
 THUMBS_DOWN = "👎"
@@ -19,7 +26,7 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
         self.config = Config.get_conf(
             self, identifier=421765611811838116, force_registration=True
         )
-        self.config.register_guild(channel_id=None)
+        self.config.register_guild(channel_id=None, applications={})
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
@@ -32,12 +39,26 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
             return
         for emoji in (THUMBS_UP, THUMBS_DOWN, REJECT):
             await message.add_reaction(emoji)
+        created_at = message.created_at.astimezone(timezone.utc)
+        expires_at = add_calendar_month(created_at)
+        await self.config.guild(message.guild).set_raw(
+            "applications",
+            str(message.id),
+            value={
+                "channel_id": message.channel.id,
+                "created_at": created_at.timestamp(),
+                "expires_at": expires_at.timestamp(),
+                "finalized": False,
+            },
+        )
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         emoji = str(payload.emoji)
         if emoji == REJECT:
             await self._reject(payload)
+        elif emoji == APPROVED:
+            await self._finalize(payload)
         elif emoji in VOTES:
             await self._sync_approval(payload)
 
@@ -48,7 +69,9 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
 
     async def _fetch_application(
         self, payload: discord.RawReactionActionEvent
-    ) -> Optional[Tuple[discord.Guild, discord.TextChannel, discord.Message]]:
+    ) -> Optional[
+        Tuple[discord.Guild, discord.TextChannel, discord.Message, Optional[dict]]
+    ]:
         if payload.guild_id is None or payload.user_id == self.bot.user.id:
             return None
         guild = self.bot.get_guild(payload.guild_id)
@@ -65,13 +88,27 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
             return None
         if not is_application_message(message.content):
             return None
-        return guild, channel, message
+        record = await self._get_application_record(guild, message.id)
+        return guild, channel, message, record
+
+    async def _get_application_record(self, guild: discord.Guild, message_id: int):
+        return await self.config.guild(guild).get_raw(
+            "applications", str(message_id), default=None
+        )
+
+    def _vote_counts(self, message: discord.Message):
+        counts = dict.fromkeys(VOTES, 0)
+        for reaction in message.reactions:
+            emoji = str(reaction.emoji)
+            if emoji in counts:
+                counts[emoji] = human_reaction_count(reaction.count, reaction.me)
+        return counts
 
     async def _reject(self, payload: discord.RawReactionActionEvent):
         application = await self._fetch_application(payload)
         if application is None:
             return
-        guild, channel, message = application
+        guild, channel, message, _ = application
         member = payload.member or guild.get_member(payload.user_id)
         if member is None or member.bot:
             return
@@ -85,15 +122,34 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
         application = await self._fetch_application(payload)
         if application is None:
             return
-        guild, _, message = application
-        counts = dict.fromkeys(VOTES, 0)
-        for reaction in message.reactions:
-            emoji = str(reaction.emoji)
-            if emoji in counts:
-                # The bot seeds each vote emoji itself; its own reaction is not a vote.
-                counts[emoji] = reaction.count - int(reaction.me)
+        guild, _, message, record = application
+        if record is not None and record.get("finalized"):
+            return
+        counts = self._vote_counts(message)
         approved = is_approved(counts[THUMBS_UP], counts[THUMBS_DOWN])
         await self._set_approved(message, guild, approved)
+
+    async def _finalize(self, payload: discord.RawReactionActionEvent):
+        application = await self._fetch_application(payload)
+        if application is None:
+            return
+        guild, channel, message, record = application
+        if record is None or record.get("finalized"):
+            return
+        member = payload.member or guild.get_member(payload.user_id)
+        if member is None or member.bot:
+            return
+        permissions = channel.permissions_for(member)
+        if not can_reject(permissions.administrator, permissions.manage_channels):
+            return
+        counts = self._vote_counts(message)
+        if not is_approved(counts[THUMBS_UP], counts[THUMBS_DOWN]):
+            return
+        for emoji in (THUMBS_UP, THUMBS_DOWN, REJECT):
+            await message.clear_reaction(emoji)
+        await self.config.guild(guild).set_raw(
+            "applications", str(message.id), "finalized", value=True
+        )
 
     async def _set_approved(
         self, message: discord.Message, guild: discord.Guild, approved: bool
