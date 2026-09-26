@@ -60,11 +60,9 @@ class ProposalMixin:
         if views is None:
             views = {}
             self._proposal_message_views = views
-        previous = views.pop(message_id, None)
-        if previous is not None:
-            previous.stop()
         if all(button.disabled for button in view.children):
             view.stop()
+            views.pop(message_id, None)
         else:
             views[message_id] = view
 
@@ -411,6 +409,8 @@ class ProposalMixin:
                 voting_closed=status == "awaiting_confirmation",
                 confirm_enabled=status == "awaiting_confirmation",
             )
+            # Stopping the old view after edit removes the new view's shared custom IDs.
+            self._drop_proposal_view(int(message_id))
             await message.edit(embed=embed, view=view)
             self._track_proposal_view(int(message_id), view)
             try:
