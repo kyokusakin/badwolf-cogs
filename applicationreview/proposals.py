@@ -11,6 +11,7 @@ from .proposal_rules import (
     add_calendar_months,
     advance_proposal,
     count_valid_votes,
+    passes_proposal,
 )
 from .proposal_view import ProposalView
 from .rules import add_calendar_month
@@ -54,6 +55,121 @@ def proposal_embed(item: str, reason: str, record: dict) -> discord.Embed:
 
 
 class ProposalMixin:
+    async def _handle_proposal_admin(
+        self, interaction: discord.Interaction, action: str
+    ) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        guild = interaction.guild
+        if guild is None or interaction.message is None:
+            await interaction.followup.send("找不到提案。", ephemeral=True)
+            return
+        if await self.bot.cog_disabled_in_guild(self, guild):
+            await interaction.followup.send("提案審核目前已停用。", ephemeral=True)
+            return
+        message_id = str(interaction.message.id)
+        guild_config = self.config.guild(guild)
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._proposal_lock:
+            record = await guild_config.get_raw(
+                "applications", message_id, default=None
+            )
+            if (
+                record is None
+                or record.get("schema_version") != 2
+                or interaction.channel_id != record["channel_id"]
+            ):
+                await interaction.followup.send("找不到提案。", ephemeral=True)
+                return
+            channel = guild.get_channel(record["channel_id"])
+            if channel is None or interaction.user.bot:
+                await interaction.followup.send("沒有管理權限。", ephemeral=True)
+                return
+            permissions = channel.permissions_for(interaction.user)
+            if not (permissions.administrator or permissions.manage_channels):
+                await interaction.followup.send("沒有管理權限。", ephemeral=True)
+                return
+            try:
+                record = await self._advance_proposal(guild, message_id, record, now)
+            except Exception:
+                log.exception("Could not advance proposal %s", message_id)
+                await interaction.followup.send("提案狀態更新失敗。", ephemeral=True)
+                return
+            if action == "prohibit":
+                if record["status"] in FINAL_STATUSES:
+                    await interaction.followup.send("提案結果已確定。", ephemeral=True)
+                    return
+                next_status = "prohibited"
+            elif action == "confirm":
+                if record["status"] != "awaiting_confirmation":
+                    await interaction.followup.send("提案尚未進入確認階段。", ephemeral=True)
+                    return
+                next_status = "passed"
+            else:
+                await interaction.followup.send("未知操作。", ephemeral=True)
+                return
+            updated = deepcopy(record)
+            approvals, oppositions = count_valid_votes(updated["votes"])
+            updated["status"] = next_status
+            updated["resolved_at"] = now
+            updated["final_counts"] = {
+                "approvals": approvals,
+                "oppositions": oppositions,
+            }
+            updated["display_dirty"] = True
+            try:
+                await guild_config.set_raw("applications", message_id, value=updated)
+            except Exception:
+                log.exception("Could not store admin action for proposal %s", message_id)
+                await interaction.followup.send("操作儲存失敗。", ephemeral=True)
+                return
+            await self._sync_proposal_message(guild, message_id, updated)
+            await interaction.followup.send("提案狀態已更新。", ephemeral=True)
+
+    async def _invalidate_vote(self, ctx, message_id: int, member) -> None:
+        guild = ctx.guild
+        message_key = str(message_id)
+        guild_config = self.config.guild(guild)
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._proposal_lock:
+            record = await guild_config.get_raw(
+                "applications", message_key, default=None
+            )
+            if record is None or record.get("schema_version") != 2:
+                await ctx.send("找不到新版提案。")
+                return
+            channel = guild.get_channel(record["channel_id"])
+            if channel is None:
+                await ctx.send("找不到提案頻道。")
+                return
+            permissions = channel.permissions_for(ctx.author)
+            if not (permissions.administrator or permissions.manage_channels):
+                await ctx.send("沒有目標提案頻道的管理權限。")
+                return
+            record = await self._advance_proposal(guild, message_key, record, now)
+            if record["status"] in FINAL_STATUSES:
+                await ctx.send("提案結果已確定，不能作廢票。")
+                return
+            vote = record["votes"].get(str(member.id))
+            if vote is None or not vote["valid"]:
+                await ctx.send("找不到可作廢的有效票。")
+                return
+            updated = deepcopy(record)
+            updated["votes"][str(member.id)]["valid"] = False
+            approvals, oppositions = count_valid_votes(updated["votes"])
+            if updated["status"] == "awaiting_confirmation" and not passes_proposal(
+                updated["kind"], approvals, oppositions
+            ):
+                updated["status"] = "failed"
+                updated["resolved_at"] = now
+                updated["final_counts"] = {
+                    "approvals": approvals,
+                    "oppositions": oppositions,
+                }
+            updated["display_dirty"] = True
+            await guild_config.set_raw("applications", message_key, value=updated)
+            await self._sync_proposal_message(guild, message_key, updated)
+            await ctx.send("已作廢該票，投票者不能重新投票。")
+
     async def _advance_proposal(
         self, guild, message_id: str, record: dict, now: float
     ) -> dict:

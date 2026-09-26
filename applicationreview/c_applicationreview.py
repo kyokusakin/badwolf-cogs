@@ -44,3 +44,10 @@ class ApplicationReviewCommands:
         """Set the role whose members cannot propose or vote."""
         await self.config.guild(ctx.guild).disqualified_role_id.set(role.id)
         await ctx.send(f"已設定褫奪公權身分組為 {role.mention}")
+
+    @applicationreview.command(name="invalidate")
+    async def applicationreview_invalidate(
+        self, ctx: commands.Context, message_id: int, member: discord.Member
+    ):
+        """Invalidate one proposal ballot without allowing a replacement."""
+        await self._invalidate_vote(ctx, message_id, member)
