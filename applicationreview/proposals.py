@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+from copy import deepcopy
 from datetime import datetime, timezone
 
 import discord
 
-from .proposal_rules import count_valid_votes
+from .proposal_rules import FINAL_STATUSES, advance_proposal, count_valid_votes
+from .proposal_view import ProposalView
 from .rules import add_calendar_month
 
 
@@ -47,6 +49,119 @@ def proposal_embed(item: str, reason: str, record: dict) -> discord.Embed:
 
 
 class ProposalMixin:
+    async def _handle_proposal_vote(
+        self, interaction: discord.Interaction, choice: str
+    ) -> None:
+        await interaction.response.defer(ephemeral=True, thinking=True)
+        guild = interaction.guild
+        if guild is None or interaction.message is None:
+            await interaction.followup.send("找不到提案。", ephemeral=True)
+            return
+        if await self.bot.cog_disabled_in_guild(self, guild):
+            await interaction.followup.send("提案投票目前已停用。", ephemeral=True)
+            return
+        message_id = str(interaction.message.id)
+        guild_config = self.config.guild(guild)
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._proposal_lock:
+            record = await guild_config.get_raw(
+                "applications", message_id, default=None
+            )
+            if (
+                record is None
+                or record.get("schema_version") != 2
+                or interaction.channel_id != record["channel_id"]
+            ):
+                await interaction.followup.send("找不到提案。", ephemeral=True)
+                return
+            advanced = advance_proposal(record, now)
+            if advanced != record:
+                advanced["display_dirty"] = True
+                await guild_config.set_raw("applications", message_id, value=advanced)
+                await self._sync_proposal_message(guild, message_id, advanced)
+            record = advanced
+            if record["status"] not in ("voting", "observing"):
+                await interaction.followup.send("投票已結束。", ephemeral=True)
+                return
+            user = interaction.user
+            if str(user.id) in record["votes"]:
+                await interaction.followup.send("禁止改票", ephemeral=True)
+                return
+            if user.bot:
+                await interaction.followup.send("機器人不得投票。", ephemeral=True)
+                return
+            role_id = await guild_config.get_raw(
+                "disqualified_role_id", default=None
+            )
+            if role_id is not None and any(
+                role.id == role_id for role in getattr(user, "roles", ())
+            ):
+                await interaction.followup.send("你目前沒有投票權。", ephemeral=True)
+                return
+            updated = deepcopy(record)
+            updated["votes"][str(user.id)] = {"choice": choice, "valid": True}
+            updated = advance_proposal(updated, now)
+            updated["display_dirty"] = True
+            try:
+                await guild_config.set_raw("applications", message_id, value=updated)
+            except Exception:
+                log.exception("Could not store vote for proposal %s", message_id)
+                await interaction.followup.send("投票儲存失敗，請稍後再試。", ephemeral=True)
+                return
+            await self._sync_proposal_message(guild, message_id, updated)
+            await interaction.followup.send("已記錄投票。", ephemeral=True)
+
+    async def _sync_proposal_message(
+        self, guild, message_id: str, record: dict
+    ) -> bool:
+        channel = guild.get_channel(record["channel_id"])
+        if channel is None:
+            return False
+        try:
+            message = await channel.fetch_message(int(message_id))
+            if not message.embeds:
+                return False
+            embed = message.embeds[0].copy()
+            counts = record.get("final_counts")
+            if counts is None:
+                approvals, oppositions = count_valid_votes(record["votes"])
+            else:
+                approvals = counts["approvals"]
+                oppositions = counts["oppositions"]
+            values = {
+                "贊成票數": str(approvals),
+                "反對票數": str(oppositions),
+                "目前狀態": STATUS_LABELS[record["status"]],
+                "投票截止時間": _time_label(_deadline(record)),
+            }
+            for index, field in enumerate(embed.fields):
+                if field.name in values:
+                    embed.set_field_at(
+                        index,
+                        name=field.name,
+                        value=values[field.name],
+                        inline=field.inline,
+                    )
+            status = record["status"]
+            view = ProposalView(
+                self,
+                disabled=status in FINAL_STATUSES,
+                voting_closed=status == "awaiting_confirmation",
+                confirm_enabled=status == "awaiting_confirmation",
+            )
+            await message.edit(embed=embed, view=view)
+            try:
+                await self.config.guild(guild).set_raw(
+                    "applications", message_id, "display_dirty", value=False
+                )
+            except Exception:
+                log.exception("Could not mark proposal %s display as current", message_id)
+                return False
+            return True
+        except (discord.NotFound, discord.Forbidden, discord.HTTPException):
+            log.exception("Could not update proposal %s; will retry", message_id)
+            return False
+
     async def _create_proposal(
         self, ctx, item: str, reason: str, kind: str
     ) -> None:
@@ -79,7 +194,8 @@ class ProposalMixin:
             ctx, kind, provisional_created_at
         )
         message = await ctx.channel.send(
-            embed=proposal_embed(item, reason, provisional_record)
+            embed=proposal_embed(item, reason, provisional_record),
+            view=ProposalView(self),
         )
         created_at = message.created_at.astimezone(timezone.utc)
         record = self._new_proposal_record(ctx, kind, created_at)

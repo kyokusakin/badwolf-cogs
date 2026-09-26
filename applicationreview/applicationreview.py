@@ -9,6 +9,7 @@ from redbot.core import Config, commands
 
 from .c_applicationreview import ApplicationReviewCommands
 from .proposals import ProposalMixin
+from .proposal_view import ProposalView
 from .rules import (
     can_reject,
     human_reaction_count,
@@ -39,6 +40,13 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
 
     def cog_unload(self):
         self.expire_applications.cancel()
+        view = getattr(self, "_proposal_view", None)
+        if view is not None:
+            view.stop()
+
+    async def cog_load(self):
+        self._proposal_view = ProposalView(self, confirm_enabled=True)
+        self.bot.add_view(self._proposal_view)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
