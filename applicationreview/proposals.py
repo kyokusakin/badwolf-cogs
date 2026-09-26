@@ -55,6 +55,95 @@ def proposal_embed(item: str, reason: str, record: dict) -> discord.Embed:
 
 
 class ProposalMixin:
+    def _track_proposal_view(self, message_id: int, view: ProposalView) -> None:
+        views = getattr(self, "_proposal_message_views", None)
+        if views is None:
+            views = {}
+            self._proposal_message_views = views
+        previous = views.pop(message_id, None)
+        if previous is not None:
+            previous.stop()
+        if all(button.disabled for button in view.children):
+            view.stop()
+        else:
+            views[message_id] = view
+
+    def _drop_proposal_view(self, message_id: int) -> None:
+        views = getattr(self, "_proposal_message_views", {})
+        view = views.pop(message_id, None)
+        if view is not None:
+            view.stop()
+
+    async def _delete_proposal_data_for_user(
+        self, *, requester: str, user_id: int
+    ) -> None:
+        now = datetime.now(timezone.utc).timestamp()
+        async with self._proposal_lock:
+            for guild_id, guild_data in (await self.config.all_guilds()).items():
+                guild = self.bot.get_guild(int(guild_id))
+                guild_config = self.config.guild_from_id(int(guild_id))
+                for message_id, snapshot in list(
+                    guild_data.get("applications", {}).items()
+                ):
+                    if snapshot.get("schema_version") != 2:
+                        continue
+                    record = await guild_config.get_raw(
+                        "applications", message_id, default=None
+                    )
+                    if record is None:
+                        continue
+                    if record["proposer_id"] == user_id:
+                        if guild is None:
+                            raise RuntimeError(
+                                f"Cannot delete proposal {message_id}: guild unavailable"
+                            )
+                        channel = guild.get_channel(record["channel_id"])
+                        if channel is None:
+                            try:
+                                channel = await guild.fetch_channel(
+                                    record["channel_id"]
+                                )
+                            except discord.NotFound:
+                                await guild_config.clear_raw("applications", message_id)
+                                continue
+                        try:
+                            message = await channel.fetch_message(int(message_id))
+                            await message.delete()
+                        except discord.NotFound:
+                            pass
+                        await guild_config.clear_raw("applications", message_id)
+                        self._drop_proposal_view(int(message_id))
+                        continue
+                    if str(user_id) not in record["votes"]:
+                        continue
+                    current = advance_proposal(record, now)
+                    updated = deepcopy(current)
+                    if requester in ("user", "user_strict"):
+                        updated["votes"][str(user_id)] = {
+                            "choice": "redacted",
+                            "valid": False,
+                        }
+                    else:
+                        updated["votes"].pop(str(user_id), None)
+                    if updated == record:
+                        continue
+                    if updated["status"] == "awaiting_confirmation":
+                        approvals, oppositions = count_valid_votes(updated["votes"])
+                        if not passes_proposal(updated["kind"], approvals, oppositions):
+                            updated["status"] = "failed"
+                            updated["resolved_at"] = now
+                            updated["final_counts"] = {
+                                "approvals": approvals,
+                                "oppositions": oppositions,
+                            }
+                    if updated["status"] not in FINAL_STATUSES or current != record:
+                        updated["display_dirty"] = True
+                    await guild_config.set_raw(
+                        "applications", message_id, value=updated
+                    )
+                    if updated.get("display_dirty") and guild is not None:
+                        await self._sync_proposal_message(guild, message_id, updated)
+
     async def _handle_proposal_admin(
         self, interaction: discord.Interaction, action: str
     ) -> None:
@@ -68,8 +157,8 @@ class ProposalMixin:
             return
         message_id = str(interaction.message.id)
         guild_config = self.config.guild(guild)
-        now = datetime.now(timezone.utc).timestamp()
         async with self._proposal_lock:
+            now = datetime.now(timezone.utc).timestamp()
             record = await guild_config.get_raw(
                 "applications", message_id, default=None
             )
@@ -101,7 +190,9 @@ class ProposalMixin:
                 next_status = "prohibited"
             elif action == "confirm":
                 if record["status"] != "awaiting_confirmation":
-                    await interaction.followup.send("提案尚未進入確認階段。", ephemeral=True)
+                    await interaction.followup.send(
+                        "提案尚未進入確認階段。", ephemeral=True
+                    )
                     return
                 next_status = "passed"
             else:
@@ -119,7 +210,9 @@ class ProposalMixin:
             try:
                 await guild_config.set_raw("applications", message_id, value=updated)
             except Exception:
-                log.exception("Could not store admin action for proposal %s", message_id)
+                log.exception(
+                    "Could not store admin action for proposal %s", message_id
+                )
                 await interaction.followup.send("操作儲存失敗。", ephemeral=True)
                 return
             await self._sync_proposal_message(guild, message_id, updated)
@@ -129,8 +222,8 @@ class ProposalMixin:
         guild = ctx.guild
         message_key = str(message_id)
         guild_config = self.config.guild(guild)
-        now = datetime.now(timezone.utc).timestamp()
         async with self._proposal_lock:
+            now = datetime.now(timezone.utc).timestamp()
             record = await guild_config.get_raw(
                 "applications", message_key, default=None
             )
@@ -213,8 +306,6 @@ class ProposalMixin:
                         await guild_config.set_raw(
                             "applications", message_id, value=updated
                         )
-                    if not updated.get("display_dirty"):
-                        await guild_config.clear_raw("applications", message_id)
                 except Exception:
                     log.exception("Could not sweep proposal %s", message_id)
 
@@ -231,8 +322,8 @@ class ProposalMixin:
             return
         message_id = str(interaction.message.id)
         guild_config = self.config.guild(guild)
-        now = datetime.now(timezone.utc).timestamp()
         async with self._proposal_lock:
+            now = datetime.now(timezone.utc).timestamp()
             record = await guild_config.get_raw(
                 "applications", message_id, default=None
             )
@@ -247,7 +338,9 @@ class ProposalMixin:
                 record = await self._advance_proposal(guild, message_id, record, now)
             except Exception:
                 log.exception("Could not advance proposal %s", message_id)
-                await interaction.followup.send("提案狀態更新失敗，請稍後再試。", ephemeral=True)
+                await interaction.followup.send(
+                    "提案狀態更新失敗，請稍後再試。", ephemeral=True
+                )
                 return
             if record["status"] not in ("voting", "observing"):
                 await interaction.followup.send("投票已結束。", ephemeral=True)
@@ -259,9 +352,7 @@ class ProposalMixin:
             if user.bot:
                 await interaction.followup.send("機器人不得投票。", ephemeral=True)
                 return
-            role_id = await guild_config.get_raw(
-                "disqualified_role_id", default=None
-            )
+            role_id = await guild_config.get_raw("disqualified_role_id", default=None)
             if role_id is not None and any(
                 role.id == role_id for role in getattr(user, "roles", ())
             ):
@@ -275,7 +366,9 @@ class ProposalMixin:
                 await guild_config.set_raw("applications", message_id, value=updated)
             except Exception:
                 log.exception("Could not store vote for proposal %s", message_id)
-                await interaction.followup.send("投票儲存失敗，請稍後再試。", ephemeral=True)
+                await interaction.followup.send(
+                    "投票儲存失敗，請稍後再試。", ephemeral=True
+                )
                 return
             await self._sync_proposal_message(guild, message_id, updated)
             await interaction.followup.send("已記錄投票。", ephemeral=True)
@@ -319,21 +412,22 @@ class ProposalMixin:
                 confirm_enabled=status == "awaiting_confirmation",
             )
             await message.edit(embed=embed, view=view)
+            self._track_proposal_view(int(message_id), view)
             try:
                 await self.config.guild(guild).set_raw(
                     "applications", message_id, "display_dirty", value=False
                 )
             except Exception:
-                log.exception("Could not mark proposal %s display as current", message_id)
+                log.exception(
+                    "Could not mark proposal %s display as current", message_id
+                )
                 return False
             return True
         except (discord.NotFound, discord.Forbidden, discord.HTTPException):
             log.exception("Could not update proposal %s; will retry", message_id)
             return False
 
-    async def _create_proposal(
-        self, ctx, item: str, reason: str, kind: str
-    ) -> None:
+    async def _create_proposal(self, ctx, item: str, reason: str, kind: str) -> None:
         if ctx.guild is None:
             await ctx.send("只能在伺服器的申請頻道提交提案。")
             return
@@ -351,9 +445,7 @@ class ProposalMixin:
             await ctx.send("申請項目或理由超過 1024 個字元。")
             return
         role_id = await guild_config.get_raw("disqualified_role_id", default=None)
-        if role_id is not None and any(
-            role.id == role_id for role in ctx.author.roles
-        ):
+        if role_id is not None and any(role.id == role_id for role in ctx.author.roles):
             await ctx.send("你目前沒有提案權。")
             return
 
@@ -362,10 +454,18 @@ class ProposalMixin:
         provisional_record = self._new_proposal_record(
             ctx, kind, provisional_created_at
         )
-        message = await ctx.channel.send(
-            embed=proposal_embed(item, reason, provisional_record),
-            view=ProposalView(self),
-        )
+        view = ProposalView(self)
+        try:
+            message = await ctx.channel.send(
+                embed=proposal_embed(item, reason, provisional_record),
+                view=view,
+            )
+        except (discord.Forbidden, discord.HTTPException):
+            view.stop()
+            log.exception("Could not publish proposal")
+            await ctx.send("提案發布失敗，請確認 Bot 的發訊息權限。")
+            return
+        self._track_proposal_view(message.id, view)
         created_at = message.created_at.astimezone(timezone.utc)
         record = self._new_proposal_record(ctx, kind, created_at)
         try:
@@ -375,17 +475,24 @@ class ProposalMixin:
                 await message.delete()
             except (discord.Forbidden, discord.HTTPException):
                 log.exception("Could not remove untracked proposal %s", message.id)
+            self._drop_proposal_view(message.id)
             log.exception("Could not store proposal %s", message.id)
             await ctx.send("提案建立失敗，請稍後再試。")
             return
 
         try:
             await message.edit(embed=proposal_embed(item, reason, record))
-            await guild_config.set_raw(
-                "applications", str(message.id), "display_dirty", value=False
-            )
         except (discord.Forbidden, discord.HTTPException):
             log.exception("Could not update proposal %s; will retry", message.id)
+        else:
+            try:
+                await guild_config.set_raw(
+                    "applications", str(message.id), "display_dirty", value=False
+                )
+            except Exception:
+                log.exception(
+                    "Could not mark proposal %s display as current", message.id
+                )
         await ctx.send(f"提案已建立：{message.jump_url}")
 
     @staticmethod

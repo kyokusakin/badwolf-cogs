@@ -21,7 +21,7 @@ class ApplicationReviewCommands:
     @commands.guild_only()
     @commands.admin_or_permissions(manage_channels=True)
     async def applicationreview(self, ctx: commands.Context):
-        """Configure application review reactions."""
+        """Configure proposal submission and voting."""
 
     @applicationreview.command(name="channel")
     async def applicationreview_channel(
@@ -33,9 +33,9 @@ class ApplicationReviewCommands:
 
     @applicationreview.command(name="disable")
     async def applicationreview_disable(self, ctx: commands.Context):
-        """Disable application review reactions."""
+        """Disable new proposal submissions."""
         await self.config.guild(ctx.guild).channel_id.set(None)
-        await ctx.send("已停用申請頻道監聽")
+        await ctx.send("已停用新提案提交")
 
     @applicationreview.command(name="disqualifiedrole")
     async def applicationreview_disqualifiedrole(

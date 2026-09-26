@@ -3,9 +3,9 @@
     "author": [
         "Badwolf_TW"
     ],
-    "description": "Add application vote reactions, require at least 16 leading approvals, let channel managers confirm approved applications, and expire reviews after one calendar month.",
-    "end_user_data_statement": "This cog stores application message IDs, channel IDs, and creation and expiration timestamps until expiration cleanup succeeds. It does not store message content or user data.",
-    "install_msg": "Thanks for installing. Use `[p]applicationreview channel #channel` to set the application channel.",
+    "description": "Submit ordinary or major proposals by command, collect votes with persistent text buttons while displaying only totals, and settle votes under the proposal voting rules. Existing reaction proposals remain supported until their original expiry.",
+    "end_user_data_statement": "This cog stores proposal message and channel IDs, proposer IDs, voter IDs and choices, validity flags, and proposal timestamps and status. It does not separately store proposal text; that remains in the public embed. Voter records remain while a proposal awaits administrator confirmation and are removed three calendar months after a final result. A proposal record without voter IDs is retained to identify public messages for later deletion requests. A voter data deletion request removes the choice, retaining only a non-counting user ID marker when Red permits anti-abuse data; an owner or deleted-user request removes the ID. A proposer's data deletion request removes their proposal message and record.",
+    "install_msg": "Use `[p]applicationreview channel #channel` to set the proposal channel. Example: `[p]proposal \"新增活動\" \"方便成員參加\" 普通`. To expose `/proposal`, the bot owner must run `[p]slash enable proposal` and `[p]slash sync`.",
     "min_bot_version": "3.5.0",
     "min_python_version": [
         3,
@@ -15,15 +15,17 @@
     "name": "ApplicationReview",
     "permissions": [
         "add_reactions",
+        "embed_links",
+        "send_messages",
         "read_message_history",
         "manage_messages"
     ],
     "requirements": [],
-    "short": "Vote on applications, confirm approval, and expire reviews after one month.",
+    "short": "Submit and vote on proposals with text buttons and timed review.",
     "tags": [
         "applications",
         "moderation",
-        "reactions"
+        "voting"
     ],
     "type": "COG"
 }

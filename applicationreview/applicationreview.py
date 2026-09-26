@@ -36,6 +36,7 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
             channel_id=None, disqualified_role_id=None, applications={}
         )
         self._proposal_lock = asyncio.Lock()
+        self._proposal_message_views = {}
         self.expire_applications.start()
 
     def cog_unload(self):
@@ -43,10 +44,16 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
         view = getattr(self, "_proposal_view", None)
         if view is not None:
             view.stop()
+        for message_view in getattr(self, "_proposal_message_views", {}).values():
+            message_view.stop()
+        self._proposal_message_views = {}
 
     async def cog_load(self):
         self._proposal_view = ProposalView(self, confirm_enabled=True)
         self.bot.add_view(self._proposal_view)
+
+    async def red_delete_data_for_user(self, *, requester: str, user_id: int):
+        await self._delete_proposal_data_for_user(requester=requester, user_id=user_id)
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -63,6 +70,24 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
         if str(payload.emoji) in VOTES:
             await self._sync_approval(payload)
 
+    @commands.Cog.listener()
+    async def on_raw_message_delete(self, payload: discord.RawMessageDeleteEvent):
+        if payload.guild_id is None:
+            return
+        guild_config = self.config.guild_from_id(payload.guild_id)
+        message_id = str(payload.message_id)
+        async with self._proposal_lock:
+            record = await guild_config.get_raw(
+                "applications", message_id, default=None
+            )
+            if (
+                record is not None
+                and record.get("schema_version") == 2
+                and record["channel_id"] == payload.channel_id
+            ):
+                await guild_config.clear_raw("applications", message_id)
+                self._drop_proposal_view(payload.message_id)
+
     @tasks.loop(hours=1)
     async def expire_applications(self):
         await self._expire_due_applications(datetime.now(timezone.utc).timestamp())
@@ -78,9 +103,7 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
                 continue
             records = guild_data.get("applications", {})
             await self._sweep_proposals(guild, records, now)
-            for message_id, record in list(
-                records.items()
-            ):
+            for message_id, record in list(records.items()):
                 if record.get("schema_version") is None and record["expires_at"] <= now:
                     await self._expire_application(guild, message_id, record)
 
