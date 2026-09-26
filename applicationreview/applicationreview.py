@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional, Tuple
@@ -7,8 +8,8 @@ from discord.ext import tasks
 from redbot.core import Config, commands
 
 from .c_applicationreview import ApplicationReviewCommands
+from .proposals import ProposalMixin
 from .rules import (
-    add_calendar_month,
     can_reject,
     human_reaction_count,
     is_application_message,
@@ -24,41 +25,20 @@ VOTES = (THUMBS_UP, THUMBS_DOWN)
 log = logging.getLogger("red.badwolf.applicationreview")
 
 
-class ApplicationReview(ApplicationReviewCommands, commands.Cog):
+class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(
             self, identifier=421765611811838116, force_registration=True
         )
-        self.config.register_guild(channel_id=None, applications={})
+        self.config.register_guild(
+            channel_id=None, disqualified_role_id=None, applications={}
+        )
+        self._proposal_lock = asyncio.Lock()
         self.expire_applications.start()
 
     def cog_unload(self):
         self.expire_applications.cancel()
-
-    @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
-        if message.author.bot or message.guild is None:
-            return
-        if await self.bot.cog_disabled_in_guild(self, message.guild):
-            return
-        channel_id = await self.config.guild(message.guild).channel_id()
-        if message.channel.id != channel_id or not is_application_message(message.content):
-            return
-        for emoji in (THUMBS_UP, THUMBS_DOWN, REJECT):
-            await message.add_reaction(emoji)
-        created_at = message.created_at.astimezone(timezone.utc)
-        expires_at = add_calendar_month(created_at)
-        await self.config.guild(message.guild).set_raw(
-            "applications",
-            str(message.id),
-            value={
-                "channel_id": message.channel.id,
-                "created_at": created_at.timestamp(),
-                "expires_at": expires_at.timestamp(),
-                "finalized": False,
-            },
-        )
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
@@ -138,6 +118,8 @@ class ApplicationReview(ApplicationReviewCommands, commands.Cog):
         if not is_application_message(message.content):
             return None
         record = await self._get_application_record(guild, message.id)
+        if record is None or record.get("schema_version") is not None:
+            return None
         return guild, channel, message, record
 
     async def _get_application_record(self, guild: discord.Guild, message_id: int):

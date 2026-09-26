@@ -1,8 +1,22 @@
+from typing import Literal
+
 import discord
 from redbot.core import commands
 
 
 class ApplicationReviewCommands:
+    @commands.hybrid_command(name="proposal")
+    @commands.guild_only()
+    async def proposal(
+        self,
+        ctx: commands.Context,
+        item: str,
+        reason: str,
+        kind: Literal["普通", "重大"],
+    ):
+        """Submit a proposal in the configured channel."""
+        await self._create_proposal(ctx, item, reason, kind)
+
     @commands.group(name="applicationreview")
     @commands.guild_only()
     @commands.admin_or_permissions(manage_channels=True)
@@ -22,3 +36,11 @@ class ApplicationReviewCommands:
         """Disable application review reactions."""
         await self.config.guild(ctx.guild).channel_id.set(None)
         await ctx.send("已停用申請頻道監聽")
+
+    @applicationreview.command(name="disqualifiedrole")
+    async def applicationreview_disqualifiedrole(
+        self, ctx: commands.Context, role: discord.Role
+    ):
+        """Set the role whose members cannot propose or vote."""
+        await self.config.guild(ctx.guild).disqualified_role_id.set(role.id)
+        await ctx.send(f"已設定褫奪公權身分組為 {role.mention}")
