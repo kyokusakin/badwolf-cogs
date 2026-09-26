@@ -449,7 +449,7 @@ class ProposalMixin:
             await ctx.send("你目前沒有提案權。")
             return
 
-        await ctx.defer()
+        await ctx.defer(ephemeral=True)
         provisional_created_at = datetime.now(timezone.utc)
         provisional_record = self._new_proposal_record(
             ctx, kind, provisional_created_at
@@ -493,7 +493,10 @@ class ProposalMixin:
                 log.exception(
                     "Could not mark proposal %s display as current", message.id
                 )
-        await ctx.send(f"提案已建立：{message.jump_url}")
+        if ctx.interaction is None:
+            await ctx.tick()
+        else:
+            await ctx.interaction.edit_original_response(content="✅")
 
     @staticmethod
     def _new_proposal_record(ctx, kind: str, created_at: datetime) -> dict:
