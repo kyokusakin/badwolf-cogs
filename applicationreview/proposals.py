@@ -6,7 +6,12 @@ from datetime import datetime, timezone
 
 import discord
 
-from .proposal_rules import FINAL_STATUSES, advance_proposal, count_valid_votes
+from .proposal_rules import (
+    FINAL_STATUSES,
+    add_calendar_months,
+    advance_proposal,
+    count_valid_votes,
+)
 from .proposal_view import ProposalView
 from .rules import add_calendar_month
 
@@ -49,6 +54,54 @@ def proposal_embed(item: str, reason: str, record: dict) -> discord.Embed:
 
 
 class ProposalMixin:
+    async def _advance_proposal(
+        self, guild, message_id: str, record: dict, now: float
+    ) -> dict:
+        updated = advance_proposal(record, now)
+        if updated != record:
+            updated["display_dirty"] = True
+            await self.config.guild(guild).set_raw(
+                "applications", message_id, value=updated
+            )
+        if updated.get("display_dirty"):
+            if await self._sync_proposal_message(guild, message_id, updated):
+                updated["display_dirty"] = False
+        return updated
+
+    async def _sweep_proposals(self, guild, records: dict, now: float) -> None:
+        async with self._proposal_lock:
+            guild_config = self.config.guild(guild)
+            for message_id, snapshot in list(records.items()):
+                if snapshot.get("schema_version") != 2:
+                    continue
+                record = await guild_config.get_raw(
+                    "applications", message_id, default=None
+                )
+                if record is None:
+                    continue
+                try:
+                    updated = await self._advance_proposal(
+                        guild, message_id, record, now
+                    )
+                    resolved_at = updated.get("resolved_at")
+                    if updated["status"] not in FINAL_STATUSES or resolved_at is None:
+                        continue
+                    retention_at = add_calendar_months(
+                        datetime.fromtimestamp(resolved_at, timezone.utc), 3
+                    ).timestamp()
+                    if now < retention_at:
+                        continue
+                    if updated["votes"]:
+                        updated = deepcopy(updated)
+                        updated["votes"] = {}
+                        await guild_config.set_raw(
+                            "applications", message_id, value=updated
+                        )
+                    if not updated.get("display_dirty"):
+                        await guild_config.clear_raw("applications", message_id)
+                except Exception:
+                    log.exception("Could not sweep proposal %s", message_id)
+
     async def _handle_proposal_vote(
         self, interaction: discord.Interaction, choice: str
     ) -> None:
@@ -74,12 +127,12 @@ class ProposalMixin:
             ):
                 await interaction.followup.send("找不到提案。", ephemeral=True)
                 return
-            advanced = advance_proposal(record, now)
-            if advanced != record:
-                advanced["display_dirty"] = True
-                await guild_config.set_raw("applications", message_id, value=advanced)
-                await self._sync_proposal_message(guild, message_id, advanced)
-            record = advanced
+            try:
+                record = await self._advance_proposal(guild, message_id, record, now)
+            except Exception:
+                log.exception("Could not advance proposal %s", message_id)
+                await interaction.followup.send("提案狀態更新失敗，請稍後再試。", ephemeral=True)
+                return
             if record["status"] not in ("voting", "observing"):
                 await interaction.followup.send("投票已結束。", ephemeral=True)
                 return

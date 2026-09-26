@@ -76,10 +76,12 @@ class ApplicationReview(ApplicationReviewCommands, ProposalMixin, commands.Cog):
             guild = self.bot.get_guild(int(guild_id))
             if guild is None or await self.bot.cog_disabled_in_guild(self, guild):
                 continue
+            records = guild_data.get("applications", {})
+            await self._sweep_proposals(guild, records, now)
             for message_id, record in list(
-                guild_data.get("applications", {}).items()
+                records.items()
             ):
-                if record["expires_at"] <= now:
+                if record.get("schema_version") is None and record["expires_at"] <= now:
                     await self._expire_application(guild, message_id, record)
 
     async def _expire_application(self, guild, message_id: str, record: dict):

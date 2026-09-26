@@ -1,8 +1,20 @@
+import calendar
 from copy import deepcopy
+from datetime import datetime
 
 
 OBSERVATION_SECONDS = 3 * 24 * 60 * 60
 FINAL_STATUSES = frozenset(("passed", "failed", "prohibited"))
+
+
+def add_calendar_months(value: datetime, months: int) -> datetime:
+    if months < 0:
+        raise ValueError("Month count must be nonnegative")
+    month_index = value.year * 12 + value.month - 1 + months
+    year, month_zero = divmod(month_index, 12)
+    month = month_zero + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
 
 
 def count_valid_votes(votes: dict) -> tuple[int, int]:
