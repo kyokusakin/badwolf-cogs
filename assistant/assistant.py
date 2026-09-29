@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextlib
 import io
 import logging
 from ddgs import DDGS
@@ -95,6 +96,18 @@ _LATEX_SEGMENT_RE = re.compile(
 _LATEX_COMMAND_RE = re.compile(
     r"\\(?:frac|int|sum|prod|lim|sqrt|left|right|ln|log|sin|cos|tan|alpha|beta|gamma|theta|pi)\b"
 )
+# matplotlib mathtext fails on these common TeX macros, and one unknown symbol drops the whole image.
+_MATHTEXT_MACRO_ALIASES = {
+    "le": r"\leq",
+    "ge": r"\geq",
+    "implies": r"\Longrightarrow",
+    "iff": r"\Longleftrightarrow",
+    "tfrac": r"\frac",
+    "lvert": "|",
+    "rvert": "|",
+}
+_MATHTEXT_MACRO_RE = re.compile(r"\\(" + "|".join(_MATHTEXT_MACRO_ALIASES) + r")(?![A-Za-z])")
+_CJK_RE = re.compile(r"[\u3000-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af\uf900-\ufaff\uff00-\uffef]")
 _PROMPT_INJECTION_PATTERNS: Tuple[Tuple[str, re.Pattern], ...] = (
     (
         "ignore_previous_instructions",
@@ -249,7 +262,53 @@ RECEIVED_REACTION = "👀"
 DONE_REACTION = "✅"
 SAFE_EXEC_COMMAND_LIMIT = 500
 SAFE_MATH_EXPRESSION_LIMIT = 240
-SAFE_MATH_ABS_LIMIT = 10 ** 12
+# Integers are capped by size rather than magnitude so that ordinary large results
+# (2**64, 100!, 1e15 ...) work while big-int blowups stay cheap to compute. 1024 bits
+# matches the range of a float, so ints and floats overflow at about the same point.
+SAFE_MATH_MAX_INT_BITS = 1024
+# Upper bound on arguments of factorial/comb/perm; keeps the computation itself cheap
+# before the result size check gets a chance to run.
+SAFE_MATH_MAX_COMBINATORIAL_ARG = 1000
+SAFE_MATH_MAX_ROUND_DIGITS = 400
+
+
+def _math_int_arg(value: Any, func_name: str) -> int:
+    """Accept ints and integral floats such as 10/2 -> 5.0; math.factorial and friends reject floats."""
+    if isinstance(value, int):
+        return int(value)
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    raise ValueError(f"{func_name} requires integer arguments")
+
+
+def _math_integer_func(func: Callable[..., Any], *, max_arg: Optional[int] = None) -> Callable[..., Any]:
+    def wrapper(*args: Any) -> Any:
+        int_args = [_math_int_arg(arg, func.__name__) for arg in args]
+        if max_arg is not None and any(arg > max_arg for arg in int_args):
+            raise ValueError("Number is too large")
+        return func(*int_args)
+
+    return wrapper
+
+
+def _math_pow(base: Any, exponent: Any, modulus: Any = None) -> Any:
+    # Shared by the ** operator and pow(); an unbounded int power would block the event loop.
+    if modulus is not None:
+        return pow(*(_math_int_arg(v, "pow") for v in (base, exponent, modulus)))
+    if isinstance(base, int) and isinstance(exponent, int) and exponent > 0 and abs(base) > 1:
+        if exponent * math.log2(abs(base)) > SAFE_MATH_MAX_INT_BITS:
+            raise ValueError("Number is too large")
+    return operator.pow(base, exponent)
+
+
+def _math_round(value: Any, ndigits: Any = None) -> Any:
+    if ndigits is None:
+        return round(value)
+    ndigits = _math_int_arg(ndigits, "round")
+    if abs(ndigits) > SAFE_MATH_MAX_ROUND_DIGITS:
+        raise ValueError(f"round digits must stay within +-{SAFE_MATH_MAX_ROUND_DIGITS}")
+    return round(value, ndigits)
+
 
 SAFE_MATH_BINOPS = {
     ast.Add: operator.add,
@@ -258,7 +317,7 @@ SAFE_MATH_BINOPS = {
     ast.Div: operator.truediv,
     ast.FloorDiv: operator.floordiv,
     ast.Mod: operator.mod,
-    ast.Pow: operator.pow,
+    ast.Pow: _math_pow,
 }
 SAFE_MATH_UNARYOPS = {
     ast.UAdd: operator.pos,
@@ -266,7 +325,8 @@ SAFE_MATH_UNARYOPS = {
 }
 SAFE_MATH_FUNCTIONS = {
     "abs": abs,
-    "round": round,
+    "round": _math_round,
+    "int": int,
     "min": min,
     "max": max,
     "sqrt": math.sqrt,
@@ -288,15 +348,16 @@ SAFE_MATH_FUNCTIONS = {
     "log2": math.log2,
     "ln": math.log,
     "exp": math.exp,
-    "pow": pow,
+    "pow": _math_pow,
     "floor": math.floor,
     "ceil": math.ceil,
     "trunc": math.trunc,
-    "factorial": math.factorial,
-    "comb": math.comb,
-    "perm": math.perm,
-    "gcd": math.gcd,
-    "lcm": math.lcm,
+    "gamma": math.gamma,
+    "factorial": _math_integer_func(math.factorial, max_arg=SAFE_MATH_MAX_COMBINATORIAL_ARG),
+    "comb": _math_integer_func(math.comb, max_arg=SAFE_MATH_MAX_COMBINATORIAL_ARG),
+    "perm": _math_integer_func(math.perm, max_arg=SAFE_MATH_MAX_COMBINATORIAL_ARG),
+    "gcd": _math_integer_func(math.gcd),
+    "lcm": _math_integer_func(math.lcm),
     "hypot": math.hypot,
 }
 SAFE_MATH_CONSTANTS = {
@@ -370,6 +431,8 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         self.queue = asyncio.Queue()
         self.queue_task = asyncio.create_task(self.process_queue())
         self.executor = ThreadPoolExecutor(max_workers=4)
+        # matplotlib's rcParams and pyplot state are process-global; render one image at a time.
+        self._render_lock = asyncio.Lock()
         self._async_http = httpx.AsyncClient()
         self._http_options = types.HttpOptions(httpx_async_client=self._async_http)
         self._api_key_lock = asyncio.Lock()
@@ -1197,6 +1260,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         content = content.replace(r"\[", "\n$").replace(r"\]", "$\n")
         content = content.replace("```latex", "```").replace("```tex", "```")
         content = content.replace("**", "")
+        content = _MATHTEXT_MACRO_RE.sub(lambda m: _MATHTEXT_MACRO_ALIASES[m.group(1)], content)
         return content.strip()
 
     @staticmethod
@@ -1313,6 +1377,7 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             return None
 
         fig = None
+        rc_stack = contextlib.ExitStack()
         try:
             content = OpenAIChat._normalize_latex_response_for_image(response)
             lines = OpenAIChat._wrap_response_for_image(content)
@@ -1320,6 +1385,22 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                 return None
 
             font_properties = OpenAIChat._get_response_font_properties(fm)
+
+            # The default math fonts have no CJK glyphs and draw a placeholder for each character.
+            # Use the CJK font as the math font for those lines; symbols it lacks fall back to STIX.
+            def _needs_cjk_math_font(line: str) -> bool:
+                return "$" in line and bool(_CJK_RE.search(line))
+
+            if any(_needs_cjk_math_font(line) for line in lines):
+                family = font_properties.get_name()
+                rc_stack.enter_context(matplotlib.rc_context({
+                    "mathtext.fontset": "custom",
+                    "mathtext.fallback": "stix",
+                    "mathtext.rm": family,
+                    "mathtext.it": family,
+                    "mathtext.bf": family,
+                    "mathtext.cal": family,
+                }))
 
             max_line_length = max((len(line.strip()) for line in lines), default=1)
             formula_only = all(
@@ -1365,6 +1446,9 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                     fontsize=base_formula_size if is_math_line else text_size,
                     color="#1f2328",
                     fontproperties=font_properties,
+                    # FontProperties keeps the math fontset from when it was created, so the
+                    # rc override above only applies to text that asks for it explicitly.
+                    math_fontfamily="custom" if _needs_cjk_math_font(line) else None,
                     usetex=False,
                 )
                 y -= y_step
@@ -1377,12 +1461,14 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             log.warning("LaTeX image rendering failed; falling back to text: %s", e)
             return None
         finally:
+            rc_stack.close()
             if fig is not None:
                 plt.close(fig)
 
     async def _render_response_image(self, response: str) -> Optional[io.BytesIO]:
         loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self.executor, self._render_response_image_sync, response)
+        async with self._render_lock:
+            return await loop.run_in_executor(self.executor, self._render_response_image_sync, response)
 
     async def _send_text_response_chunks(self, message: discord.Message, text: str):
         content = str(text or "")
@@ -1724,7 +1810,11 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         if command_name == "math":
             if len(parts) < 2:
                 raise ValueError("math requires an expression")
-            return "math:" + command[len(parts[0]):].strip()
+            expression = command[len(parts[0]):].strip()
+            # Models often quote the expression like a shell argument: math "2+3".
+            if len(expression) >= 2 and expression[0] == expression[-1] and expression[0] in "\"'":
+                expression = expression[1:-1].strip()
+            return "math:" + expression
         if command_name == "random":
             if len(parts) == 1:
                 return "random:"
@@ -1736,30 +1826,29 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
 
     async def _safe_exec(self, args: Dict[str, Any]) -> str:
         """Run a small whitelist of safe project inspection/check commands."""
-        if isinstance(args, dict) and str(args.get("command") or "").strip():
-            try:
-                kind = self._safe_exec_kind_from_command(args.get("command"))
-            except ValueError as e:
-                return f"(safe_exec blocked: {e})"
-            if kind.startswith("math:"):
-                return self._safe_math(kind.removeprefix("math:"))
-            if kind.startswith("random:"):
-                return self._safe_random_from_command(kind)
-            if kind.startswith("timezone:"):
-                return self._safe_timezone(kind.removeprefix("timezone:"))
-            return self._safe_exec_time(kind)
-
-        action = str((args or {}).get("action") or "").strip().lower()
+        args = args if isinstance(args, dict) else {}
+        # Failures are returned to the model as tool output. Raising here would make the
+        # whole Gemini request fail and be retried, re-running every earlier tool call.
         try:
+            if str(args.get("command") or "").strip():
+                kind = self._safe_exec_kind_from_command(args.get("command"))
+                if kind.startswith("math:"):
+                    return self._safe_math(kind.removeprefix("math:"))
+                if kind.startswith("random:"):
+                    return self._safe_random_from_command(kind)
+                if kind.startswith("timezone:"):
+                    return self._safe_timezone(kind.removeprefix("timezone:"))
+                return self._safe_exec_time(kind)
+
+            action = str(args.get("action") or "").strip().lower()
             if action in {"date", "time", "datetime"}:
                 return self._safe_exec_time(action)
             if action == "timezone":
-                return self._safe_timezone((args or {}).get("timezone"))
+                return self._safe_timezone(args.get("timezone"))
             if action == "math":
-                return self._safe_math((args or {}).get("expression"))
+                return self._safe_math(args.get("expression"))
             if action == "random":
-                return self._safe_random((args or {}).get("min"), (args or {}).get("max"))
-
+                return self._safe_random(args.get("min"), args.get("max"))
         except ValueError as e:
             return f"(safe_exec blocked: {e})"
 
@@ -1931,9 +2020,10 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
             raise ValueError("Result is too large")
         except SyntaxError:
             raise ValueError("Invalid math expression")
+        except TypeError as e:
+            # Wrong argument count/type for a math function, e.g. sqrt() or round(1, 2, 3).
+            raise ValueError(f"Invalid math function arguments: {e}")
 
-        if isinstance(value, (int, float)) and not math.isfinite(float(value)):
-            raise ValueError("Result is not finite")
         return str(value)
 
     def _safe_math_eval_node(self, node: ast.AST) -> Any:
@@ -1954,8 +2044,6 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                 raise ValueError("Unsupported math operator")
             left = self._safe_math_eval_node(node.left)
             right = self._safe_math_eval_node(node.right)
-            if isinstance(node.op, ast.Pow) and abs(float(right)) > 10:
-                raise ValueError("Exponent is too large")
             result = op_func(left, right)
             self._safe_math_check_number(result)
             return result
@@ -1973,7 +2061,11 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                 raise ValueError("Only direct math functions are allowed")
             func = SAFE_MATH_FUNCTIONS.get(node.func.id)
             if func is None:
-                raise ValueError(f"Unsupported math function: {node.func.id}")
+                raise ValueError(
+                    f"Unsupported math function: {node.func.id}. "
+                    f"Supported functions: {', '.join(sorted(SAFE_MATH_FUNCTIONS))}. "
+                    "For random numbers use the random command instead."
+                )
             if node.keywords:
                 raise ValueError("Keyword arguments are not allowed")
             if len(node.args) > 4:
@@ -1989,9 +2081,10 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
     def _safe_math_check_number(value: Any):
         if not isinstance(value, (int, float)):
             raise ValueError("Math result must be numeric")
-        if isinstance(value, float) and not math.isfinite(value):
-            raise ValueError("Number is not finite")
-        if abs(float(value)) > SAFE_MATH_ABS_LIMIT:
+        if isinstance(value, float):
+            if not math.isfinite(value):
+                raise ValueError("Number is not finite")
+        elif value.bit_length() > SAFE_MATH_MAX_INT_BITS:
             raise ValueError("Number is too large")
 
     async def _genai_request(
@@ -2078,7 +2171,13 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
                     result_payload = await self._web_fetch(url)
                 elif fc.name == SAFE_EXEC_TOOL_NAME and agent_mode:
                     log.debug(f"Executing safe exec action: {(fc.args or {}).get('action')}")
-                    result_payload = await self._safe_exec(fc.args or {})
+                    try:
+                        result_payload = await self._safe_exec(fc.args or {})
+                    except Exception as e:
+                        # A tool bug must not surface as a request failure: the retry loop would
+                        # replay the whole conversation and hit the same error again.
+                        log.exception("safe_exec failed unexpectedly")
+                        result_payload = f"(safe_exec failed: {type(e).__name__}: {e})"
                 else:
                     continue
 

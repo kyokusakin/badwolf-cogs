@@ -86,13 +86,17 @@ pi e tau
 Supported functions:
 
 ```text
-abs round min max sqrt cbrt
+abs round int min max sqrt cbrt
 sin cos tan asin acos atan atan2
 sinh cosh tanh degrees radians
 log log10 log2 ln exp pow
-floor ceil trunc factorial comb perm
+floor ceil trunc gamma factorial comb perm
 gcd lcm hypot
 ```
+
+`factorial`, `comb`, `perm`, `gcd` and `lcm` need whole numbers (`factorial(10 / 2)` is fine). `factorial`, `comb` and `perm` accept arguments up to 1000. Write the expression as plain text without wrapping it in quotes. Use the `random` command for random numbers, not a math function.
+
+Integer results are limited to about 300 digits; float results only need to be finite. If a call fails, `safe_exec` returns text starting with `(safe_exec blocked: ...)` that explains why. Fix the expression instead of repeating the same call, or tell the user the calculation is not supported.
 
 ## Random Commands
 
