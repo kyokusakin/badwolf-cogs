@@ -1470,43 +1470,89 @@ class OpenAIChat(commands.Cog, AgentRuntimeMixin, AssistantCommands):
         async with self._render_lock:
             return await loop.run_in_executor(self.executor, self._render_response_image_sync, response)
 
-    async def _send_text_response_chunks(self, message: discord.Message, text: str):
+    async def _send_text_response_chunks(self, message: discord.Message, text: str, *, reply: bool = True) -> bool:
         content = str(text or "")
         if not content.strip():
-            return
+            return False
         chunk_size = 2000
         chunks = [content[i: i + chunk_size] for i in range(0, len(content), chunk_size)]
+        sent = False
         for chunk in chunks:
             if not chunk.strip():
                 continue
-            await message.reply(chunk)
+            send = message.reply if reply and not sent else message.channel.send
+            await send(chunk)
+            sent = True
             await asyncio.sleep(1)
+        return sent
 
     async def _send_response(self, message: discord.Message, response: str):
+        files: List[discord.File] = []
         try:
             segments = self._split_latex_response_segments(response)
             if not any(kind == "latex" for kind, _ in segments):
                 await self._send_text_response_chunks(message, response)
                 return
 
-            for kind, content in segments:
-                if kind == "text":
-                    await self._send_text_response_chunks(message, content)
-                    continue
+            text = ""
+            fallback_text = ""
+            replied = False
+            formula_index = 0
 
-                image = await self._render_response_image(content)
-                if image is None:
-                    await self._send_text_response_chunks(message, content)
-                    continue
-
+            async def flush():
+                nonlocal text, fallback_text, files, replied
                 try:
-                    await message.reply(file=discord.File(image, filename="formula.png"))
-                    await asyncio.sleep(1)
-                except discord.DiscordException as e:
-                    log.warning("Error sending rendered formula image; falling back to text: %s", e)
-                    await self._send_text_response_chunks(message, content)
+                    if text.strip() or files:
+                        send = message.reply if not replied else message.channel.send
+                        if files:
+                            try:
+                                await send(text if text.strip() else None, files=files)
+                            except discord.DiscordException as e:
+                                log.warning("Error sending rendered formula images; falling back to text: %s", e)
+                                sent = await self._send_text_response_chunks(
+                                    message, fallback_text, reply=not replied
+                                )
+                                replied = replied or sent
+                                return
+                        else:
+                            await send(text)
+                        replied = True
+                        await asyncio.sleep(1)
+                finally:
+                    for file in files:
+                        file.close()
+                        file.fp.close()
+                    text = ""
+                    fallback_text = ""
+                    files = []
+
+            for kind, content in segments:
+                if kind == "latex":
+                    marker = f"[{formula_index + 1}]"
+                    if len(files) == 10 or len(text) + len(marker) > 2000:
+                        await flush()
+                    image = await self._render_response_image(content)
+                    if image is not None:
+                        formula_index += 1
+                        files.append(discord.File(image, filename=f"formula_{formula_index}.png"))
+                        text += marker
+                        fallback_text += content
+                        continue
+
+                while content:
+                    if len(text) == 2000:
+                        await flush()
+                    chunk = content[:2000 - len(text)]
+                    text += chunk
+                    fallback_text += chunk
+                    content = content[len(chunk):]
+            await flush()
         except discord.DiscordException as e:
             log.error(f"Error sending response: {e}")
+        finally:
+            for file in files:
+                file.close()
+                file.fp.close()
 
     @staticmethod
     def _detect_prompt_injection_indicators(text: str) -> List[str]:

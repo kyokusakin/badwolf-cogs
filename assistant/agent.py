@@ -60,11 +60,30 @@ class AgentRuntimeMixin:
         if not lines:
             return text, None
 
-        control = _AGENT_CONTROL_MAP.get(lines[-1].strip().upper())
-        if control is None:
-            return text, None
+        control = None
+        while lines:
+            if not lines[-1].strip():
+                lines.pop()
+                continue
 
-        cleaned = "\n".join(lines[:-1]).strip()
+            marker_text = lines[-1].strip()
+            marker_lines = 1
+            if (
+                marker_text == "```"
+                and len(lines) >= 3
+                and lines[-3].strip().startswith("```")
+            ):
+                marker_text = lines[-2].strip()
+                marker_lines = 3
+
+            marker = _AGENT_CONTROL_MAP.get(marker_text.strip("`*_").strip().upper())
+            if marker is None:
+                break
+            if control != "no_reply":
+                control = marker
+            del lines[-marker_lines:]
+
+        cleaned = "\n".join(lines).strip()
         return cleaned, control
 
     def _strip_bot_mention(self, content: str) -> str:
