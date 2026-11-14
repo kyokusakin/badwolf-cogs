@@ -1,8 +1,12 @@
 {
     "author": [
         "RePulsR",
+<<<<<<< HEAD
         "TrustyJAID",
         "Badwolf_TW"
+=======
+        "TrustyJAID"
+>>>>>>> upstream-extendedmodlog/master
     ],
     "description": "Log changes within the server using extended modlogs, an extension of RedBot cores modlog.",
     "disabled": false,
