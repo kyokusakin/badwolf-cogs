@@ -131,7 +131,14 @@ class EventMixin:
                 all_settings[key] = value
 
     async def get_event_colour(
+<<<<<<< HEAD
         self, guild: discord.Guild, event_type: str, changed_object: Optional[discord.Role] = None
+=======
+        self,
+        guild: discord.Guild,
+        event_type: str,
+        changed_object: Optional[discord.Role] = None,
+>>>>>>> upstream-extendedmodlog/master
     ) -> discord.Colour:
         if guild.text_channels:
             cmd_colour = await self.bot.get_embed_colour(guild.text_channels[0])
@@ -602,7 +609,12 @@ class EventMixin:
         else:
             clean_msg = message.clean_content[: (1990 - len(infomessage))]
             await channel.send(
+<<<<<<< HEAD
                 f"{infomessage}\n>>> {clean_msg}", allowed_mentions=self.allowed_mentions
+=======
+                f"{infomessage}\n>>> {clean_msg}",
+                allowed_mentions=self.allowed_mentions,
+>>>>>>> upstream-extendedmodlog/master
             )
 
     @commands.Cog.listener()
@@ -957,7 +969,14 @@ class EventMixin:
             await channel.send(msg, allowed_mentions=self.allowed_mentions)
 
     async def get_permission_change(
+<<<<<<< HEAD
         self, before: discord.abc.GuildChannel, after: discord.abc.GuildChannel, embed_links: bool
+=======
+        self,
+        before: discord.abc.GuildChannel,
+        after: discord.abc.GuildChannel,
+        embed_links: bool,
+>>>>>>> upstream-extendedmodlog/master
     ) -> str:
         p_msg = ""
         before_perms = {}
@@ -1248,7 +1267,11 @@ class EventMixin:
                                 continue
                             else:
                                 for role in removed_roles:
+<<<<<<< HEAD
                                     if role.id in log_removed:
+=======
+                                    if role.id in log_added:
+>>>>>>> upstream-extendedmodlog/master
                                         entry = log
                                         # this may be the correct log entry
 
@@ -1300,7 +1323,11 @@ class EventMixin:
                                 # This entry matches identically
                             else:
                                 for role in removed_roles:
+<<<<<<< HEAD
                                     if role.id in log_removed:
+=======
+                                    if role.id in log_added:
+>>>>>>> upstream-extendedmodlog/master
                                         entry = log
                                         # this may be the correct log entry
                     if target_id == getattr(log.target, "id", None) and entry is None:
@@ -1818,7 +1845,14 @@ class EventMixin:
 
     @commands.Cog.listener()
     async def on_guild_emojis_update(
+<<<<<<< HEAD
         self, guild: discord.Guild, before: Sequence[discord.Emoji], after: Sequence[discord.Emoji]
+=======
+        self,
+        guild: discord.Guild,
+        before: Sequence[discord.Emoji],
+        after: Sequence[discord.Emoji],
+>>>>>>> upstream-extendedmodlog/master
     ) -> None:
         if guild.id not in self.settings:
             return
@@ -1965,7 +1999,14 @@ class EventMixin:
 
     @commands.Cog.listener()
     async def on_voice_state_update(
+<<<<<<< HEAD
         self, member: discord.Member, before: discord.VoiceState, after: discord.VoiceState
+=======
+        self,
+        member: discord.Member,
+        before: discord.VoiceState,
+        after: discord.VoiceState,
+>>>>>>> upstream-extendedmodlog/master
     ) -> None:
         guild = member.guild
         if guild.id not in self.settings:
@@ -2193,7 +2234,12 @@ class EventMixin:
                     if perps:
                         msg += _("Updated by ") + humanize_list(list(perps)) + "."
                         embed.add_field(
+<<<<<<< HEAD
                             name=_("Updated by "), value="\n".join(f"- {p}" for p in perps)
+=======
+                            name=_("Updated by "),
+                            value="\n".join(f"- {p}" for p in perps),
+>>>>>>> upstream-extendedmodlog/master
                         )
                     if reasons:
                         reason_str = "\n".join(f"- {r}" for r in reasons)
